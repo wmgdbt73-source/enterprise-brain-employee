@@ -4,7 +4,7 @@
 
 ## ADR-001 — Chat and Work are separate runtimes
 
-**Decision（决策）**  
+**Decision（决策）**
 Chat（聊天） and Work（工作） are separate Runtime / Permission boundaries（运行环境 / 权限边界）.
 
 **Consequences（影响）**
@@ -130,6 +130,28 @@ Development priority follows complete Vertical Slices（端到端业务切片）
 Primary Alpha slice:
 
 `Project → Task → AgentRun → Artifact → Employee Confirm → Result → Human Review → Accepted`
+
+---
+
+## ADR-013 — Employee Core Domain Baseline
+
+**Decision（决策）**
+Employee Core Domain starts with User, Project, ProjectMember and Task.
+
+**Task state names（任务状态命名）**
+`TODO → IN_PROGRESS → READY_FOR_REVIEW → ACCEPTED → CLOSED`, with `READY_FOR_REVIEW → IN_PROGRESS` for request rework.
+
+**Project membership（项目成员）**
+ProjectMember is the source of truth for Project membership and Project-level roles. Project does not store `ownerId` or `memberIds`. Alpha starts with one OWNER, and OWNER transfer or multiple OWNERs are deferred.
+
+**User and Project roles（用户与项目角色）**
+User system roles are `EMPLOYEE` and `ADMIN`. Project roles are `OWNER`, `MEMBER` and `REVIEWER`; OWNER is not a User system role.
+
+**Acceptance and closure（验收与关闭）**
+`ACCEPTED != CLOSED`. A Task enters ACCEPTED only through `ACCEPT_AFTER_HUMAN_REVIEW`; CLOSED requires a separate formal action.
+
+**Deferred（延期）**
+`WAITING`, `BLOCKED` and `CANCELLED` are deferred from EB-002.
 
 ---
 

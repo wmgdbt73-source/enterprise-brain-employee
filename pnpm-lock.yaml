@@ -79,7 +79,11 @@ importers:
 
   packages/contracts: {}
 
-  packages/domain: {}
+  packages/domain:
+    dependencies:
+      '@enterprise-brain/contracts':
+        specifier: workspace:*
+        version: link:../contracts
 
   packages/shared: {}
 

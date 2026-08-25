@@ -19,23 +19,27 @@ It must define:
 ### User（用户）
 - id
 - name
-- role
+- system_role
 - department_id?
 
 ### Project（项目）
 - id
 - name
 - goal
-- owner_id
 - status
+
+### ProjectMember（项目成员）
+- id
+- project_id
+- user_id
+- role: OWNER / MEMBER / REVIEWER
 
 ### Task（任务）
 - id
 - project_id
 - title
 - description?
-- dri_user_id
-- collaborators[]
+- assignee_user_id?
 - priority
 - status
 - deadline?
@@ -110,7 +114,8 @@ It must define:
 ## 3. Core Relations（核心关系）
 
 ```text
-User --owns--> Project
+User --has_membership--> ProjectMember
+ProjectMember --belongs_to--> Project
 Project --contains--> Task
 Task --assigned_to--> User
 Task --depends_on--> Task
@@ -127,9 +132,13 @@ ActivityEvent --references--> any structured object
 
 ### Task
 
-`READY → WORKING → READY_FOR_REVIEW → ACCEPTED → CLOSED`
+`TODO → IN_PROGRESS → READY_FOR_REVIEW → ACCEPTED → CLOSED`
 
-Side states:
+Allowed rework transition:
+
+`READY_FOR_REVIEW → IN_PROGRESS`
+
+Deferred states:
 - WAITING
 - BLOCKED
 - CANCELLED
@@ -153,9 +162,14 @@ Side state:
 ## 5. Core Actions（核心动作）
 
 - create_project
+- add_project_member
 - create_task
 - assign_task
 - start_task
+- submit_task_for_review
+- request_task_rework
+- accept_task_after_human_review
+- close_task
 - create_agent_run
 - request_tool_call
 - confirm_tool_call
