@@ -51,18 +51,6 @@ describe('Task API vertical slice', () => {
       priority: 'P2',
       dependencyIds: []
     });
-    const assigned = (
-      await app.inject({
-        method: 'POST',
-        url: `/projects/${project.id}/tasks`,
-        payload: { title: 'Assigned', assigneeId: 'dev-user' }
-      })
-    ).json();
-    await expect(
-      requireDatabase().taskAssignment.findUniqueOrThrow({
-        where: { taskId: assigned.id }
-      })
-    ).resolves.toMatchObject({ projectId: project.id, userId: 'dev-user' });
     expect(
       (
         await app.inject({
@@ -107,6 +95,34 @@ describe('Task API vertical slice', () => {
     expect(
       (await app.inject({ method: 'GET', url: `/tasks/${task.id}` })).json()
     ).toMatchObject({ status: 'IN_PROGRESS' });
+    await app.close();
+  });
+
+  it('persists TaskAssignment when creating an assigned Task', async () => {
+    const app = await createApp({ prisma: requireDatabase() });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const response = await app.inject({
+      method: 'POST',
+      url: `/projects/${project.id}/tasks`,
+      payload: { title: 'Assigned', assigneeId: 'dev-user' }
+    });
+    expect(response.statusCode).toBe(201);
+    const task = response.json();
+    await expect(
+      requireDatabase().taskAssignment.findUniqueOrThrow({
+        where: { taskId: task.id }
+      })
+    ).resolves.toMatchObject({
+      taskId: task.id,
+      projectId: project.id,
+      userId: 'dev-user'
+    });
     await app.close();
   });
 
