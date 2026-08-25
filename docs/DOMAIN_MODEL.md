@@ -8,8 +8,10 @@
 interface User {
   id: string
   name: string
-  role: 'EMPLOYEE' | 'PROJECT_OWNER' | 'ADMIN'
+  systemRole: 'EMPLOYEE' | 'ADMIN'
   departmentId?: string
+  createdAt: string
+  updatedAt: string
 }
 ```
 
@@ -20,15 +22,30 @@ interface Project {
   id: string
   name: string
   goal?: string
-  ownerId: string
-  memberIds: string[]
   status: 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ARCHIVED'
   createdAt: string
   updatedAt: string
 }
 ```
 
-## 3. Task（任务）
+Project does not hold `ownerId` or `memberIds`. Project membership and Project-level roles are owned by `ProjectMember`.
+
+## 3. ProjectMember（项目成员）
+
+```ts
+interface ProjectMember {
+  id: string
+  projectId: string
+  userId: string
+  role: 'OWNER' | 'MEMBER' | 'REVIEWER'
+  createdAt: string
+  updatedAt: string
+}
+```
+
+Alpha baseline: a Project is created with one initial `OWNER` ProjectMember. OWNER transfer and multiple OWNERs are not implemented.
+
+## 4. Task（任务）
 
 ```ts
 interface Task {
@@ -36,18 +53,14 @@ interface Task {
   projectId: string
   title: string
   description?: string
-  driUserId: string
-  collaboratorIds: string[]
+  assigneeId?: string
   priority: 'P0' | 'P1' | 'P2' | 'P3'
   status:
-    | 'READY'
-    | 'WORKING'
-    | 'WAITING'
-    | 'BLOCKED'
+    | 'TODO'
+    | 'IN_PROGRESS'
     | 'READY_FOR_REVIEW'
     | 'ACCEPTED'
     | 'CLOSED'
-    | 'CANCELLED'
   deadline?: string
   acceptanceCriteria: string[]
   dependencyIds: string[]
@@ -56,7 +69,17 @@ interface Task {
 }
 ```
 
-## 4. Conversation（对话）
+Task creation always starts in `TODO`. Formal state changes are only made through:
+
+- `START`
+- `SUBMIT_FOR_REVIEW`
+- `REQUEST_REWORK`
+- `ACCEPT_AFTER_HUMAN_REVIEW`
+- `CLOSE`
+
+`WAITING`, `BLOCKED`, and `CANCELLED` are deferred. `ACCEPTED` and `CLOSED` remain separate formal states.
+
+## 5. Conversation（对话）
 
 ```ts
 type ConversationType =
@@ -77,7 +100,7 @@ interface Conversation {
 }
 ```
 
-## 5. WorkspaceBinding（本地工作区绑定）
+## 6. WorkspaceBinding（本地工作区绑定）
 
 ```ts
 interface WorkspaceBinding {
@@ -99,7 +122,7 @@ type LocalPermission =
   | 'LOCAL_EXECUTE'
 ```
 
-## 6. AgentDefinition（Agent 定义）
+## 7. AgentDefinition（Agent 定义）
 
 ```ts
 interface AgentDefinition {
@@ -113,7 +136,7 @@ interface AgentDefinition {
 }
 ```
 
-## 7. AgentRun（Agent 执行实例）
+## 8. AgentRun（Agent 执行实例）
 
 ```ts
 type AgentRunStatus =
@@ -139,7 +162,7 @@ interface AgentRun {
 }
 ```
 
-## 8. Artifact（工作产物）
+## 9. Artifact（工作产物）
 
 ```ts
 interface Artifact {
@@ -155,7 +178,7 @@ interface Artifact {
 }
 ```
 
-## 9. Result（正式候选结果 / 正式结果）
+## 10. Result（正式候选结果 / 正式结果）
 
 ```ts
 type ResultStatus =
@@ -177,7 +200,7 @@ interface Result {
 }
 ```
 
-## 10. Review（人工评审）
+## 11. Review（人工评审）
 
 ```ts
 interface Review {
@@ -190,7 +213,7 @@ interface Review {
 }
 ```
 
-## 11. ActivityEvent（工作事件）
+## 12. ActivityEvent（工作事件）
 
 ```ts
 interface ActivityEvent {
@@ -205,7 +228,7 @@ interface ActivityEvent {
 }
 ```
 
-## 12. Modeling Rules（建模规则）
+## 13. Modeling Rules（建模规则）
 
 - avoid duplicating the same business object in UI-specific models;
 - formal status values are shared through `packages/contracts`;
