@@ -73,6 +73,21 @@ describe('Task state machine', () => {
     );
   });
 
+  it('rejects an untrusted arbitrary action string without changing task state', () => {
+    const fixture = createProjectFixture();
+    const task = createTask(
+      { id: asTaskId('task-untrusted'), projectId, title: 'Untrusted' },
+      fixture.members,
+      now
+    );
+
+    expectDomainError(
+      () => applyTaskAction(task, 'SET_ACCEPTED' as never, now),
+      'INVALID_STATE_TRANSITION'
+    );
+    expect(task.status).toBe('TODO');
+  });
+
   it('keeps ACCEPTED distinct from CLOSED until CLOSE is called', () => {
     const fixture = createProjectFixture();
     const task = createTask(

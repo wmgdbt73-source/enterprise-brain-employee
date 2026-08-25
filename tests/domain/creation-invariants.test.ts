@@ -4,6 +4,7 @@ import {
   asProjectMemberId,
   asTaskId,
   asUserId,
+  applyTaskAction,
   createUser,
   createProject,
   createTask,
@@ -82,16 +83,21 @@ describe('creation invariants', () => {
     ).toThrow(DomainError);
   });
 
-  it('keeps identity and creation timestamp unchanged after a transition', () => {
+  it('keeps identity invariant and updates timestamp after a transition', () => {
     const fixture = createProjectFixture();
+    const laterNow = new Date('2026-08-25T00:01:00.000Z');
     const task = createTask(
       { id: asTaskId('task-identity'), projectId, title: 'Identity' },
       fixture.members,
       now
     );
+    const inProgress = applyTaskAction(task, 'START', laterNow);
 
-    expect(task.id).toBe(asTaskId('task-identity'));
-    expect(task.createdAt).toEqual(now);
-    expect(task.projectId).toBe(asProjectId('project-1'));
+    expect(inProgress.status).toBe('IN_PROGRESS');
+    expect(inProgress.id).toBe(task.id);
+    expect(inProgress.projectId).toBe(task.projectId);
+    expect(inProgress.createdAt).toEqual(task.createdAt);
+    expect(inProgress.updatedAt).toEqual(laterNow);
+    expect(inProgress.updatedAt).not.toEqual(task.updatedAt);
   });
 });

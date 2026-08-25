@@ -19,7 +19,7 @@ It must define:
 ### User（用户）
 - id
 - name
-- role
+- system_role
 - department_id?
 
 ### Project（项目）
@@ -114,7 +114,7 @@ It must define:
 ## 3. Core Relations（核心关系）
 
 ```text
-User --is_member_of--> ProjectMember
+User --has_membership--> ProjectMember
 ProjectMember --belongs_to--> Project
 Project --contains--> Task
 Task --assigned_to--> User
