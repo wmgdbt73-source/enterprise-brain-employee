@@ -36,6 +36,13 @@ export interface CreateTaskInput {
 }
 
 const taskPriorities = new Set<TaskPriority>(['P0', 'P1', 'P2', 'P3']);
+const taskStatuses = new Set<TaskStatus>([
+  'TODO',
+  'IN_PROGRESS',
+  'READY_FOR_REVIEW',
+  'ACCEPTED',
+  'CLOSED'
+]);
 
 export function createTask(
   input: CreateTaskInput,
@@ -94,6 +101,38 @@ export function applyTaskAction(
     status: transitionTaskStatus(task.status, action),
     updatedAt: new Date(now)
   });
+}
+
+/** Restores a trusted persistence record; it is not a creation or transition API. */
+export function rehydrateTask(task: Task): Task {
+  if (!taskPriorities.has(task.priority) || !taskStatuses.has(task.status)) {
+    throw new DomainError('INVALID_ARGUMENT', 'Invalid persisted Task state');
+  }
+  if (
+    !isValidDate(task.createdAt) ||
+    !isValidDate(task.updatedAt) ||
+    (task.deadline !== undefined && !isValidDate(task.deadline))
+  ) {
+    throw new DomainError(
+      'INVALID_ARGUMENT',
+      'Invalid persisted Task timestamp'
+    );
+  }
+
+  return Object.freeze({
+    ...task,
+    title: requireNonBlank(task.title, 'title'),
+    description: task.description?.trim() || undefined,
+    acceptanceCriteria: Object.freeze([...task.acceptanceCriteria]),
+    dependencyIds: Object.freeze([...task.dependencyIds]),
+    deadline: task.deadline ? new Date(task.deadline) : undefined,
+    createdAt: new Date(task.createdAt),
+    updatedAt: new Date(task.updatedAt)
+  });
+}
+
+function isValidDate(value: Date): boolean {
+  return value instanceof Date && !Number.isNaN(value.valueOf());
 }
 
 function assertAssigneeMembership(

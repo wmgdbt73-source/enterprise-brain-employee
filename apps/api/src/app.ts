@@ -2,6 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import { createUser, type User } from '@enterprise-brain/domain';
 import {
   ProjectRepository,
+  TaskRepository,
   createPrismaClient,
   ensureUser,
   type PrismaClient
@@ -14,6 +15,11 @@ import {
   ProjectNotFoundError,
   ProjectService
 } from './modules/projects/project-service.js';
+import { registerTaskRoutes } from './modules/tasks/task-routes.js';
+import {
+  TaskNotFoundError,
+  TaskService
+} from './modules/tasks/task-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -47,8 +53,20 @@ export async function createApp(
 
   app.get('/health', async () => ({ status: 'ok' }));
   registerProjectRoutes(app, new ProjectService(new ProjectRepository(prisma)));
+  registerTaskRoutes(app, new TaskService(new TaskRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
+    if (isDomainError(error) && error.code === 'INVALID_STATE_TRANSITION') {
+      return reply
+        .code(409)
+        .send({
+          error: {
+            code: 'INVALID_STATE_TRANSITION',
+            message: error.message,
+            details: {}
+          }
+        });
+    }
     if (hasValidationError(error) || isDomainError(error)) {
       return reply.code(400).send({
         error: {
@@ -59,7 +77,10 @@ export async function createApp(
       });
     }
 
-    if (error instanceof ProjectNotFoundError) {
+    if (
+      error instanceof ProjectNotFoundError ||
+      error instanceof TaskNotFoundError
+    ) {
       return reply.code(404).send({
         error: {
           code: 'NOT_FOUND',
