@@ -3,16 +3,17 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "dist/main/main.js",
+  "main": "dist/main/main/main.js",
   "scripts": {
     "build": "vite build && tsc -p tsconfig.main.json",
     "dev": "concurrently --kill-others-on-fail --names renderer,main,electron --prefix-colors blue,magenta,green \"pnpm run dev:renderer\" \"pnpm run dev:main\" \"pnpm run dev:electron\"",
-    "dev:electron": "wait-on tcp:5173 file:dist/main/main.js file:dist/main/preload.js && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist/main/main.js",
+    "dev:electron": "wait-on tcp:5173 file:dist/main/main/main.js file:dist/main/main/preload.js && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 electron dist/main/main/main.js",
     "dev:main": "tsc -p tsconfig.main.json --watch",
     "dev:renderer": "vite --host 127.0.0.1",
     "typecheck": "tsc -p tsconfig.renderer.json --noEmit && tsc -p tsconfig.main.json --noEmit"
   },
   "dependencies": {
+    "@enterprise-brain/contracts": "workspace:*",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },

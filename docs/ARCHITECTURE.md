@@ -143,3 +143,16 @@ This stack is a **Reference Implementation（参考实现）**. Future formal Ja
 PostgreSQL-backed Prisma Client factory. `packages/domain` remains independent of
 Prisma. Record-to-Domain rehydration and repositories are deliberately deferred to
 the future application/repository integration boundary.
+
+## 10. Desktop Work Runtime Boundary（桌面工作运行环境边界）
+
+EB-006 establishes:
+
+```text
+React Renderer → typed preload bridge → IPC allowlist → Electron Main → Employee HTTP API → PostgreSQL
+```
+
+The sandboxed Renderer has no Node.js, filesystem, shell, environment, raw IPC
+or arbitrary HTTP capability. Electron Main owns the fixed API gateway. Future
+local tools also pass through this Desktop Runtime permission boundary; the
+Renderer never receives direct operating-system access.

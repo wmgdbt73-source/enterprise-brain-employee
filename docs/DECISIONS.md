@@ -207,6 +207,23 @@ exclusive to `applyTaskAction`.
 
 ---
 
+## ADR-017 — Desktop Renderer Capability Boundary
+
+**Decision（决策）**
+
+The Electron Renderer has no Node.js, raw operating-system or raw IPC capability.
+The preload script exposes only a typed, allowlisted bridge. In EB-006, Employee
+API requests are mediated by Electron Main; local filesystem tools remain deferred.
+
+**Consequences（影响）**
+
+- `contextIsolation` and renderer sandboxing remain enabled;
+- raw `ipcRenderer` is never exposed to React;
+- the API base URL stays in Main Process configuration;
+- future local tools require the Desktop Runtime permission boundary.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

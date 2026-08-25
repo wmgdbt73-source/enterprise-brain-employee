@@ -54,6 +54,9 @@ importers:
 
   apps/desktop:
     dependencies:
+      '@enterprise-brain/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       react:
         specifier: ^19.0.0
         version: 19.2.8
