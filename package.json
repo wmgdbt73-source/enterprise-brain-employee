@@ -18,7 +18,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run --exclude tests/database/** --exclude tests/api/**",
+    "test": "vitest run tests/foundation.test.ts tests/domain",
     "test:api:integration": "vitest run tests/api",
     "test:database": "vitest run tests/database",
     "typecheck": "pnpm --recursive run typecheck"

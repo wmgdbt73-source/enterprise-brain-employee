@@ -198,6 +198,15 @@ the provider without changing business services that consume RequestContext.
 
 ---
 
+## ADR-016 — Trusted Task Rehydration Boundary
+
+`createTask` creates a new Task only in TODO. `rehydrateTask` restores a trusted
+persistence record and may restore any valid formal Task status. HTTP and LLM
+input cannot use rehydration to create or alter formal state; transitions remain
+exclusive to `applyTaskAction`.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

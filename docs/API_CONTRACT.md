@@ -81,6 +81,21 @@ Start Task（开始任务）.
 
 Formal status transition must be validated server-side.
 
+### EB-005 implemented Task endpoints
+
+`POST /projects/:projectId/tasks` accepts only `title`, optional `description`,
+`assigneeId`, `priority`, `acceptanceCriteria`, and ISO-8601 `deadline`; it
+returns `201` with TaskContract. Unknown fields including `id`, `projectId`,
+`status`, timestamps and `dependencyIds` are rejected.
+
+`GET /projects/:projectId/tasks` returns `{ "tasks": [] }` ordered by
+`createdAt DESC`. `GET /tasks/:id` returns TaskContract. `POST /tasks/:id/start`
+performs TODO → IN_PROGRESS and returns `200`; repeat START returns `409
+INVALID_STATE_TRANSITION`.
+
+All Task endpoints are scoped to current-user ProjectMember membership. Missing
+and non-member Project/Task resources return the same `404 NOT_FOUND` envelope.
+
 ## 4. Workspace APIs（本地工作区接口）
 
 Local filesystem operations may be handled through Electron IPC（Electron 进程间通信）, but formal WorkspaceBinding metadata should use structured contracts.

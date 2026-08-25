@@ -26,6 +26,7 @@ export {
   applyTaskAction,
   assignTask,
   createTask,
+  rehydrateTask,
   unassignTask,
   type CreateTaskInput,
   type Task
