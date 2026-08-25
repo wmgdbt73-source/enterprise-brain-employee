@@ -2,10 +2,10 @@
   "name": "enterprise-brain-employee",
   "private": true,
   "version": "0.0.0",
-  "packageManager": "pnpm@10.0.0",
+  "packageManager": "pnpm@11.19.0",
   "engines": {
     "node": ">=22.0.0",
-    "pnpm": ">=10.0.0"
+    "pnpm": ">=11.0.0"
   },
   "scripts": {
     "build": "pnpm --recursive run build",
