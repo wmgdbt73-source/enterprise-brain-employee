@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
+import { DevIdentityProvider } from '../../apps/api/src/identity/dev-identity-provider.js';
 import { createPrismaClient } from '../../packages/database/src/index.js';
 
 const connectionString = process.env.DATABASE_URL;
@@ -50,6 +51,18 @@ describe('Task API vertical slice', () => {
       priority: 'P2',
       dependencyIds: []
     });
+    const assigned = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Assigned', assigneeId: 'dev-user' }
+      })
+    ).json();
+    await expect(
+      requireDatabase().taskAssignment.findUniqueOrThrow({
+        where: { taskId: assigned.id }
+      })
+    ).resolves.toMatchObject({ projectId: project.id, userId: 'dev-user' });
     expect(
       (
         await app.inject({
@@ -66,6 +79,23 @@ describe('Task API vertical slice', () => {
     expect(
       (await app.inject({ method: 'GET', url: `/tasks/${task.id}` })).json()
     ).toMatchObject({ status: 'IN_PROGRESS' });
+    const outsiderApp = await createApp({
+      prisma: requireDatabase(),
+      identityProvider: new DevIdentityProvider({ id: 'non-member' })
+    });
+    expect(
+      (
+        await outsiderApp.inject({
+          method: 'GET',
+          url: `/projects/${project.id}/tasks`
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (await outsiderApp.inject({ method: 'GET', url: `/tasks/${task.id}` }))
+        .statusCode
+    ).toBe(404);
+    await outsiderApp.close();
     const again = await app.inject({
       method: 'POST',
       url: `/tasks/${task.id}/start`
