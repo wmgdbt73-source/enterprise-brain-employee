@@ -1,2 +1,9 @@
-// Intentionally empty: EB-001 exposes no desktop capabilities to the renderer.
-export {};
+import { contextBridge, ipcRenderer } from 'electron';
+import { createEnterpriseBrainBridge } from '../shared/enterprise-brain.js';
+
+contextBridge.exposeInMainWorld(
+  'enterpriseBrain',
+  createEnterpriseBrainBridge((channel, payload) =>
+    ipcRenderer.invoke(channel, payload)
+  )
+);

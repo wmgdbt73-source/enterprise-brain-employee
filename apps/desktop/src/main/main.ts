@@ -1,6 +1,8 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DesktopApiGateway } from './desktop-api-gateway.js';
+import { registerRuntimeHandlers } from './runtime-handlers.js';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,6 +13,7 @@ function createWindow() {
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
       preload: path.join(dirname, 'preload.js')
     }
   });
@@ -19,11 +22,18 @@ function createWindow() {
   if (developmentUrl) {
     void window.loadURL(developmentUrl);
   } else {
-    void window.loadFile(path.join(dirname, '../renderer/index.html'));
+    void window.loadFile(path.join(dirname, '../../renderer/index.html'));
   }
 }
 
 app.whenReady().then(() => {
+  const gateway = new DesktopApiGateway({
+    baseUrl: process.env.EMPLOYEE_API_BASE_URL ?? 'http://127.0.0.1:3000'
+  });
+  registerRuntimeHandlers(ipcMain, gateway, {
+    platform: process.platform,
+    appVersion: app.getVersion()
+  });
   createWindow();
 
   app.on('activate', () => {
