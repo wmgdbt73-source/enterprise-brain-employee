@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DesktopApiGateway } from './desktop-api-gateway.js';
+import { isAllowedTopLevelNavigation } from './navigation-policy.js';
 import { registerRuntimeHandlers } from './runtime-handlers.js';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,10 +20,18 @@ function createWindow() {
   });
 
   const developmentUrl = process.env.VITE_DEV_SERVER_URL;
+  const packagedUrl = pathToFileURL(
+    path.join(dirname, '../../renderer/index.html')
+  ).toString();
+  window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  window.webContents.on('will-navigate', (event, url) => {
+    if (!isAllowedTopLevelNavigation(url, developmentUrl, packagedUrl))
+      event.preventDefault();
+  });
   if (developmentUrl) {
     void window.loadURL(developmentUrl);
   } else {
-    void window.loadFile(path.join(dirname, '../../renderer/index.html'));
+    void window.loadURL(packagedUrl);
   }
 }
 
