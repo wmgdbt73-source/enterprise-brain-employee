@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: enterprise_brain
+      POSTGRES_PASSWORD: enterprise_brain
+      POSTGRES_DB: enterprise_brain
+    ports:
+      - '5432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U enterprise_brain -d enterprise_brain']
+      interval: 5s
+      timeout: 5s
+      retries: 10

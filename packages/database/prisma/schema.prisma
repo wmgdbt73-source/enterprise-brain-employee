@@ -1,0 +1,122 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserSystemRole {
+  EMPLOYEE
+  ADMIN
+}
+
+enum ProjectMemberRole {
+  OWNER
+  MEMBER
+  REVIEWER
+}
+
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  READY_FOR_REVIEW
+  ACCEPTED
+  CLOSED
+}
+
+enum TaskPriority {
+  P0
+  P1
+  P2
+  P3
+}
+
+model User {
+  id             String          @id @map("user_id")
+  name           String
+  systemRole     UserSystemRole  @map("system_role")
+  departmentId   String?         @map("department_id")
+  createdAt      DateTime        @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime        @map("updated_at") @db.Timestamptz(3)
+  projectMembers ProjectMember[]
+
+  @@map("users")
+}
+
+model Project {
+  id        String          @id @map("project_id")
+  name      String
+  goal      String?
+  status    ProjectStatus
+  createdAt DateTime        @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime        @map("updated_at") @db.Timestamptz(3)
+  members   ProjectMember[]
+  tasks     Task[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id              String            @id @map("project_member_id")
+  projectId       String            @map("project_id")
+  userId          String            @map("user_id")
+  role            ProjectMemberRole
+  createdAt       DateTime          @map("created_at") @db.Timestamptz(3)
+  updatedAt       DateTime          @map("updated_at") @db.Timestamptz(3)
+  project         Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  user            User              @relation(fields: [userId], references: [id], onDelete: Restrict)
+  taskAssignments TaskAssignment[]
+
+  @@unique([projectId, userId], map: "project_members_project_id_user_id_key")
+  @@map("project_members")
+}
+
+model Task {
+  id                 String           @id @map("task_id")
+  projectId          String           @map("project_id")
+  title              String
+  description        String?
+  priority           TaskPriority
+  status             TaskStatus
+  acceptanceCriteria String[]         @map("acceptance_criteria")
+  deadline           DateTime?        @db.Timestamptz(3)
+  createdAt          DateTime         @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime         @map("updated_at") @db.Timestamptz(3)
+  project            Project          @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  assignment         TaskAssignment?
+  dependencies       TaskDependency[] @relation("TaskDependencies")
+  dependents         TaskDependency[] @relation("TaskDependents")
+
+  @@unique([id, projectId], map: "tasks_task_id_project_id_key")
+  @@map("tasks")
+}
+
+model TaskAssignment {
+  taskId        String        @id @map("task_id")
+  projectId     String        @map("project_id")
+  userId        String        @map("user_id")
+  task          Task          @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Cascade)
+  projectMember ProjectMember @relation(fields: [projectId, userId], references: [projectId, userId], onDelete: Restrict)
+
+  @@unique([taskId, projectId], map: "task_assignments_task_id_project_id_key")
+  @@map("task_assignments")
+}
+
+model TaskDependency {
+  taskId          String @map("task_id")
+  dependsOnTaskId String @map("depends_on_task_id")
+  task            Task   @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
+  dependsOnTask   Task   @relation("TaskDependents", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, dependsOnTaskId])
+  @@map("task_dependencies")
+}

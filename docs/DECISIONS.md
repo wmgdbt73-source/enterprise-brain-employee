@@ -155,6 +155,31 @@ User system roles are `EMPLOYEE` and `ADMIN`. Project roles are `OWNER`, `MEMBER
 
 ---
 
+## ADR-014 — PostgreSQL and Prisma Persistence Baseline
+
+**Decision（决策）**
+EB-003 uses PostgreSQL with Prisma ORM 7. Prisma uses the `prisma-client`
+generator with an explicit generated-client output, `prisma.config.ts`, and the
+PostgreSQL driver adapter (`@prisma/adapter-pg` + `pg`).
+
+**Boundary（边界）**
+`packages/database` owns the schema, migrations and explicit client factory.
+`packages/domain` does not depend on Prisma. Repositories and Domain rehydration
+are deferred to the application/repository integration task.
+
+**Integrity（完整性）**
+The first persistence scope is User, Project, ProjectMember and Task, plus
+persistence-only TaskAssignment and TaskDependency relations. IDs are externally
+supplied strings. ProjectMember remains the membership/role source of truth.
+Database constraints enforce unique project membership and, through a PostgreSQL
+partial unique index in the committed migration, at most one OWNER per Project.
+
+**Time（时间）**
+Domain owns `createdAt` and `updatedAt`; PostgreSQL stores timezone-aware values
+without database defaults or Prisma `@updatedAt` mutation.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

@@ -34,7 +34,7 @@ Files / Browser / Terminal
 - Vite（构建工具）
 - Node.js + Fastify（应用 API）
 - PostgreSQL（结构化业务数据）
-- Prisma or Drizzle（ORM，二选一后记录到 DECISIONS.md）
+- Prisma ORM 7（PostgreSQL Driver Adapter：`@prisma/adapter-pg` + `pg`）
 - SSE — Server-Sent Events（服务器实时推送） for AgentRun progress
 
 ## 3. Repository Structure（仓库结构）
@@ -50,7 +50,8 @@ enterprise-brain-employee/
 │   ├── domain/
 │   ├── contracts/
 │   ├── shared/
-│   └── ui/
+│   ├── ui/
+│   └── database/              # Prisma schema, migrations and client factory
 ├── docs/
 ├── reference/
 ├── tests/
@@ -135,3 +136,10 @@ Use Knowledge / RAG for:
 ## 8. Evolution Strategy（演进策略）
 
 This stack is a **Reference Implementation（参考实现）**. Future formal Java backend, enterprise IAM, production Ontology and enterprise Agent Runtime may replace internal services as long as public contracts remain stable.
+
+## 9. Persistence Baseline（持久化基线）
+
+`packages/database` owns the Prisma 7 schema, committed migrations and an explicit
+PostgreSQL-backed Prisma Client factory. `packages/domain` remains independent of
+Prisma. Record-to-Domain rehydration and repositories are deliberately deferred to
+the future application/repository integration boundary.
