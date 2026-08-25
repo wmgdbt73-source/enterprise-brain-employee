@@ -180,6 +180,24 @@ without database defaults or Prisma `@updatedAt` mutation.
 
 ---
 
+## ADR-015 — Development Identity through RequestContext
+
+**Decision（决策）**
+EB-004 uses a temporary DevIdentityProvider that supplies one configured
+development user. API route and business code consume identity only through
+RequestContext (`currentUser`), never through a hardcoded user ID.
+
+**Bootstrap（初始化）**
+Application startup idempotently ensures that the development identity has a
+corresponding User record using the User Domain Rule. This makes the owner
+ProjectMember foreign key valid without route-level hidden user creation.
+
+**Future replacement（未来替换）**
+DevIdentityProvider is not authentication. Enterprise Identity / SSO can replace
+the provider without changing business services that consume RequestContext.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:
