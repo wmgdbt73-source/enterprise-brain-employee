@@ -1,0 +1,164 @@
+# API Contract（接口契约）
+
+> Status: Alpha proposal / Alpha 提案。正式编码前可调整，但修改需同步到本文件。
+
+## 1. Principles（原则）
+
+- UI does not own formal business state.
+- APIs return structured objects, not only LLM text.
+- Agent execution status is streamed separately from formal business mutation.
+- errors must be machine-readable.
+
+## 2. Project APIs（项目接口）
+
+### POST /projects
+Create Project（创建项目）.
+
+Request:
+```json
+{
+  "name": "Employee Alpha",
+  "goal": "Run core delivery flow"
+}
+```
+
+### GET /projects
+List Projects（项目列表）.
+
+### GET /projects/:id
+Get Project detail（项目详情）.
+
+## 3. Task APIs（任务接口）
+
+### POST /projects/:projectId/tasks
+Create Task（创建任务）.
+
+### GET /projects/:projectId/tasks
+List Project Tasks（项目任务列表）.
+
+### GET /tasks/:id
+Get Task detail（任务详情）.
+
+### POST /tasks/:id/start
+Start Task（开始任务）.
+
+Formal status transition must be validated server-side.
+
+## 4. Workspace APIs（本地工作区接口）
+
+Local filesystem operations may be handled through Electron IPC（Electron 进程间通信）, but formal WorkspaceBinding metadata should use structured contracts.
+
+### POST /workspace-bindings
+Create or update Workspace binding（创建或更新本地工作区绑定）.
+
+### GET /projects/:projectId/workspace-binding
+Get current user's binding for this device（获取当前用户在当前设备上的项目工作区绑定）.
+
+## 5. AgentRun APIs（Agent 执行接口）
+
+### POST /agent-runs
+Create AgentRun（创建 Agent 执行）.
+
+Request concept:
+```json
+{
+  "agentDefinitionId": "work-agent",
+  "projectId": "project-1",
+  "taskId": "task-1",
+  "conversationId": "conversation-1",
+  "input": {
+    "message": "Analyze current requirement files"
+  }
+}
+```
+
+### GET /agent-runs/:id
+Get AgentRun status（获取 Agent 执行状态）.
+
+### GET /agent-runs/:id/events
+SSE — Server-Sent Events（服务器实时推送） stream.
+
+Suggested event types:
+- run.started
+- model.delta
+- tool.requested
+- tool.started
+- tool.completed
+- human_confirmation.required
+- run.completed
+- run.failed
+
+### POST /agent-runs/:id/cancel
+Cancel AgentRun（取消执行）.
+
+## 6. Artifact APIs（工作产物接口）
+
+### POST /artifacts
+Register Artifact（登记工作产物）.
+
+### GET /tasks/:taskId/artifacts
+List Task Artifacts（任务工作产物列表）.
+
+## 7. Result APIs（结果接口）
+
+### POST /tasks/:taskId/results
+Create Result Candidate（创建正式候选结果）.
+
+This action requires explicit Employee Confirmation（员工确认） in the UI.
+
+### GET /results/:id
+Get Result（结果详情）.
+
+### POST /results/:id/submit-review
+Submit for Human Review（提交人工评审）.
+
+## 8. Review APIs（评审接口）
+
+### POST /results/:id/reviews
+Create Human Review（创建人工评审）.
+
+Request:
+```json
+{
+  "decision": "ACCEPT",
+  "comment": "Meets acceptance criteria"
+}
+```
+
+Server validates reviewer authority before Result becomes ACCEPTED.
+
+## 9. Activity / Notification APIs（动态 / 通知接口）
+
+### GET /projects/:projectId/activity
+Get Project Dynamic（项目动态）.
+
+### GET /notifications
+Get current user notifications（获取当前用户通知）.
+
+## 10. Error Shape（错误结构）
+
+```json
+{
+  "error": {
+    "code": "PERMISSION_DENIED",
+    "message": "Human-readable message",
+    "details": {}
+  }
+}
+```
+
+Initial error codes:
+- VALIDATION_ERROR
+- NOT_FOUND
+- PERMISSION_DENIED
+- INVALID_STATE_TRANSITION
+- WORKSPACE_SCOPE_VIOLATION
+- HUMAN_CONFIRMATION_REQUIRED
+- AGENT_RUN_FAILED
+
+## 11. Contract Rule（契约规则）
+
+Before Codex adds or changes an endpoint, it must:
+1. check this file;
+2. reuse an existing contract where possible;
+3. update this file when a new public endpoint is introduced.
