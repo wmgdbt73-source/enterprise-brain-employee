@@ -100,3 +100,6 @@ jobs:
 
       - name: Run database integration tests
         run: pnpm test:database
+
+      - name: Run Project API integration tests
+        run: pnpm test:api:integration

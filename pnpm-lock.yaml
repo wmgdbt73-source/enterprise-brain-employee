@@ -35,6 +35,15 @@ importers:
 
   apps/api:
     dependencies:
+      '@enterprise-brain/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@enterprise-brain/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@enterprise-brain/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       fastify:
         specifier: ^5.0.0
         version: 5.12.1
@@ -81,6 +90,12 @@ importers:
 
   packages/database:
     dependencies:
+      '@enterprise-brain/contracts':
+        specifier: workspace:*
+        version: link:../contracts
+      '@enterprise-brain/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@prisma/adapter-pg':
         specifier: 7.9.1
         version: 7.9.1

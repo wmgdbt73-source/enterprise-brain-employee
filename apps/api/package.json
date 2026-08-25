@@ -10,6 +10,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@enterprise-brain/contracts": "workspace:*",
+    "@enterprise-brain/database": "workspace:*",
+    "@enterprise-brain/domain": "workspace:*",
     "fastify": "^5.0.0"
   },
   "devDependencies": {

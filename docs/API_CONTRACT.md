@@ -1,6 +1,6 @@
 # API Contract（接口契约）
 
-> Status: Alpha proposal / Alpha 提案。正式编码前可调整，但修改需同步到本文件。
+> Status: Alpha baseline / Alpha 基线。修改需同步到本文件。
 
 ## 1. Principles（原则）
 
@@ -22,11 +22,48 @@ Request:
 }
 ```
 
+`name` is required and non-blank. `goal` is optional. Unknown fields are
+rejected; clients cannot supply `ownerId`, `memberIds`, `status`, `createdAt`
+or `updatedAt`.
+
+Response: `201 Created`
+
+```json
+{
+  "id": "project-id",
+  "name": "Employee Alpha",
+  "goal": "Run core delivery flow",
+  "status": "ACTIVE",
+  "createdAt": "2026-08-25T00:00:00.000Z",
+  "updatedAt": "2026-08-25T00:00:00.000Z"
+}
+```
+
+The owner is the current user from RequestContext. The server creates a
+Project and its initial OWNER ProjectMember in one transaction.
+
 ### GET /projects
 List Projects（项目列表）.
 
+Response: `200 OK`
+
+```json
+{
+  "projects": []
+}
+```
+
+Only Projects for which the current user has a ProjectMember membership are
+returned, ordered by `createdAt DESC`.
+
 ### GET /projects/:id
 Get Project detail（项目详情）.
+
+Response: `200 OK` with `ProjectContract`.
+
+The endpoint returns `404 NOT_FOUND` when the Project does not exist or the
+current user is not a ProjectMember. This shared response avoids leaking the
+existence of other Projects.
 
 ## 3. Task APIs（任务接口）
 
@@ -149,6 +186,8 @@ Get current user notifications（获取当前用户通知）.
 
 Initial error codes:
 - VALIDATION_ERROR
+- NOT_FOUND
+- INTERNAL_ERROR
 - NOT_FOUND
 - PERMISSION_DENIED
 - INVALID_STATE_TRANSITION
