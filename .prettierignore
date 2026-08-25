@@ -1,0 +1,7 @@
+node_modules/
+dist/
+coverage/
+docs/
+reference/
+README.md
+pnpm-lock.yaml

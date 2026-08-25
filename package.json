@@ -1,0 +1,30 @@
+{
+  "name": "enterprise-brain-employee",
+  "private": true,
+  "version": "0.0.0",
+  "packageManager": "pnpm@11.19.0",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=11.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --recursive run build",
+    "dev:api": "pnpm --filter @enterprise-brain/api dev",
+    "dev:desktop": "pnpm --filter @enterprise-brain/desktop dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings=0",
+    "test": "vitest run",
+    "typecheck": "pnpm --recursive run typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^10.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}
