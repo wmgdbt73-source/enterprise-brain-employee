@@ -11,10 +11,15 @@
     "build": "pnpm --recursive run build",
     "dev:api": "pnpm --filter @enterprise-brain/api dev",
     "dev:desktop": "pnpm --filter @enterprise-brain/desktop dev",
+    "db:validate": "pnpm --filter @enterprise-brain/database prisma validate --config prisma.config.ts",
+    "db:generate": "pnpm --filter @enterprise-brain/database prisma generate --config prisma.config.ts",
+    "db:migrate:dev": "pnpm --filter @enterprise-brain/database prisma migrate dev --config prisma.config.ts",
+    "db:migrate:deploy": "pnpm --filter @enterprise-brain/database prisma migrate deploy --config prisma.config.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run",
+    "test": "vitest run --exclude tests/database/**",
+    "test:database": "vitest run tests/database",
     "typecheck": "pnpm --recursive run typecheck"
   },
   "devDependencies": {

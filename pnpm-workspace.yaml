@@ -7,5 +7,7 @@ onlyBuiltDependencies:
   - electron
   - esbuild
 allowBuilds:
+  '@prisma/engines': true
   electron: true
   esbuild: true
+  prisma: true
