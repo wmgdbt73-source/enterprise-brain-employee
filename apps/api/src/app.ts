@@ -23,7 +23,13 @@ export interface CreateAppOptions {
 export async function createApp(
   options: CreateAppOptions = {}
 ): Promise<FastifyInstance> {
-  const app = Fastify();
+  const app = Fastify({
+    ajv: {
+      customOptions: {
+        removeAdditional: false
+      }
+    }
+  });
   const identityProvider =
     options.identityProvider ?? new DevIdentityProvider();
   const prisma =
