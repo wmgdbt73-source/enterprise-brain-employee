@@ -19,6 +19,7 @@ import type { RequestContext } from '../../context/request-context.js';
 
 export class AgentRunNotFoundError extends Error {}
 export class AgentRunConflictError extends Error {}
+export class AgentRunInvalidResultError extends Error {}
 export class AgentRunService {
   constructor(
     private readonly runs: AgentRunRepository,
@@ -72,6 +73,7 @@ export class AgentRunService {
     );
     if (!result) throw new AgentRunNotFoundError();
     if (result === 'CONFLICT') throw new AgentRunConflictError();
+    if (result === 'INVALID') throw new AgentRunInvalidResultError();
     return result;
   }
   async get(context: RequestContext, runId: string): Promise<AgentRunContract> {

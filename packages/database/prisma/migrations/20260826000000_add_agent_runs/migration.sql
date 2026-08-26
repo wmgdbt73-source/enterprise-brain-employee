@@ -16,7 +16,7 @@ CREATE TABLE "agent_runs" (
   CONSTRAINT "agent_runs_pkey" PRIMARY KEY ("agent_run_id"),
   CONSTRAINT "agent_runs_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("user_id") ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT "agent_runs_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects"("project_id") ON DELETE RESTRICT ON UPDATE CASCADE,
-  CONSTRAINT "agent_runs_task_id_fkey" FOREIGN KEY ("task_id") REFERENCES "tasks"("task_id") ON DELETE RESTRICT ON UPDATE CASCADE
+  CONSTRAINT "agent_runs_task_id_project_id_fkey" FOREIGN KEY ("task_id", "project_id") REFERENCES "tasks"("task_id", "project_id") ON DELETE RESTRICT ON UPDATE CASCADE
 );
 CREATE TABLE "agent_tool_calls" (
   "agent_tool_call_id" TEXT NOT NULL,

@@ -25,6 +25,7 @@ import {
 import { registerAgentRunRoutes } from './modules/agent-runs/agent-run-routes.js';
 import {
   AgentRunConflictError,
+  AgentRunInvalidResultError,
   AgentRunNotFoundError,
   AgentRunService
 } from './modules/agent-runs/agent-run-service.js';
@@ -117,7 +118,9 @@ export async function createApp(
             message: 'Conflicting AgentRun completion',
             details: {}
           }
-        });
+      });
+    if (error instanceof AgentRunInvalidResultError)
+      return reply.code(400).send({ error: { code: 'AGENT_TOOL_RESULT_INVALID', message: 'Tool completion does not match request', details: {} } });
 
     app.log.error(error);
     return reply.code(500).send({
