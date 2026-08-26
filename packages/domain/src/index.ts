@@ -4,10 +4,14 @@ export {
   asProjectMemberId,
   asTaskId,
   asUserId,
+  asWorkspaceBindingId,
+  asDeviceId,
+  type DeviceId,
   type ProjectId,
   type ProjectMemberId,
   type TaskId,
-  type UserId
+  type UserId,
+  type WorkspaceBindingId
 } from './ids.js';
 export {
   createProject,
@@ -33,3 +37,10 @@ export {
 } from './task.js';
 export { transitionTaskStatus } from './task-state-machine.js';
 export { createUser, type CreateUserInput, type User } from './user.js';
+export {
+  createWorkspaceBinding,
+  rehydrateWorkspaceBinding,
+  type CreateWorkspaceBindingInput,
+  type RehydrateWorkspaceBindingInput,
+  type WorkspaceBinding
+} from './workspace-binding.js';

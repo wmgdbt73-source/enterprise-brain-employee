@@ -1,4 +1,5 @@
 import type {
+  CurrentUserContract,
   ProjectContract,
   TaskContract
 } from '@enterprise-brain/contracts';
@@ -35,6 +36,9 @@ export class DesktopApiGateway {
           }
         : result
     );
+  }
+  getCurrentUser(): Promise<DesktopResult<CurrentUserContract>> {
+    return this.request('/me') as Promise<DesktopResult<CurrentUserContract>>;
   }
   getProject(id: string): Promise<DesktopResult<ProjectContract>> {
     return this.request(`/projects/${encodeURIComponent(id)}`) as Promise<

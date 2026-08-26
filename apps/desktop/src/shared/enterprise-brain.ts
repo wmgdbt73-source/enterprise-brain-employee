@@ -1,4 +1,5 @@
 import type {
+  LocalPermission,
   ProjectContract,
   TaskContract,
   TaskPriority
@@ -21,6 +22,30 @@ export interface TaskInput {
   priority?: TaskPriority;
   acceptanceCriteria?: string[];
   deadline?: string;
+}
+
+export interface WorkspaceBindingView {
+  id: string;
+  userId: string;
+  projectId: string;
+  localPath: string;
+  permissions: LocalPermission[];
+  createdAt: string;
+  updatedAt: string;
+}
+export interface DirectoryListing {
+  path: string;
+  entries: Array<{
+    name: string;
+    relativePath: string;
+    kind: 'FILE' | 'DIRECTORY' | 'SYMLINK';
+  }>;
+}
+export interface TextFile {
+  relativePath: string;
+  content: string;
+  size: number;
+  encoding: 'utf-8';
 }
 
 export interface DesktopApiError {
@@ -47,6 +72,23 @@ export interface EnterpriseBrainBridge {
       input: TaskInput
     ): Promise<DesktopResult<TaskContract>>;
     start(id: string): Promise<DesktopResult<TaskContract>>;
+  };
+  workspace: {
+    get(projectId: string): Promise<DesktopResult<WorkspaceBindingView | null>>;
+    select(
+      projectId: string
+    ): Promise<
+      DesktopResult<{ cancelled: boolean; binding?: WorkspaceBindingView }>
+    >;
+    unbind(projectId: string): Promise<DesktopResult<void>>;
+    listDirectory(
+      projectId: string,
+      relativePath?: string
+    ): Promise<DesktopResult<DirectoryListing>>;
+    readFile(
+      projectId: string,
+      relativePath: string
+    ): Promise<DesktopResult<TextFile>>;
   };
 }
 
@@ -85,6 +127,29 @@ export function createEnterpriseBrainBridge(
         >,
       start: (id) =>
         invoke('tasks:start', { id }) as Promise<DesktopResult<TaskContract>>
+    },
+    workspace: {
+      get: (projectId) =>
+        invoke('workspace:get', { projectId }) as Promise<
+          DesktopResult<WorkspaceBindingView | null>
+        >,
+      select: (projectId) =>
+        invoke('workspace:select', { projectId }) as Promise<
+          DesktopResult<{ cancelled: boolean; binding?: WorkspaceBindingView }>
+        >,
+      unbind: (projectId) =>
+        invoke('workspace:unbind', { projectId }) as Promise<
+          DesktopResult<void>
+        >,
+      listDirectory: (projectId, relativePath = '') =>
+        invoke('workspace:list-directory', {
+          projectId,
+          relativePath
+        }) as Promise<DesktopResult<DirectoryListing>>,
+      readFile: (projectId, relativePath) =>
+        invoke('workspace:read-file', { projectId, relativePath }) as Promise<
+          DesktopResult<TextFile>
+        >
     }
   };
 }

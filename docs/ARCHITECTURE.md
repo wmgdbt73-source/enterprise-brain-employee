@@ -156,3 +156,16 @@ The sandboxed Renderer has no Node.js, filesystem, shell, environment, raw IPC
 or arbitrary HTTP capability. Electron Main owns the fixed API gateway. Future
 local tools also pass through this Desktop Runtime permission boundary; the
 Renderer never receives direct operating-system access.
+
+## 11. Device-local Workspace Boundary（设备本地工作区边界）
+
+```text
+Renderer → typed preload workspace allowlist → IPC → Electron Main
+  → /me + project membership check → device-local WorkspaceBinding store
+  → canonical path policy → local filesystem
+```
+
+WorkspaceBinding is keyed by `user_id + project_id + device_id`; its local path
+is stored only below Electron `userData`. Each read re-checks current identity
+and Project membership. Renderer input is relative-only and canonical target
+paths must remain under the canonical Workspace root.

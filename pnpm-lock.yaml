@@ -57,6 +57,9 @@ importers:
       '@enterprise-brain/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@enterprise-brain/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       react:
         specifier: ^19.0.0
         version: 19.2.8
@@ -129,7 +132,11 @@ importers:
 
   packages/ui: {}
 
-  tests: {}
+  tests:
+    dependencies:
+      '@enterprise-brain/domain':
+        specifier: workspace:*
+        version: link:../packages/domain
 
 packages:
 

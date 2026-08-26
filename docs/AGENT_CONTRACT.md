@@ -2,6 +2,10 @@
 
 > Goal: define the minimum shared contract for Agent execution in Employee Alpha.
 
+> EB-007 establishes the Desktop Local Capability Layer. Its `list_directory`
+> and `read_file` authorization boundary is reusable by a future Agent Runtime,
+> but Agent Runtime itself remains EB-008 and is not implemented here.
+
 ## 1. One Runtime, Many Agent Definitions（一套运行引擎，多种 Agent 定义）
 
 Do not build one runtime per Agent.

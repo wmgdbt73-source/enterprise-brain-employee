@@ -4,10 +4,13 @@ import {
   asProjectMemberId,
   asTaskId,
   asUserId,
+  asDeviceId,
+  asWorkspaceBindingId,
   applyTaskAction,
   createUser,
   createProject,
   createTask,
+  createWorkspaceBinding,
   DomainError
 } from '../../packages/domain/src/index.js';
 import { createProjectFixture, now, projectId } from './fixtures.js';
@@ -78,6 +81,35 @@ describe('creation invariants', () => {
       createTask(
         { id: asTaskId('task-blank'), projectId, title: '  ' },
         fixture.members,
+        now
+      )
+    ).toThrow(DomainError);
+  });
+
+  it('creates a WorkspaceBinding with LOCAL_READ only', () => {
+    expect(
+      createWorkspaceBinding(
+        {
+          id: asWorkspaceBindingId('binding-1'),
+          userId: asUserId('user-1'),
+          projectId,
+          deviceId: asDeviceId('device-1'),
+          localPath: '/workspace',
+          permissions: ['LOCAL_READ']
+        },
+        now
+      ).permissions
+    ).toEqual(['LOCAL_READ']);
+    expect(() =>
+      createWorkspaceBinding(
+        {
+          id: asWorkspaceBindingId('binding-2'),
+          userId: asUserId('user-1'),
+          projectId,
+          deviceId: asDeviceId('device-1'),
+          localPath: '/workspace',
+          permissions: ['LOCAL_MODIFY']
+        },
         now
       )
     ).toThrow(DomainError);

@@ -1,5 +1,6 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import { createUser, type User } from '@enterprise-brain/domain';
+import type { CurrentUserContract } from '@enterprise-brain/contracts';
 import {
   ProjectRepository,
   TaskRepository,
@@ -52,20 +53,23 @@ export async function createApp(
   });
 
   app.get('/health', async () => ({ status: 'ok' }));
+  app.get('/me', async (request): Promise<CurrentUserContract> => ({
+    id: request.requestContext.currentUser.id,
+    name: request.requestContext.currentUser.name,
+    systemRole: request.requestContext.currentUser.systemRole
+  }));
   registerProjectRoutes(app, new ProjectService(new ProjectRepository(prisma)));
   registerTaskRoutes(app, new TaskService(new TaskRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
     if (isDomainError(error) && error.code === 'INVALID_STATE_TRANSITION') {
-      return reply
-        .code(409)
-        .send({
-          error: {
-            code: 'INVALID_STATE_TRANSITION',
-            message: error.message,
-            details: {}
-          }
-        });
+      return reply.code(409).send({
+        error: {
+          code: 'INVALID_STATE_TRANSITION',
+          message: error.message,
+          details: {}
+        }
+      });
     }
     if (hasValidationError(error) || isDomainError(error)) {
       return reply.code(400).send({

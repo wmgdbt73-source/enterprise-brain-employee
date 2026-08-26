@@ -224,6 +224,20 @@ API requests are mediated by Electron Main; local filesystem tools remain deferr
 
 ---
 
+## ADR-018 — Device-Local Workspace Capability Boundary
+
+WorkspaceBinding is device-local metadata keyed by user, project and a random
+app-local UUID device identifier. It is not a hardware fingerprint and its
+`localPath` never reaches Employee API or PostgreSQL. Renderer has no direct
+filesystem capability; Electron Main grants only allowlisted, project-scoped
+operations after fresh `/me` and Project membership checks.
+
+EB-007 grants `LOCAL_READ` only. Every path is relative input, canonicalized,
+and checked beneath the canonical Workspace root; symlink escape is denied.
+Write, delete, create and execute capabilities remain deferred.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

@@ -10,3 +10,10 @@ export interface UserContract {
   createdAt: string;
   updatedAt: string;
 }
+
+/** Current request identity; intentionally excludes persistence timestamps. */
+export interface CurrentUserContract {
+  id: UserId;
+  name: string;
+  systemRole: UserSystemRole;
+}
