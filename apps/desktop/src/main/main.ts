@@ -7,6 +7,8 @@ import { registerRuntimeHandlers } from './runtime-handlers.js';
 import { DeviceIdStore } from './workspace/device-id-store.js';
 import { WorkspaceStore } from './workspace/workspace-store.js';
 import { WorkspaceService } from './workspace/workspace-service.js';
+import { AgentToolExecutor } from './agent-runtime/agent-tool-executor.js';
+import { DesktopAgentRunCoordinator } from './agent-runtime/agent-run-coordinator.js';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,7 +61,8 @@ app.whenReady().then(async () => {
       platform: process.platform,
       appVersion: app.getVersion()
     },
-    workspace
+    workspace,
+    new DesktopAgentRunCoordinator(gateway, new AgentToolExecutor(workspace))
   );
   createWindow();
 

@@ -17,6 +17,8 @@ function requireDatabase() {
 describe('Task API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.agentToolCall.deleteMany();
+    await db.agentRun.deleteMany();
     await db.taskDependency.deleteMany();
     await db.taskAssignment.deleteMany();
     await db.task.deleteMany();
@@ -172,6 +174,66 @@ describe('Task API vertical slice', () => {
     expect(
       (await app.inject({ method: 'GET', url: '/tasks/missing' })).statusCode
     ).toBe(404);
+    await app.close();
+  });
+
+  it('creates a running AgentRun and completes its one pending ToolCall idempotently', async () => {
+    const app = await createApp({ prisma: requireDatabase() });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = await app.inject({
+      method: 'POST',
+      url: `/tasks/${task.id}/agent-runs`,
+      payload: { name: 'list_directory', relativePath: '' }
+    });
+    expect(created.statusCode).toBe(201);
+    const body = created.json();
+    expect(body).toMatchObject({
+      run: { status: 'RUNNING', taskId: task.id },
+      toolRequest: { name: 'list_directory', projectId: project.id }
+    });
+    const receipt = {
+      toolCallId: body.toolRequest.id,
+      status: 'SUCCEEDED',
+      metadata: { relativePath: '', entryCount: 2 }
+    };
+    const completed = await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${body.run.id}/tool-results`,
+      payload: receipt
+    });
+    expect(completed.statusCode).toBe(200);
+    expect(completed.json()).toMatchObject({ status: 'SUCCEEDED' });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/agent-runs/${body.run.id}/tool-results`,
+          payload: receipt
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/tasks/${task.id}/agent-runs`,
+          payload: { name: 'run_command', relativePath: '' }
+        })
+      ).statusCode
+    ).toBe(400);
     await app.close();
   });
 });

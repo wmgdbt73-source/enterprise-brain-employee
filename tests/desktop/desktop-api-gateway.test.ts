@@ -4,6 +4,7 @@ import { createEnterpriseBrainBridge } from '../../apps/desktop/src/shared/enter
 import { isAllowedTopLevelNavigation } from '../../apps/desktop/src/main/navigation-policy.js';
 import { resolveOperation } from '../../apps/desktop/src/renderer/src/features/runtime/operation-state.js';
 import { toTaskInput } from '../../apps/desktop/src/renderer/src/features/tasks/task-input.js';
+import { AgentToolExecutor } from '../../apps/desktop/src/main/agent-runtime/agent-tool-executor.js';
 
 describe('Desktop Work Runtime gateway', () => {
   it('uses fixed Project API method, path and JSON body', async () => {
@@ -74,11 +75,13 @@ describe('Desktop Work Runtime gateway', () => {
     });
     const bridge = createEnterpriseBrainBridge(invoke);
     expect(Object.keys(bridge).sort()).toEqual([
+      'agents',
       'projects',
       'runtime',
       'tasks',
       'workspace'
     ]);
+    expect(Object.keys(bridge.agents)).toEqual(['run']);
     expect(Object.keys(bridge.projects).sort()).toEqual([
       'create',
       'get',
@@ -167,5 +170,29 @@ describe('Desktop Work Runtime gateway', () => {
         'file:///app/renderer/index.html'
       )
     ).toBe(false);
+  });
+  it('keeps complete local file results out of the server completion receipt', async () => {
+    const executor = new AgentToolExecutor({
+      readFile: async () => ({
+        relativePath: 'brief.md',
+        content: 'private text',
+        size: 12,
+        encoding: 'utf-8'
+      })
+    } as never);
+    const result = await executor.execute({
+      id: 'call',
+      runId: 'run',
+      userId: 'user',
+      projectId: 'project',
+      name: 'read_file',
+      relativePath: 'brief.md'
+    });
+    expect(result.localResult).toMatchObject({ content: 'private text' });
+    expect(result.receipt).toMatchObject({
+      status: 'SUCCEEDED',
+      metadata: { relativePath: 'brief.md', size: 12 }
+    });
+    expect(JSON.stringify(result.receipt)).not.toContain('private text');
   });
 });

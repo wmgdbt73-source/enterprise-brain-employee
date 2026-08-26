@@ -1,4 +1,8 @@
 import type {
+  AgentRunContract,
+  AgentToolCompletionReceipt,
+  AgentToolIntent,
+  AgentToolRequest,
   CurrentUserContract,
   ProjectContract,
   TaskContract
@@ -78,6 +82,31 @@ export class DesktopApiGateway {
     return this.request(`/tasks/${encodeURIComponent(id)}/start`, {
       method: 'POST'
     }) as Promise<DesktopResult<TaskContract>>;
+  }
+  createAgentRun(
+    taskId: string,
+    intent: AgentToolIntent
+  ): Promise<
+    DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest }>
+  > {
+    return this.request(`/tasks/${encodeURIComponent(taskId)}/agent-runs`, {
+      method: 'POST',
+      body: intent
+    }) as Promise<
+      DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest }>
+    >;
+  }
+  completeAgentRun(
+    runId: string,
+    receipt: AgentToolCompletionReceipt
+  ): Promise<DesktopResult<AgentRunContract>> {
+    return this.request(
+      `/agent-runs/${encodeURIComponent(runId)}/tool-results`,
+      {
+        method: 'POST',
+        body: receipt
+      }
+    ) as Promise<DesktopResult<AgentRunContract>>;
   }
   private async request(
     path: string,

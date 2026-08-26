@@ -1,4 +1,6 @@
 import type {
+  AgentRunContract,
+  AgentToolIntent,
   LocalPermission,
   ProjectContract,
   TaskContract,
@@ -90,6 +92,12 @@ export interface EnterpriseBrainBridge {
       relativePath: string
     ): Promise<DesktopResult<TextFile>>;
   };
+  agents: {
+    run(
+      taskId: string,
+      intent: AgentToolIntent
+    ): Promise<DesktopResult<{ run: AgentRunContract; localResult?: unknown }>>;
+  };
 }
 
 type Invoke = (channel: string, payload?: unknown) => Promise<unknown>;
@@ -149,6 +157,12 @@ export function createEnterpriseBrainBridge(
       readFile: (projectId, relativePath) =>
         invoke('workspace:read-file', { projectId, relativePath }) as Promise<
           DesktopResult<TextFile>
+        >
+    },
+    agents: {
+      run: (taskId, intent) =>
+        invoke('agent-runs:run', { taskId, intent }) as Promise<
+          DesktopResult<{ run: AgentRunContract; localResult?: unknown }>
         >
     }
   };

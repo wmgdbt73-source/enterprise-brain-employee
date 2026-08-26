@@ -116,7 +116,19 @@ EB-007 WorkspaceBinding metadata and local paths are device-local Electron Main
 Process state, not Employee HTTP API resources. The typed desktop bridge exposes
 only project-scoped `get`, `select`, `unbind`, `listDirectory` and `readFile`.
 
-## 6. AgentRun APIs（Agent 执行接口）
+## 6. AgentRun APIs（EB-008）
+
+`POST /tasks/:taskId/agent-runs` accepts only `{ name, relativePath }`, where
+`name` is `list_directory` or `read_file`. Identity, Project, status, agent key,
+commands and URLs are server-owned or rejected. The response includes a RUNNING
+AgentRun and one ToolRequest for Electron Main.
+
+`POST /agent-runs/:runId/tool-results` accepts a structured completion receipt.
+It persists only safe metadata (relative path, count/size/encoding/hash), never
+file content, directory entries, local path, stack or errno. Same receipt retry is
+idempotent; a conflicting second completion is `409`.
+
+## 7. AgentRun future APIs（Agent 执行接口）
 
 ### POST /agent-runs
 Create AgentRun（创建 Agent 执行）.

@@ -238,6 +238,18 @@ Write, delete, create and execute capabilities remain deferred.
 
 ---
 
+## ADR-019 — Backend AgentRun Authority with Desktop Tool Executor
+
+AgentRun and AgentToolCall are backend/PostgreSQL structured truth. The API first
+creates a RUNNING AgentRun and PENDING ToolCall in one transaction; Electron Main
+then executes only the returned allowlisted request through EB-007 WorkspaceService.
+Backend never accesses local filesystems. Desktop returns a safe completion receipt,
+not file contents or directory listings, and Run completion is transactional and
+idempotent. EB-008 enables only QUEUED → RUNNING → SUCCEEDED/FAILED; Task state is
+never changed by AgentRun outcome.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

@@ -166,6 +166,11 @@ interface AgentRun {
 }
 ```
 
+EB-008 binds every AgentRun to one User, Project and Task. Backend persists the
+AgentRun and safe ToolCall receipts; Electron Main holds full local tool output.
+Enabled transitions are `QUEUED → RUNNING → SUCCEEDED | FAILED`. `WAITING_HUMAN`
+and `CANCELLED` remain reserved enum values.
+
 ## 9. Artifact（工作产物）
 
 ```ts
