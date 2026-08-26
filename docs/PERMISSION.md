@@ -75,6 +75,10 @@ Agent receives a derived permission scope from:
 
 Agent must never gain broader device or enterprise permissions simply because it is running in Work mode.
 
+Artifact registration performs no new local read and grants no new local
+permission. It relies on the prior authorized `LOCAL_READ` ToolCall provenance
+and current Project membership.
+
 ## 8. Formal State Changes（正式状态变更）
 
 Server-side authorization is required for:

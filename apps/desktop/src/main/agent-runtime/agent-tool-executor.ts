@@ -7,54 +7,70 @@ import type { WorkspaceService } from '../workspace/workspace-service.js';
 import type { DesktopApiGateway } from '../desktop-api-gateway.js';
 import { LocalCapabilityFailure } from '../workspace/workspace-types.js';
 export class AgentToolExecutor {
-  constructor(private readonly workspace: WorkspaceService, private readonly gateway: DesktopApiGateway) {}
+  constructor(
+    private readonly workspace: WorkspaceService,
+    private readonly gateway: DesktopApiGateway
+  ) {}
   async execute(
     request: AgentToolRequest
   ): Promise<{ receipt: AgentToolCompletionReceipt; localResult?: unknown }> {
     try {
       const current = await this.gateway.getCurrentUser();
-      if (!current.ok || current.data.id !== request.userId) return { receipt: failed(request.id, 'AGENT_TOOL_REQUEST_INVALID', 'ToolRequest user does not match current identity') };
-      switch (request.name) {
-      case 'list_directory': {
-        const result = await this.workspace.listDirectory(
-          request.projectId,
-          request.relativePath
-        );
+      if (!current.ok || current.data.id !== request.userId)
         return {
-          localResult: result,
-          receipt: {
-            toolCallId: request.id,
-            status: 'SUCCEEDED',
-            metadata: {
-              relativePath: result.path,
-              entryCount: result.entries.length
-            }
-          }
+          receipt: failed(
+            request.id,
+            'AGENT_TOOL_REQUEST_INVALID',
+            'ToolRequest user does not match current identity'
+          )
         };
-      }
-      case 'read_file': {
-      const result = await this.workspace.readFile(
-        request.projectId,
-        request.relativePath
-      );
-      return {
-        localResult: result,
-        receipt: {
-          toolCallId: request.id,
-          status: 'SUCCEEDED',
-          metadata: {
-            relativePath: result.relativePath,
-            size: result.size,
-            encoding: result.encoding,
-            sha256: createHash('sha256')
-              .update(result.content, 'utf8')
-              .digest('hex')
-          }
+      switch (request.name) {
+        case 'list_directory': {
+          const result = await this.workspace.listDirectory(
+            request.projectId,
+            request.relativePath
+          );
+          return {
+            localResult: result,
+            receipt: {
+              toolCallId: request.id,
+              status: 'SUCCEEDED',
+              metadata: {
+                relativePath: result.path,
+                entryCount: result.entries.length
+              }
+            }
+          };
         }
-      };
-      }
-      default:
-        return { receipt: failed((request as { id: string }).id, 'AGENT_TOOL_REQUEST_INVALID', 'Unsupported Agent tool request') };
+        case 'read_file': {
+          const result = await this.workspace.readFile(
+            request.projectId,
+            request.relativePath
+          );
+          return {
+            localResult: result,
+            receipt: {
+              toolCallId: request.id,
+              status: 'SUCCEEDED',
+              metadata: {
+                relativePath: result.relativePath,
+                size: result.size,
+                encoding: result.encoding,
+                sha256: createHash('sha256')
+                  .update(result.content, 'utf8')
+                  .digest('hex')
+              }
+            }
+          };
+        }
+        default:
+          return {
+            receipt: failed(
+              (request as { id: string }).id,
+              'AGENT_TOOL_REQUEST_INVALID',
+              'Unsupported Agent tool request'
+            )
+          };
       }
     } catch (error) {
       const local =
@@ -75,4 +91,14 @@ export class AgentToolExecutor {
     }
   }
 }
-function failed(toolCallId: string, code: string, message: string): AgentToolCompletionReceipt { return { toolCallId, status: 'FAILED', error: { code, message, details: {} } }; }
+function failed(
+  toolCallId: string,
+  code: string,
+  message: string
+): AgentToolCompletionReceipt {
+  return {
+    toolCallId,
+    status: 'FAILED',
+    error: { code, message, details: {} }
+  };
+}

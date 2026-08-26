@@ -170,6 +170,12 @@ Cancel AgentRun（取消执行）.
 ### POST /artifacts
 Register Artifact（登记工作产物）.
 
+Accepts exactly `{ "agentRunId": "..." }`. The server derives all Artifact
+metadata from the current user's successful, single sequence-one `read_file`
+ToolCall. First registration returns `201`; repeated registration returns `200`
+with the same Artifact. Missing/non-member/other-user sources return `404`;
+visible but ineligible sources return `409 ARTIFACT_SOURCE_INVALID`.
+
 ### GET /tasks/:taskId/artifacts
 List Task Artifacts（任务工作产物列表）.
 
@@ -231,6 +237,7 @@ Initial error codes:
 - WORKSPACE_SCOPE_VIOLATION
 - HUMAN_CONFIRMATION_REQUIRED
 - AGENT_RUN_FAILED
+- ARTIFACT_SOURCE_INVALID
 
 ## 12. Contract Rule（契约规则）
 

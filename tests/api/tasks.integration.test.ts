@@ -20,6 +20,7 @@ function requireDatabase() {
 describe('Task API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.artifact.deleteMany();
     await db.agentToolCall.deleteMany();
     await db.agentRun.deleteMany();
     await db.taskDependency.deleteMany();
@@ -620,6 +621,323 @@ describe('Task API vertical slice', () => {
         }
       })
     ).rejects.toThrow();
+    await app.close();
+  });
+
+  it('registers a receipt-derived Artifact idempotently without changing Task or Run state', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'read_file', relativePath: 'docs/brief.md' }
+      })
+    ).json();
+    const receipt = {
+      toolCallId: created.toolRequest.id,
+      status: 'SUCCEEDED',
+      metadata: {
+        relativePath: 'docs/brief.md',
+        size: 12,
+        encoding: 'utf-8',
+        sha256: 'a'.repeat(64)
+      }
+    };
+    await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${created.run.id}/tool-results`,
+      payload: receipt
+    });
+    const first = await app.inject({
+      method: 'POST',
+      url: '/artifacts',
+      payload: { agentRunId: created.run.id }
+    });
+    expect(first.statusCode).toBe(201);
+    expect(first.json()).toMatchObject({
+      projectId: project.id,
+      taskId: task.id,
+      agentRunId: created.run.id,
+      sourceToolCallId: created.toolRequest.id,
+      relativePath: 'docs/brief.md',
+      size: 12,
+      encoding: 'utf-8',
+      sha256: 'a'.repeat(64),
+      version: 1,
+      createdByUserId: 'dev-user'
+    });
+    expect(JSON.stringify(first.json())).not.toContain('/Users/');
+    expect(JSON.stringify(first.json())).not.toContain('content');
+    const second = await app.inject({
+      method: 'POST',
+      url: '/artifacts',
+      payload: { agentRunId: created.run.id }
+    });
+    expect(second.statusCode).toBe(200);
+    expect(second.json().id).toBe(first.json().id);
+    expect(await db.artifact.count()).toBe(1);
+    expect(
+      (await db.task.findUniqueOrThrow({ where: { id: task.id } })).status
+    ).toBe('TODO');
+    expect(
+      (await db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } }))
+        .status
+    ).toBe('SUCCEEDED');
+    expect(
+      (
+        await app.inject({ method: 'GET', url: `/tasks/${task.id}/artifacts` })
+      ).json()
+    ).toEqual({ artifacts: [first.json()] });
+    await app.close();
+  });
+
+  it('rejects forged, ineligible, and hidden Artifact sources', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const list = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'list_directory', relativePath: '' }
+      })
+    ).json();
+    await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${list.run.id}/tool-results`,
+      payload: {
+        toolCallId: list.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: { relativePath: '', entryCount: 0 }
+      }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: list.run.id }
+        })
+      ).statusCode
+    ).toBe(409);
+    const running = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'read_file', relativePath: 'x.md' }
+      })
+    ).json();
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: running.run.id }
+        })
+      ).statusCode
+    ).toBe(409);
+    await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${running.run.id}/tool-results`,
+      payload: {
+        toolCallId: running.toolRequest.id,
+        status: 'FAILED',
+        error: { code: 'LOCAL_IO_ERROR', message: 'failed', details: {} }
+      }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: running.run.id }
+        })
+      ).statusCode
+    ).toBe(409);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: {
+            agentRunId: running.run.id,
+            relativePath: '/private',
+            content: 'forged'
+          }
+        })
+      ).statusCode
+    ).toBe(400);
+    const outsider = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider({ id: 'outsider' })
+    });
+    expect(
+      (
+        await outsider.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: running.run.id }
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await outsider.inject({
+          method: 'GET',
+          url: `/tasks/${task.id}/artifacts`
+        })
+      ).statusCode
+    ).toBe(404);
+    await outsider.close();
+    await app.close();
+  });
+
+  it('serializes concurrent Artifact registration to one durable row', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const run = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'read_file', relativePath: 'a.md' }
+      })
+    ).json();
+    await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${run.run.id}/tool-results`,
+      payload: {
+        toolCallId: run.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: {
+          relativePath: 'a.md',
+          size: 1,
+          encoding: 'utf-8',
+          sha256: 'b'.repeat(64)
+        }
+      }
+    });
+    const responses = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: '/artifacts',
+        payload: { agentRunId: run.run.id }
+      }),
+      app.inject({
+        method: 'POST',
+        url: '/artifacts',
+        payload: { agentRunId: run.run.id }
+      })
+    ]);
+    expect(responses.map((response) => response.statusCode).sort()).toEqual([
+      200, 201
+    ]);
+    expect(responses[0].json().id).toBe(responses[1].json().id);
+    expect(await db.artifact.count()).toBe(1);
+    await app.close();
+  });
+
+  it('requires exactly one sequence-one ToolCall before Artifact registration', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const run = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'read_file', relativePath: 'a.md' }
+      })
+    ).json();
+    await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${run.run.id}/tool-results`,
+      payload: {
+        toolCallId: run.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: {
+          relativePath: 'a.md',
+          size: 1,
+          encoding: 'utf-8',
+          sha256: 'c'.repeat(64)
+        }
+      }
+    });
+    await db.agentToolCall.create({
+      data: {
+        id: 'unexpected-second-call',
+        agentRunId: run.run.id,
+        sequence: 2,
+        name: 'read_file',
+        request: { name: 'read_file', relativePath: 'b.md' },
+        status: 'SUCCEEDED',
+        receipt: { status: 'SUCCEEDED' },
+        createdAt: new Date(),
+        completedAt: new Date()
+      }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: run.run.id }
+        })
+      ).statusCode
+    ).toBe(409);
     await app.close();
   });
 });

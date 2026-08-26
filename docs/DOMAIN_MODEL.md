@@ -177,15 +177,24 @@ and `CANCELLED` remain reserved enum values.
 interface Artifact {
   id: string
   projectId: string
-  taskId?: string
-  agentRunId?: string
-  type: 'FILE' | 'DOCUMENT' | 'CODE' | 'PROTOTYPE' | 'OTHER'
-  pathOrUri: string
-  version: number
-  createdBy: string
+  taskId: string
+  agentRunId: string
+  sourceToolCallId: string
+  type: 'FILE'
+  storageKind: 'LOCAL_WORKSPACE'
+  relativePath: string
+  size: number
+  encoding: 'utf-8'
+  sha256: string
+  version: 1
+  createdByUserId: string
   createdAt: string
 }
 ```
+
+Artifact is an immutable metadata reference derived from a successful local
+`read_file` observation. It stores neither an absolute local path nor file
+content and is not a Result.
 
 ## 10. Result（正式候选结果 / 正式结果）
 

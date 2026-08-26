@@ -97,6 +97,10 @@ Initial supported logical outputs:
 - ACTION_CANDIDATE（业务动作候选）
 - ARTIFACT_CANDIDATE（工作产物候选）
 
+EB-009 does not automatically create an Artifact. A successful `read_file` only
+records safe receipt metadata; an employee must explicitly register that observed
+local file as an Artifact. The Agent does not claim to have created the file.
+
 ## 7. Formal Business Action Rule（正式业务动作规则）
 
 Agent may propose an Action Candidate（动作候选）.

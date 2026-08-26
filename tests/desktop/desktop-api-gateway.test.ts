@@ -76,12 +76,17 @@ describe('Desktop Work Runtime gateway', () => {
     const bridge = createEnterpriseBrainBridge(invoke);
     expect(Object.keys(bridge).sort()).toEqual([
       'agents',
+      'artifacts',
       'projects',
       'runtime',
       'tasks',
       'workspace'
     ]);
     expect(Object.keys(bridge.agents)).toEqual(['run']);
+    expect(Object.keys(bridge.artifacts).sort()).toEqual([
+      'listForTask',
+      'register'
+    ]);
     expect(Object.keys(bridge.projects).sort()).toEqual([
       'create',
       'get',
@@ -172,14 +177,19 @@ describe('Desktop Work Runtime gateway', () => {
     ).toBe(false);
   });
   it('keeps complete local file results out of the server completion receipt', async () => {
-    const executor = new AgentToolExecutor({
-      readFile: async () => ({
-        relativePath: 'brief.md',
-        content: 'private text',
-        size: 12,
-        encoding: 'utf-8'
-      })
-    } as never, { getCurrentUser: async () => ({ ok: true, data: { id: 'user' } }) } as never);
+    const executor = new AgentToolExecutor(
+      {
+        readFile: async () => ({
+          relativePath: 'brief.md',
+          content: 'private text',
+          size: 12,
+          encoding: 'utf-8'
+        })
+      } as never,
+      {
+        getCurrentUser: async () => ({ ok: true, data: { id: 'user' } })
+      } as never
+    );
     const result = await executor.execute({
       id: 'call',
       runId: 'run',
@@ -194,5 +204,24 @@ describe('Desktop Work Runtime gateway', () => {
       metadata: { relativePath: 'brief.md', size: 12 }
     });
     expect(JSON.stringify(result.receipt)).not.toContain('private text');
+  });
+  it('uses fixed Artifact API methods without arbitrary HTTP access', async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({ id: 'artifact-1' })
+    });
+    const gateway = new DesktopApiGateway({
+      baseUrl: 'http://api.test',
+      fetchImplementation
+    });
+    await gateway.registerArtifact('run-1');
+    expect(fetchImplementation).toHaveBeenCalledWith(
+      'http://api.test/artifacts',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ agentRunId: 'run-1' })
+      })
+    );
   });
 });

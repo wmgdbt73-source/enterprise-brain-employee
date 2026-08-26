@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type {
   ProjectContract,
-  TaskContract
+  TaskContract,
+  ArtifactContract,
+  AgentRunContract
 } from '@enterprise-brain/contracts';
 import type {
   DesktopApiError,
@@ -23,6 +25,7 @@ export function App() {
   const [project, setProject] = useState<ProjectContract>();
   const [tasks, setTasks] = useState<TaskContract[]>([]);
   const [task, setTask] = useState<TaskContract>();
+  const [artifacts, setArtifacts] = useState<ArtifactContract[]>([]);
   const [tab, setTab] = useState<ProjectTab>('任务');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DesktopApiError>();
@@ -52,6 +55,15 @@ export function App() {
   useEffect(() => {
     if (project) void loadTasks(project.id);
   }, [project, loadTasks]);
+  useEffect(() => {
+    if (!task) return void setArtifacts([]);
+    void window.enterpriseBrain.artifacts
+      .listForTask(task.id)
+      .then((result) => {
+        const operation = resolveOperation(result);
+        if (operation.data) setArtifacts(operation.data);
+      });
+  }, [task]);
   useEffect(() => {
     void window.enterpriseBrain.runtime.getInfo().then((result) => {
       const operation = resolveOperation(result);
@@ -98,6 +110,36 @@ export function App() {
       await loadTasks(operation.data.projectId);
     }
   }
+  async function readFile(
+    value: TaskContract,
+    relativePath: string
+  ): Promise<AgentRunContract | undefined> {
+    const operation = resolveOperation(
+      await window.enterpriseBrain.agents.run(value.id, {
+        name: 'read_file',
+        relativePath
+      })
+    );
+    if (operation.error) {
+      setError(operation.error);
+      return undefined;
+    }
+    setError(undefined);
+    return operation.data?.run;
+  }
+  async function registerArtifact(agentRunId: string) {
+    const operation = resolveOperation(
+      await window.enterpriseBrain.artifacts.register(agentRunId)
+    );
+    if (operation.error) return setError(operation.error);
+    setError(undefined);
+    if (task) {
+      const listed = resolveOperation(
+        await window.enterpriseBrain.artifacts.listForTask(task.id)
+      );
+      if (listed.data) setArtifacts(listed.data);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -131,6 +173,9 @@ export function App() {
             onCreateTask={createTask}
             onSelectTask={setTask}
             onStartTask={startTask}
+            artifacts={artifacts}
+            onReadFile={readFile}
+            onRegisterArtifact={registerArtifact}
           />
         )}
       </main>

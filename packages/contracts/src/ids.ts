@@ -4,3 +4,4 @@ export type ProjectMemberId = string;
 export type TaskId = string;
 export type AgentRunId = string;
 export type AgentToolCallId = string;
+export type ArtifactId = string;

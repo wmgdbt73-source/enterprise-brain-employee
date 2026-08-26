@@ -3,6 +3,7 @@ import type {
   AgentToolCompletionReceipt,
   AgentToolRequest
 } from '@enterprise-brain/contracts';
+import { normalizeToolCompletion } from '@enterprise-brain/contracts';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 export class AgentRunRepository {
@@ -60,7 +61,8 @@ export class AgentRunRepository {
           }))
         )
           return undefined;
-        if (!validReceipt(call.request, receipt)) return 'INVALID';
+        if (normalizeToolCompletion(call.request, receipt).kind === 'INVALID')
+          return 'INVALID';
         if (call.status !== 'PENDING')
           return sameReceipt(call.receipt, receipt)
             ? toContract(call.agentRun)
@@ -106,36 +108,6 @@ export class AgentRunRepository {
   }
 }
 class CompletionCasConflict extends Error {}
-function validReceipt(
-  request: unknown,
-  receipt: AgentToolCompletionReceipt
-): boolean {
-  if (receipt.status === 'FAILED') return true;
-  const original = request as { name?: string; relativePath?: string };
-  const metadata = receipt.metadata;
-  if (metadata.relativePath !== original.relativePath) return false;
-  const entryCount = metadata.entryCount;
-  const size = metadata.size;
-  if (original.name === 'list_directory')
-    return (
-      Number.isInteger(entryCount) &&
-      entryCount !== undefined &&
-      entryCount >= 0 &&
-      size === undefined &&
-      metadata.encoding === undefined &&
-      metadata.sha256 === undefined
-    );
-  return (
-    original.name === 'read_file' &&
-    Number.isInteger(size) &&
-    size !== undefined &&
-    size >= 0 &&
-    metadata.encoding === 'utf-8' &&
-    typeof metadata.sha256 === 'string' &&
-    /^[a-f0-9]{64}$/i.test(metadata.sha256) &&
-    entryCount === undefined
-  );
-}
 function sameReceipt(
   value: unknown,
   receipt: AgentToolCompletionReceipt
