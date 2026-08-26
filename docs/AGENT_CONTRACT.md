@@ -6,6 +6,10 @@
 > and `read_file` authorization boundary is reusable by a future Agent Runtime,
 > but Agent Runtime itself remains EB-008 and is not implemented here.
 
+EB-008 activates a deterministic, no-LLM read-only AgentRun path. The user selects
+only `list_directory` or `read_file`; Backend creates the Run/ToolCall before
+Electron Main executes the existing Desktop Local Capability Layer.
+
 ## 1. One Runtime, Many Agent Definitions（一套运行引擎，多种 Agent 定义）
 
 Do not build one runtime per Agent.

@@ -12,10 +12,14 @@ Agent permission is not equal to user permission, and Work mode is not equal to 
 
 ## 2. Business Roles（业务角色）
 
-Alpha roles:
+SystemRole:
 - EMPLOYEE（员工）
-- PROJECT_OWNER（项目负责人）
 - ADMIN（管理员）
+
+ProjectMemberRole:
+- OWNER（项目负责人）
+- MEMBER（成员）
+- REVIEWER（评审人）
 
 Future production roles may be more granular.
 

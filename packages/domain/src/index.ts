@@ -4,9 +4,13 @@ export {
   asProjectMemberId,
   asTaskId,
   asUserId,
+  asAgentRunId,
+  asAgentToolCallId,
   asWorkspaceBindingId,
   asDeviceId,
   type DeviceId,
+  type AgentRunId,
+  type AgentToolCallId,
   type ProjectId,
   type ProjectMemberId,
   type TaskId,
@@ -37,6 +41,13 @@ export {
 } from './task.js';
 export { transitionTaskStatus } from './task-state-machine.js';
 export { createUser, type CreateUserInput, type User } from './user.js';
+export {
+  createAgentRun,
+  failAgentRun,
+  startAgentRun,
+  succeedAgentRun,
+  type AgentRun
+} from './agent-run.js';
 export {
   createWorkspaceBinding,
   rehydrateWorkspaceBinding,

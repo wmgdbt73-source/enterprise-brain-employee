@@ -4,6 +4,7 @@ import type { CurrentUserContract } from '@enterprise-brain/contracts';
 import {
   ProjectRepository,
   TaskRepository,
+  AgentRunRepository,
   createPrismaClient,
   ensureUser,
   type PrismaClient
@@ -21,6 +22,13 @@ import {
   TaskNotFoundError,
   TaskService
 } from './modules/tasks/task-service.js';
+import { registerAgentRunRoutes } from './modules/agent-runs/agent-run-routes.js';
+import {
+  AgentRunConflictError,
+  AgentRunInvalidResultError,
+  AgentRunNotFoundError,
+  AgentRunService
+} from './modules/agent-runs/agent-run-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -60,6 +68,13 @@ export async function createApp(
   }));
   registerProjectRoutes(app, new ProjectService(new ProjectRepository(prisma)));
   registerTaskRoutes(app, new TaskService(new TaskRepository(prisma)));
+  registerAgentRunRoutes(
+    app,
+    new AgentRunService(
+      new AgentRunRepository(prisma),
+      new TaskRepository(prisma)
+    )
+  );
 
   app.setErrorHandler((error, _request, reply) => {
     if (isDomainError(error) && error.code === 'INVALID_STATE_TRANSITION') {
@@ -83,7 +98,8 @@ export async function createApp(
 
     if (
       error instanceof ProjectNotFoundError ||
-      error instanceof TaskNotFoundError
+      error instanceof TaskNotFoundError ||
+      error instanceof AgentRunNotFoundError
     ) {
       return reply.code(404).send({
         error: {
@@ -93,6 +109,18 @@ export async function createApp(
         }
       });
     }
+    if (error instanceof AgentRunConflictError)
+      return reply
+        .code(409)
+        .send({
+          error: {
+            code: 'AGENT_RUN_CONFLICT',
+            message: 'Conflicting AgentRun completion',
+            details: {}
+          }
+      });
+    if (error instanceof AgentRunInvalidResultError)
+      return reply.code(400).send({ error: { code: 'AGENT_TOOL_RESULT_INVALID', message: 'Tool completion does not match request', details: {} } });
 
     app.log.error(error);
     return reply.code(500).send({

@@ -169,3 +169,10 @@ WorkspaceBinding is keyed by `user_id + project_id + device_id`; its local path
 is stored only below Electron `userData`. Each read re-checks current identity
 and Project membership. Renderer input is relative-only and canonical target
 paths must remain under the canonical Workspace root.
+
+## 12. Minimal Agent Runtime Boundary（最小 Agent 运行边界）
+
+Backend owns AgentRun/ToolCall persistence and returns a deterministic allowlisted
+ToolRequest. Electron Main is the local executor and reuses WorkspaceService;
+Backend never imports or accesses local filesystem APIs. Full local results stay
+on Desktop, while PostgreSQL records only safe completion metadata.

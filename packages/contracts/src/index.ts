@@ -1,4 +1,20 @@
-export type { ProjectId, ProjectMemberId, TaskId, UserId } from './ids.js';
+export type {
+  AgentRunId,
+  AgentToolCallId,
+  ProjectId,
+  ProjectMemberId,
+  TaskId,
+  UserId
+} from './ids.js';
+export type {
+  AgentRunContract,
+  AgentRunStatus,
+  AgentToolCallStatus,
+  AgentToolCompletionReceipt,
+  AgentToolIntent,
+  AgentToolName,
+  AgentToolRequest
+} from './agent-run.js';
 export type { ProjectContract, ProjectStatus } from './project.js';
 export type {
   ProjectMemberContract,

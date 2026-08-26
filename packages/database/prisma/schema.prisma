@@ -40,6 +40,21 @@ enum TaskPriority {
   P3
 }
 
+enum AgentRunStatus {
+  QUEUED
+  RUNNING
+  WAITING_HUMAN
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum AgentToolCallStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
 model User {
   id             String          @id @map("user_id")
   name           String
@@ -48,6 +63,7 @@ model User {
   createdAt      DateTime        @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime        @map("updated_at") @db.Timestamptz(3)
   projectMembers ProjectMember[]
+  agentRuns      AgentRun[]
 
   @@map("users")
 }
@@ -61,6 +77,7 @@ model Project {
   updatedAt DateTime        @map("updated_at") @db.Timestamptz(3)
   members   ProjectMember[]
   tasks     Task[]
+  agentRuns AgentRun[]
 
   @@map("projects")
 }
@@ -95,9 +112,46 @@ model Task {
   assignment         TaskAssignment?
   dependencies       TaskDependency[] @relation("TaskDependencies")
   dependents         TaskDependency[] @relation("TaskDependents")
+  agentRuns          AgentRun[]
 
   @@unique([id, projectId], map: "tasks_task_id_project_id_key")
   @@map("tasks")
+}
+
+model AgentRun {
+  id                 String         @id @map("agent_run_id")
+  userId             String         @map("user_id")
+  projectId          String         @map("project_id")
+  taskId             String         @map("task_id")
+  agentDefinitionKey String         @map("agent_definition_key")
+  intent             Json
+  status             AgentRunStatus
+  createdAt          DateTime       @map("created_at") @db.Timestamptz(3)
+  startedAt          DateTime?      @map("started_at") @db.Timestamptz(3)
+  finishedAt         DateTime?      @map("finished_at") @db.Timestamptz(3)
+  updatedAt          DateTime       @map("updated_at") @db.Timestamptz(3)
+  user               User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  project            Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  task               Task           @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Restrict)
+  toolCalls          AgentToolCall[]
+
+  @@map("agent_runs")
+}
+
+model AgentToolCall {
+  id          String              @id @map("agent_tool_call_id")
+  agentRunId  String              @map("agent_run_id")
+  sequence    Int
+  name        String
+  request     Json
+  status      AgentToolCallStatus
+  receipt     Json?
+  createdAt   DateTime            @map("created_at") @db.Timestamptz(3)
+  completedAt DateTime?           @map("completed_at") @db.Timestamptz(3)
+  agentRun    AgentRun            @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+
+  @@unique([agentRunId, sequence], map: "agent_tool_calls_agent_run_id_sequence_key")
+  @@map("agent_tool_calls")
 }
 
 model TaskAssignment {

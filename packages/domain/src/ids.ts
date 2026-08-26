@@ -4,6 +4,8 @@ declare const projectMemberIdBrand: unique symbol;
 declare const taskIdBrand: unique symbol;
 declare const workspaceBindingIdBrand: unique symbol;
 declare const deviceIdBrand: unique symbol;
+declare const agentRunIdBrand: unique symbol;
+declare const agentToolCallIdBrand: unique symbol;
 
 export type UserId = string & { readonly [userIdBrand]: 'UserId' };
 export type ProjectId = string & { readonly [projectIdBrand]: 'ProjectId' };
@@ -15,6 +17,10 @@ export type WorkspaceBindingId = string & {
   readonly [workspaceBindingIdBrand]: 'WorkspaceBindingId';
 };
 export type DeviceId = string & { readonly [deviceIdBrand]: 'DeviceId' };
+export type AgentRunId = string & { readonly [agentRunIdBrand]: 'AgentRunId' };
+export type AgentToolCallId = string & {
+  readonly [agentToolCallIdBrand]: 'AgentToolCallId';
+};
 
 function asNonEmptyId<T extends string>(value: string, label: string): T {
   if (value.trim().length === 0) {
@@ -48,5 +54,11 @@ export function asWorkspaceBindingId(value: string): WorkspaceBindingId {
 
 export function asDeviceId(value: string): DeviceId {
   return asNonEmptyId<DeviceId>(value, 'DeviceId');
+}
+export function asAgentRunId(value: string): AgentRunId {
+  return asNonEmptyId<AgentRunId>(value, 'AgentRunId');
+}
+export function asAgentToolCallId(value: string): AgentToolCallId {
+  return asNonEmptyId<AgentToolCallId>(value, 'AgentToolCallId');
 }
 import { DomainError } from './errors.js';

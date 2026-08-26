@@ -6,12 +6,14 @@ import {
   type LocalCapabilityError
 } from './workspace/workspace-types.js';
 import type { WorkspaceService } from './workspace/workspace-service.js';
+import type { DesktopAgentRunCoordinator } from './agent-runtime/agent-run-coordinator.js';
 
 export function registerRuntimeHandlers(
   ipc: Pick<IpcMain, 'handle'>,
   gateway: DesktopApiGateway,
   runtimeInfo: Omit<RuntimeInfo, 'runtime'>,
-  workspace?: WorkspaceService
+  workspace?: WorkspaceService,
+  agents?: DesktopAgentRunCoordinator
 ): void {
   ipc.handle('runtime:get-info', () => ({
     ok: true,
@@ -61,6 +63,11 @@ export function registerRuntimeHandlers(
         handleWorkspace(() =>
           workspace.readFile(payload.projectId, payload.relativePath)
         )
+    );
+  }
+  if (agents) {
+    ipc.handle('agent-runs:run', (_event, payload) =>
+      agents.run(payload.taskId, payload.intent)
     );
   }
 }
