@@ -1,15 +1,29 @@
 import path from 'node:path';
-import type { WorkspaceBinding } from '@enterprise-brain/domain';
+import {
+  rehydrateWorkspaceBinding,
+  type WorkspaceBinding
+} from '@enterprise-brain/domain';
 import { readJsonFile, writeJsonAtomically } from './json-file.js';
 
 interface StoredBindings {
   version: 1;
-  bindings: WorkspaceBinding[];
+  bindings: SerializedWorkspaceBinding[];
+}
+
+interface SerializedWorkspaceBinding {
+  id: string;
+  userId: string;
+  projectId: string;
+  deviceId: string;
+  localPath: string;
+  permissions: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export class WorkspaceStore {
   private readonly filePath: string;
-  private pending = Promise.resolve();
+  private pending: Promise<void> = Promise.resolve();
   constructor(directory: string) {
     this.filePath = path.join(directory, 'workspace-bindings.json');
   }
@@ -18,12 +32,15 @@ export class WorkspaceStore {
     projectId: string,
     deviceId: string
   ): Promise<WorkspaceBinding | undefined> {
-    return (await this.read()).bindings.find(
-      (binding) =>
-        binding.userId === userId &&
-        binding.projectId === projectId &&
-        binding.deviceId === deviceId
-    );
+    await this.pending;
+    return (await this.readRaw()).bindings
+      .map((binding) => rehydrateWorkspaceBinding(binding as never))
+      .find(
+        (binding) =>
+          binding.userId === userId &&
+          binding.projectId === projectId &&
+          binding.deviceId === deviceId
+      );
   }
   upsert(binding: WorkspaceBinding): Promise<void> {
     return this.mutate(async (state) => {
@@ -35,7 +52,7 @@ export class WorkspaceStore {
             item.deviceId === binding.deviceId
           )
       );
-      return { version: 1, bindings: [...retained, binding] };
+      return { version: 1, bindings: [...retained, serializeBinding(binding)] };
     });
   }
   remove(
@@ -56,29 +73,35 @@ export class WorkspaceStore {
       return { version: 1, bindings };
     }).then(() => removed);
   }
-  private async read(): Promise<StoredBindings> {
+  private async readRaw(): Promise<StoredBindings> {
     const state = await readJsonFile<StoredBindings>(this.filePath);
     if (!state) return { version: 1, bindings: [] };
     if (state.version !== 1 || !Array.isArray(state.bindings))
       throw new Error('Workspace metadata is invalid');
-    return { version: 1, bindings: state.bindings.map(hydrateBinding) };
+    return state;
   }
   private mutate(
     mutator: (state: StoredBindings) => Promise<StoredBindings>
   ): Promise<void> {
     const operation = this.pending.then(async () =>
-      writeJsonAtomically(this.filePath, await mutator(await this.read()))
+      writeJsonAtomically(this.filePath, await mutator(await this.readRaw()))
     );
     this.pending = operation.catch(() => undefined);
     return operation;
   }
 }
 
-function hydrateBinding(binding: WorkspaceBinding): WorkspaceBinding {
-  const createdAt = new Date(binding.createdAt);
-  const updatedAt = new Date(binding.updatedAt);
-  if (Number.isNaN(createdAt.valueOf()) || Number.isNaN(updatedAt.valueOf())) {
-    throw new Error('Workspace metadata is invalid');
-  }
-  return { ...binding, createdAt, updatedAt };
+function serializeBinding(
+  binding: WorkspaceBinding
+): SerializedWorkspaceBinding {
+  return {
+    id: binding.id,
+    userId: binding.userId,
+    projectId: binding.projectId,
+    deviceId: binding.deviceId,
+    localPath: binding.localPath,
+    permissions: [...binding.permissions],
+    createdAt: binding.createdAt.toISOString(),
+    updatedAt: binding.updatedAt.toISOString()
+  };
 }

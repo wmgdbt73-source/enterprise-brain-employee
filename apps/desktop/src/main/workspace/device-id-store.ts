@@ -20,9 +20,19 @@ export class DeviceIdStore {
       await writeJsonAtomically(this.filePath, { version: 1, deviceId });
       return deviceId;
     }
-    if (stored.version !== 1 || typeof stored.deviceId !== 'string') {
+    if (
+      stored.version !== 1 ||
+      typeof stored.deviceId !== 'string' ||
+      !isUuid(stored.deviceId)
+    ) {
       throw new Error('Device identity metadata is invalid');
     }
     return asDeviceId(stored.deviceId);
   }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
 }

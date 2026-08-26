@@ -1,4 +1,4 @@
-import { open, readdir, stat } from 'node:fs/promises';
+import { open, readdir, stat, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { resolveWithinWorkspace, validateRelativePath } from './path-policy.js';
 import {
@@ -11,6 +11,11 @@ import {
 const MAX_FILE_BYTES = 1024 * 1024;
 
 export class LocalReadService {
+  constructor(
+    private readonly options: {
+      openFile?: (path: string, flags: string) => Promise<FileHandle>;
+    } = {}
+  ) {}
   async listDirectory(
     root: string,
     relativePath = ''
@@ -54,11 +59,21 @@ export class LocalReadService {
       localFailure('LOCAL_NOT_FILE', 'Workspace path is not a file');
     if (info.size > MAX_FILE_BYTES)
       localFailure('LOCAL_FILE_TOO_LARGE', 'File exceeds the 1 MiB read limit');
-    const handle = await open(target, 'r');
+    const handle = await (this.options.openFile ?? open)(target, 'r');
     try {
       const buffer = Buffer.alloc(MAX_FILE_BYTES + 1);
-      const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
-      if (bytesRead > MAX_FILE_BYTES)
+      let bytesRead = 0;
+      while (bytesRead < buffer.length) {
+        const result = await handle.read(
+          buffer,
+          bytesRead,
+          buffer.length - bytesRead,
+          bytesRead
+        );
+        if (result.bytesRead === 0) break;
+        bytesRead += result.bytesRead;
+      }
+      if (bytesRead >= MAX_FILE_BYTES + 1)
         localFailure(
           'LOCAL_FILE_TOO_LARGE',
           'File exceeds the 1 MiB read limit'

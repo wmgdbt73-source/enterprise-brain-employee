@@ -39,6 +39,8 @@ export { transitionTaskStatus } from './task-state-machine.js';
 export { createUser, type CreateUserInput, type User } from './user.js';
 export {
   createWorkspaceBinding,
+  rehydrateWorkspaceBinding,
   type CreateWorkspaceBindingInput,
+  type RehydrateWorkspaceBindingInput,
   type WorkspaceBinding
 } from './workspace-binding.js';

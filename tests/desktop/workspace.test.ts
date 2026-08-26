@@ -72,11 +72,46 @@ describe('device-local workspace read capabilities', () => {
       await new WorkspaceStore(directory).get('user', 'project', first)
     ).toMatchObject({ id: 'replacement', createdAt: expect.any(Date) });
   });
-  it('lists and reads in-root UTF-8 files but rejects traversal, absolute, binary and oversized files', async () => {
+  it('fails safely for corrupted DeviceId and WorkspaceBinding metadata', async () => {
+    const directory = await createTemp();
+    await writeFile(
+      path.join(directory, 'device-id.json'),
+      JSON.stringify({ version: 1, deviceId: 'not-a-uuid' })
+    );
+    await expect(new DeviceIdStore(directory).get()).rejects.toThrow(
+      'Device identity metadata is invalid'
+    );
+    await writeFile(
+      path.join(directory, 'workspace-bindings.json'),
+      JSON.stringify({
+        version: 1,
+        bindings: [
+          {
+            id: 'binding',
+            userId: 'user',
+            projectId: 'project',
+            deviceId: 'device',
+            localPath: '',
+            permissions: ['LOCAL_MODIFY'],
+            createdAt: 'bad',
+            updatedAt: 'bad'
+          }
+        ]
+      })
+    );
+    await expect(
+      new WorkspaceStore(directory).get('user', 'project', 'device')
+    ).rejects.toThrow();
+  });
+  it('lists and reads in-root UTF-8 files but rejects invalid inputs and file kinds', async () => {
     const root = await createTemp();
     await mkdir(path.join(root, 'docs'));
     await writeFile(path.join(root, 'docs', 'readme.md'), 'hello');
     await writeFile(path.join(root, 'binary.bin'), Buffer.from([0, 1]));
+    await writeFile(
+      path.join(root, 'invalid-utf8.txt'),
+      Buffer.from([0xc3, 0x28])
+    );
     await writeFile(
       path.join(root, 'large.txt'),
       Buffer.alloc(1024 * 1024 + 1, 65)
@@ -101,7 +136,19 @@ describe('device-local workspace read capabilities', () => {
     await expect(service.readFile(root, '')).rejects.toSatisfy(
       (error) => failureCode(error) === 'LOCAL_NOT_FILE'
     );
+    await expect(service.readFile(root, 'missing.txt')).rejects.toSatisfy(
+      (error) => failureCode(error) === 'LOCAL_PATH_NOT_FOUND'
+    );
+    await expect(service.readFile(root, 'docs')).rejects.toSatisfy(
+      (error) => failureCode(error) === 'LOCAL_NOT_FILE'
+    );
+    await expect(service.listDirectory(root, 'binary.bin')).rejects.toSatisfy(
+      (error) => failureCode(error) === 'LOCAL_NOT_DIRECTORY'
+    );
     await expect(service.readFile(root, 'binary.bin')).rejects.toSatisfy(
+      (error) => failureCode(error) === 'LOCAL_BINARY_UNSUPPORTED'
+    );
+    await expect(service.readFile(root, 'invalid-utf8.txt')).rejects.toSatisfy(
       (error) => failureCode(error) === 'LOCAL_BINARY_UNSUPPORTED'
     );
     await expect(service.readFile(root, 'large.txt')).rejects.toSatisfy(
@@ -124,6 +171,39 @@ describe('device-local workspace read capabilities', () => {
     ).rejects.toSatisfy(
       (error) => failureCode(error) === 'LOCAL_PATH_OUTSIDE_WORKSPACE'
     );
+  });
+  it('rejects prefix-confusion symlink targets and never silently truncates short reads', async () => {
+    const root = await createTemp();
+    const sibling = `${root}-sibling`;
+    await mkdir(sibling);
+    directories.push(sibling);
+    await writeFile(path.join(sibling, 'secret.txt'), 'secret');
+    await symlink(sibling, path.join(root, 'prefix-link'), 'dir');
+    const service = new LocalReadService();
+    await expect(
+      service.readFile(root, 'prefix-link/secret.txt')
+    ).rejects.toSatisfy(
+      (error) => failureCode(error) === 'LOCAL_PATH_OUTSIDE_WORKSPACE'
+    );
+    await writeFile(path.join(root, 'short.txt'), 'placeholder');
+    const chunks = [Buffer.from('short '), Buffer.from('read')];
+    const shortReadService = new LocalReadService({
+      openFile: async () =>
+        ({
+          read: async (buffer: Buffer, offset: number) => {
+            const chunk = chunks.shift() ?? Buffer.alloc(0);
+            chunk.copy(buffer, offset);
+            return { bytesRead: chunk.length, buffer };
+          },
+          close: async () => undefined
+        }) as never
+    });
+    await expect(
+      shortReadService.readFile(root, 'short.txt')
+    ).resolves.toMatchObject({
+      content: 'short read',
+      size: 10
+    });
   });
   it('enforces authorization and unbind behavior without stale fallback', async () => {
     const directory = await createTemp();
@@ -163,6 +243,29 @@ describe('device-local workspace read capabilities', () => {
     await expect(service.listDirectory('project')).rejects.toSatisfy(
       (error) => failureCode(error) === 'WORKSPACE_NOT_BOUND'
     );
+  });
+  it('makes get observe a started unbind mutation', async () => {
+    const directory = await createTemp();
+    const deviceId = asDeviceId('device');
+    const store = new WorkspaceStore(directory);
+    await store.upsert(
+      createWorkspaceBinding(
+        {
+          id: asWorkspaceBindingId('binding'),
+          userId: asUserId('user'),
+          projectId: asProjectId('project'),
+          deviceId,
+          localPath: directory,
+          permissions: ['LOCAL_READ']
+        },
+        new Date()
+      )
+    );
+    const removal = store.remove('user', 'project', deviceId);
+    await expect(
+      store.get('user', 'project', deviceId)
+    ).resolves.toBeUndefined();
+    await expect(removal).resolves.toBe(true);
   });
   it('fails closed when current identity is unavailable and rejects bindings without LOCAL_READ', async () => {
     const directory = await createTemp();
