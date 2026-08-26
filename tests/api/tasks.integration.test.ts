@@ -236,4 +236,71 @@ describe('Task API vertical slice', () => {
     ).toBe(400);
     await app.close();
   });
+
+  it('rejects receipts that do not match the original tool request without changing state', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'read_file', relativePath: 'brief.md' }
+      })
+    ).json();
+    for (const metadata of [
+      {
+        relativePath: 'wrong.md',
+        size: 1,
+        encoding: 'utf-8',
+        sha256: 'a'.repeat(64)
+      },
+      { relativePath: 'brief.md', encoding: 'utf-8', sha256: 'a'.repeat(64) },
+      { relativePath: 'brief.md', size: 1, sha256: 'a'.repeat(64) },
+      { relativePath: 'brief.md', size: 1, encoding: 'utf-8' },
+      { relativePath: 'brief.md', size: 1, encoding: 'utf-8', sha256: 'bad' },
+      {
+        relativePath: 'brief.md',
+        size: 1,
+        encoding: 'utf-8',
+        sha256: 'a'.repeat(64),
+        entryCount: 1
+      }
+    ])
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: `/agent-runs/${created.run.id}/tool-results`,
+            payload: {
+              toolCallId: created.toolRequest.id,
+              status: 'SUCCEEDED',
+              metadata
+            }
+          })
+        ).statusCode
+      ).toBe(400);
+    await expect(
+      db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } })
+    ).resolves.toMatchObject({ status: 'RUNNING' });
+    await expect(
+      db.agentToolCall.findUniqueOrThrow({
+        where: { id: created.toolRequest.id }
+      })
+    ).resolves.toMatchObject({ status: 'PENDING' });
+    await app.close();
+  });
 });
