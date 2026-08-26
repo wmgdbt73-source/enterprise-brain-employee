@@ -36,8 +36,8 @@ export class ArtifactRepository {
         this.registerInTransaction(tx, input)
       );
     } catch (error) {
-      if (!isSourceToolCallUniqueConflict(error)) throw error;
-      const artifact = await this.findBySourceForUser(
+      if (!isArtifactUniqueConflict(error)) throw error;
+      const artifact = await this.findExistingSourceArtifactForUser(
         input.agentRunId,
         input.userId
       );
@@ -126,18 +126,24 @@ export class ArtifactRepository {
     return { artifact: toContract(created), created: true };
   }
 
-  private async findBySourceForUser(
+  private async findExistingSourceArtifactForUser(
     agentRunId: string,
     userId: string
   ): Promise<ArtifactContract | undefined> {
-    const artifact = await this.prisma.artifact.findFirst({
+    const run = await this.prisma.agentRun.findFirst({
       where: {
-        agentRunId,
-        agentRun: {
-          userId,
-          project: { members: { some: { userId } } }
-        }
+        id: agentRunId,
+        userId,
+        project: { members: { some: { userId } } }
       }
+    });
+    if (!run) return undefined;
+    const source = await this.prisma.agentToolCall.findUnique({
+      where: { agentRunId_sequence: { agentRunId, sequence: 1 } }
+    });
+    if (!source) return undefined;
+    const artifact = await this.prisma.artifact.findUnique({
+      where: { sourceToolCallId: source.id }
     });
     return artifact ? toContract(artifact) : undefined;
   }
@@ -177,13 +183,7 @@ function toContract(artifact: {
   };
 }
 
-function isSourceToolCallUniqueConflict(error: unknown): boolean {
+function isArtifactUniqueConflict(error: unknown): boolean {
   if (typeof error !== 'object' || error === null) return false;
-  const value = error as { code?: unknown; meta?: { target?: unknown } };
-  if (value.code !== 'P2002') return false;
-  const target = value.meta?.target;
-  return (
-    target === 'artifacts_source_tool_call_id_key' ||
-    (Array.isArray(target) && target.includes('source_tool_call_id'))
-  );
+  return (error as { code?: unknown }).code === 'P2002';
 }

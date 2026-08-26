@@ -3,6 +3,7 @@ import { createApp } from '../../apps/api/src/app.js';
 import { DevIdentityProvider } from '../../apps/api/src/identity/dev-identity-provider.js';
 import {
   AgentRunRepository,
+  ArtifactRepository,
   createPrismaClient
 } from '../../packages/database/src/index.js';
 
@@ -938,6 +939,68 @@ describe('Task API vertical slice', () => {
         })
       ).statusCode
     ).toBe(409);
+    await app.close();
+  });
+
+  it('does not swallow unrelated Artifact uniqueness failures as idempotency', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const completedRun = async (relativePath: string, sha256: string) => {
+      const run = (
+        await app.inject({
+          method: 'POST',
+          url: `/tasks/${task.id}/agent-runs`,
+          payload: { name: 'read_file', relativePath }
+        })
+      ).json();
+      await app.inject({
+        method: 'POST',
+        url: `/agent-runs/${run.run.id}/tool-results`,
+        payload: {
+          toolCallId: run.toolRequest.id,
+          status: 'SUCCEEDED',
+          metadata: {
+            relativePath,
+            size: 1,
+            encoding: 'utf-8',
+            sha256
+          }
+        }
+      });
+      return run;
+    };
+    const firstRun = await completedRun('a.md', 'd'.repeat(64));
+    const first = (
+      await app.inject({
+        method: 'POST',
+        url: '/artifacts',
+        payload: { agentRunId: firstRun.run.id }
+      })
+    ).json();
+    const secondRun = await completedRun('b.md', 'e'.repeat(64));
+    await expect(
+      new ArtifactRepository(db).registerFromRunForUser({
+        artifactId: first.id,
+        agentRunId: secondRun.run.id,
+        userId: 'dev-user',
+        now: new Date()
+      })
+    ).rejects.toMatchObject({ code: 'P2002' });
+    expect(await db.artifact.count()).toBe(1);
     await app.close();
   });
 });
