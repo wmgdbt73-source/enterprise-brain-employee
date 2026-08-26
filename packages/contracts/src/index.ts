@@ -10,4 +10,9 @@ export type {
   TaskPriority,
   TaskStatus
 } from './task.js';
-export type { UserContract, UserSystemRole } from './user.js';
+export type {
+  CurrentUserContract,
+  UserContract,
+  UserSystemRole
+} from './user.js';
+export type { LocalPermission } from './workspace.js';

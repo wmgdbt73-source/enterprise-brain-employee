@@ -156,6 +156,35 @@ nav {
   border-bottom: 1px solid #dfd8e8;
   margin-top: 30px;
 }
+
+.workspace-panel {
+  max-width: 760px;
+}
+.workspace-panel button {
+  margin: 0 8px 8px 0;
+}
+.workspace-path,
+.workspace-browser {
+  overflow-wrap: anywhere;
+  background: #f6f3fa;
+  padding: 12px;
+  border-radius: 8px;
+}
+.workspace-browser ul {
+  list-style: none;
+  padding: 0;
+}
+.workspace-browser pre {
+  white-space: pre-wrap;
+  max-height: 360px;
+  overflow: auto;
+  background: #17101f;
+  color: #fff;
+  padding: 12px;
+}
+.local-error {
+  color: #a61b43;
+}
 .tabs button {
   border: 0;
   background: none;

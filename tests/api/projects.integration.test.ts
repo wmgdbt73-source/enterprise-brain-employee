@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
 import { DevIdentityProvider } from '../../apps/api/src/identity/dev-identity-provider.js';
+import type { IdentityProvider } from '../../apps/api/src/identity/identity-provider.js';
 import { createPrismaClient } from '../../packages/database/src/index.js';
 import {
   asProjectId,
@@ -78,6 +79,28 @@ describe('Project API vertical slice', () => {
     expect(getResponse.statusCode).toBe(200);
     expect(getResponse.json()).toEqual(created);
 
+    await app.close();
+  });
+
+  it('returns the injected RequestContext identity from /me', async () => {
+    const identity: IdentityProvider = {
+      getCurrentUser: async () => ({
+        id: asUserId('alternative-user'),
+        name: 'Alternative',
+        systemRole: 'ADMIN'
+      })
+    };
+    const app = await createApp({
+      prisma: requireDatabase(),
+      identityProvider: identity
+    });
+    const response = await app.inject({ method: 'GET', url: '/me' });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      id: 'alternative-user',
+      name: 'Alternative',
+      systemRole: 'ADMIN'
+    });
     await app.close();
   });
 

@@ -76,7 +76,8 @@ describe('Desktop Work Runtime gateway', () => {
     expect(Object.keys(bridge).sort()).toEqual([
       'projects',
       'runtime',
-      'tasks'
+      'tasks',
+      'workspace'
     ]);
     expect(Object.keys(bridge.projects).sort()).toEqual([
       'create',
@@ -88,6 +89,13 @@ describe('Desktop Work Runtime gateway', () => {
       'get',
       'list',
       'start'
+    ]);
+    expect(Object.keys(bridge.workspace).sort()).toEqual([
+      'get',
+      'listDirectory',
+      'readFile',
+      'select',
+      'unbind'
     ]);
     expect(bridge).not.toHaveProperty('invoke');
     void bridge.runtime.getInfo();

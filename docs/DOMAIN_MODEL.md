@@ -122,6 +122,10 @@ type LocalPermission =
   | 'LOCAL_EXECUTE'
 ```
 
+WorkspaceBinding is persisted only in the current Desktop device-local store.
+`localPath` is never sent to Employee API, PostgreSQL, or formal Project/Task
+records. EB-007 may grant only `LOCAL_READ`.
+
 ## 7. AgentDefinition（Agent 定义）
 
 ```ts

@@ -7,6 +7,7 @@ import { State } from '../../components/State.js';
 import { TaskDetail } from '../tasks/TaskDetail.js';
 import { TaskForm } from '../tasks/TaskForm.js';
 import { TaskList } from '../tasks/TaskList.js';
+import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
 
 export const projectTabs = ['动态', '计划', '任务', '资产', '配置'] as const;
 export type ProjectTab = (typeof projectTabs)[number];
@@ -46,7 +47,9 @@ export function ProjectWorkspace({
           </button>
         ))}
       </div>
-      {tab !== '任务' ? (
+      {tab === '配置' ? (
+        <WorkspacePanel projectId={project.id} />
+      ) : tab !== '任务' ? (
         <State
           title={`${tab}将在后续阶段实现`}
           text="本阶段只提供真实的项目与任务工作能力。"

@@ -2,6 +2,9 @@
   "name": "@enterprise-brain/tests",
   "private": true,
   "version": "0.0.0",
+  "dependencies": {
+    "@enterprise-brain/domain": "workspace:*"
+  },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit"
   }

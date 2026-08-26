@@ -96,17 +96,27 @@ INVALID_STATE_TRANSITION`.
 All Task endpoints are scoped to current-user ProjectMember membership. Missing
 and non-member Project/Task resources return the same `404 NOT_FOUND` envelope.
 
-## 4. Workspace APIs（本地工作区接口）
+## 4. Current Identity（当前身份）
+
+### GET /me
+
+Returns the current RequestContext identity, without User persistence timestamps.
+
+```json
+{ "id": "dev-user", "name": "Development Employee", "systemRole": "EMPLOYEE" }
+```
+
+This is a development identity endpoint, not an authentication protocol.
+
+## 5. Workspace APIs（本地工作区接口）
 
 Local filesystem operations may be handled through Electron IPC（Electron 进程间通信）, but formal WorkspaceBinding metadata should use structured contracts.
 
-### POST /workspace-bindings
-Create or update Workspace binding（创建或更新本地工作区绑定）.
+EB-007 WorkspaceBinding metadata and local paths are device-local Electron Main
+Process state, not Employee HTTP API resources. The typed desktop bridge exposes
+only project-scoped `get`, `select`, `unbind`, `listDirectory` and `readFile`.
 
-### GET /projects/:projectId/workspace-binding
-Get current user's binding for this device（获取当前用户在当前设备上的项目工作区绑定）.
-
-## 5. AgentRun APIs（Agent 执行接口）
+## 6. AgentRun APIs（Agent 执行接口）
 
 ### POST /agent-runs
 Create AgentRun（创建 Agent 执行）.
@@ -143,7 +153,7 @@ Suggested event types:
 ### POST /agent-runs/:id/cancel
 Cancel AgentRun（取消执行）.
 
-## 6. Artifact APIs（工作产物接口）
+## 7. Artifact APIs（工作产物接口）
 
 ### POST /artifacts
 Register Artifact（登记工作产物）.
@@ -151,7 +161,7 @@ Register Artifact（登记工作产物）.
 ### GET /tasks/:taskId/artifacts
 List Task Artifacts（任务工作产物列表）.
 
-## 7. Result APIs（结果接口）
+## 8. Result APIs（结果接口）
 
 ### POST /tasks/:taskId/results
 Create Result Candidate（创建正式候选结果）.
@@ -164,7 +174,7 @@ Get Result（结果详情）.
 ### POST /results/:id/submit-review
 Submit for Human Review（提交人工评审）.
 
-## 8. Review APIs（评审接口）
+## 9. Review APIs（评审接口）
 
 ### POST /results/:id/reviews
 Create Human Review（创建人工评审）.
@@ -179,7 +189,7 @@ Request:
 
 Server validates reviewer authority before Result becomes ACCEPTED.
 
-## 9. Activity / Notification APIs（动态 / 通知接口）
+## 10. Activity / Notification APIs（动态 / 通知接口）
 
 ### GET /projects/:projectId/activity
 Get Project Dynamic（项目动态）.
@@ -187,7 +197,7 @@ Get Project Dynamic（项目动态）.
 ### GET /notifications
 Get current user notifications（获取当前用户通知）.
 
-## 10. Error Shape（错误结构）
+## 11. Error Shape（错误结构）
 
 ```json
 {
@@ -210,7 +220,7 @@ Initial error codes:
 - HUMAN_CONFIRMATION_REQUIRED
 - AGENT_RUN_FAILED
 
-## 11. Contract Rule（契约规则）
+## 12. Contract Rule（契约规则）
 
 Before Codex adds or changes an endpoint, it must:
 1. check this file;

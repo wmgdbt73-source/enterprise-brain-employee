@@ -1,9 +1,12 @@
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain } from 'electron';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DesktopApiGateway } from './desktop-api-gateway.js';
 import { isAllowedTopLevelNavigation } from './navigation-policy.js';
 import { registerRuntimeHandlers } from './runtime-handlers.js';
+import { DeviceIdStore } from './workspace/device-id-store.js';
+import { WorkspaceStore } from './workspace/workspace-store.js';
+import { WorkspaceService } from './workspace/workspace-service.js';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -35,14 +38,29 @@ function createWindow() {
   }
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const gateway = new DesktopApiGateway({
     baseUrl: process.env.EMPLOYEE_API_BASE_URL ?? 'http://127.0.0.1:3000'
   });
-  registerRuntimeHandlers(ipcMain, gateway, {
-    platform: process.platform,
-    appVersion: app.getVersion()
+  const directory = app.getPath('userData');
+  const workspace = new WorkspaceService({
+    gateway,
+    dialog: {
+      showOpenDialog: () =>
+        dialog.showOpenDialog({ properties: ['openDirectory'] })
+    },
+    store: new WorkspaceStore(directory),
+    deviceId: await new DeviceIdStore(directory).get()
   });
+  registerRuntimeHandlers(
+    ipcMain,
+    gateway,
+    {
+      platform: process.platform,
+      appVersion: app.getVersion()
+    },
+    workspace
+  );
   createWindow();
 
   app.on('activate', () => {

@@ -41,6 +41,9 @@ Separate permission namespace:
 - LOCAL_DELETE（本地删除）
 - LOCAL_EXECUTE（本地执行）
 
+EB-007 activates only `LOCAL_READ`. All modify/create/delete/execute permissions
+and their tools remain deferred.
+
 ## 5. Workspace Scope（工作区范围）
 
 WorkspaceBinding key:
