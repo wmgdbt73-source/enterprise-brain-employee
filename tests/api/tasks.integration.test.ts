@@ -1,7 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
 import { DevIdentityProvider } from '../../apps/api/src/identity/dev-identity-provider.js';
-import { createPrismaClient } from '../../packages/database/src/index.js';
+import {
+  AgentRunRepository,
+  createPrismaClient
+} from '../../packages/database/src/index.js';
 
 const connectionString = process.env.DATABASE_URL;
 const database = connectionString
@@ -329,10 +332,9 @@ describe('Task API vertical slice', () => {
       })
     ).json();
     expect(
-      await db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } })
-    ).toMatchObject({
-      intent: { name: 'list_directory', relativePath: 'docs' }
-    });
+      (await db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } }))
+        .intent
+    ).toEqual({ name: 'list_directory', relativePath: 'docs' });
     for (const metadata of [
       { relativePath: 'wrong', entryCount: 0 },
       { relativePath: 'docs', entryCount: 0, size: 1 },
@@ -472,6 +474,18 @@ describe('Task API vertical slice', () => {
         ])
       ).map((r) => r.statusCode)
     ).toEqual([200, 200]);
+    await expect(
+      db.agentRun.findUniqueOrThrow({ where: { id: first.run.id } })
+    ).resolves.toMatchObject({ status: 'SUCCEEDED' });
+    await expect(
+      db.agentToolCall.findUniqueOrThrow({
+        where: { id: first.toolRequest.id }
+      })
+    ).resolves.toMatchObject({
+      status: 'SUCCEEDED',
+      receipt: same,
+      completedAt: expect.any(Date)
+    });
     const second = await create();
     const [a, b] = await Promise.all([
       app.inject({
@@ -494,6 +508,118 @@ describe('Task API vertical slice', () => {
       })
     ]);
     expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+    const winner = a.statusCode === 200 ? a.json() : b.json();
+    const persistedRun = await db.agentRun.findUniqueOrThrow({
+      where: { id: second.run.id }
+    });
+    const persistedCall = await db.agentToolCall.findUniqueOrThrow({
+      where: { id: second.toolRequest.id }
+    });
+    expect(persistedRun.status).toBe(winner.status);
+    expect(persistedCall.status).toBe(winner.status);
+    expect(persistedCall.receipt).toEqual(
+      a.statusCode === 200
+        ? {
+            toolCallId: second.toolRequest.id,
+            status: 'SUCCEEDED',
+            metadata: { relativePath: '', entryCount: 1 }
+          }
+        : {
+            toolCallId: second.toolRequest.id,
+            status: 'FAILED',
+            error: { code: 'LOCAL_IO_ERROR', message: 'failed', details: {} }
+          }
+    );
+    await app.close();
+  });
+
+  it('rolls back ToolCall completion when AgentRun CAS cannot transition', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'list_directory', relativePath: '' }
+      })
+    ).json();
+    await db.agentRun.update({
+      where: { id: created.run.id },
+      data: { status: 'SUCCEEDED' }
+    });
+    await expect(
+      new AgentRunRepository(db).complete(created.run.id, 'dev-user', {
+        toolCallId: created.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: { relativePath: '', entryCount: 0 }
+      })
+    ).resolves.toBe('CONFLICT');
+    await expect(
+      db.agentToolCall.findUniqueOrThrow({
+        where: { id: created.toolRequest.id }
+      })
+    ).resolves.toMatchObject({
+      status: 'PENDING',
+      receipt: null,
+      completedAt: null
+    });
+    await app.close();
+  });
+
+  it('enforces the AgentRun Task and Project composite foreign key', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const a = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'A' }
+      })
+    ).json();
+    const b = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'B' }
+      })
+    ).json();
+    const taskB = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${b.id}/tasks`,
+        payload: { title: 'Task B' }
+      })
+    ).json();
+    await expect(
+      db.agentRun.create({
+        data: {
+          id: 'invalid-composite-run',
+          userId: 'dev-user',
+          projectId: a.id,
+          taskId: taskB.id,
+          agentDefinitionKey: 'read-only-work-agent-v1',
+          intent: { name: 'list_directory', relativePath: '' },
+          status: 'RUNNING',
+          createdAt: new Date(),
+          startedAt: new Date(),
+          updatedAt: new Date()
+        }
+      })
+    ).rejects.toThrow();
     await app.close();
   });
 });
