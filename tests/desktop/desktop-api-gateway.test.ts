@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { DesktopApiGateway } from '../../apps/desktop/src/main/desktop-api-gateway.js';
 import { createEnterpriseBrainBridge } from '../../apps/desktop/src/shared/enterprise-brain.js';
+import { isAllowedTopLevelNavigation } from '../../apps/desktop/src/main/navigation-policy.js';
+import { resolveOperation } from '../../apps/desktop/src/renderer/src/features/runtime/operation-state.js';
+import { toTaskInput } from '../../apps/desktop/src/renderer/src/features/tasks/task-input.js';
 
 describe('Desktop Work Runtime gateway', () => {
   it('uses fixed Project API method, path and JSON body', async () => {
@@ -65,7 +68,11 @@ describe('Desktop Work Runtime gateway', () => {
     });
   });
   it('exposes only the allowlisted preload bridge capabilities', () => {
-    const bridge = createEnterpriseBrainBridge(vi.fn());
+    const invoke = vi.fn().mockResolvedValue({
+      ok: true,
+      data: { runtime: 'desktop', platform: 'darwin', appVersion: '1.0.0' }
+    });
+    const bridge = createEnterpriseBrainBridge(invoke);
     expect(Object.keys(bridge).sort()).toEqual([
       'projects',
       'runtime',
@@ -83,5 +90,74 @@ describe('Desktop Work Runtime gateway', () => {
       'start'
     ]);
     expect(bridge).not.toHaveProperty('invoke');
+    void bridge.runtime.getInfo();
+    expect(invoke).toHaveBeenCalledWith('runtime:get-info');
+  });
+  it('clears a recoverable error after a successful retry result', () => {
+    expect(resolveOperation({ ok: true, data: ['project-1'] })).toEqual({
+      data: ['project-1'],
+      error: undefined
+    });
+    expect(
+      resolveOperation({
+        ok: false,
+        error: { code: 'NOT_FOUND', message: 'Missing', details: {} }
+      })
+    ).toEqual({
+      error: { code: 'NOT_FOUND', message: 'Missing', details: {} }
+    });
+  });
+  it('transforms Task form criteria and deadline into the API contract', () => {
+    const input = {
+      title: 'Task',
+      description: 'Note',
+      priority: 'P1' as const,
+      acceptanceCriteria: 'One\n\n Two ',
+      deadline: '2026-09-01T10:00'
+    };
+    expect(toTaskInput(input)).toEqual({
+      title: 'Task',
+      description: 'Note',
+      priority: 'P1',
+      acceptanceCriteria: ['One', 'Two'],
+      deadline: new Date(input.deadline).toISOString()
+    });
+  });
+  it('allows only configured renderer navigation and packaged files', () => {
+    expect(
+      isAllowedTopLevelNavigation(
+        'http://127.0.0.1:5173/',
+        'http://127.0.0.1:5173'
+      )
+    ).toBe(true);
+    expect(
+      isAllowedTopLevelNavigation(
+        'https://example.com',
+        'http://127.0.0.1:5173'
+      )
+    ).toBe(false);
+    expect(
+      isAllowedTopLevelNavigation(
+        'http://127.0.0.1:5173@evil.example/',
+        'http://127.0.0.1:5173'
+      )
+    ).toBe(false);
+    expect(
+      isAllowedTopLevelNavigation('not a valid url', 'http://127.0.0.1:5173')
+    ).toBe(false);
+    expect(
+      isAllowedTopLevelNavigation(
+        'file:///app/renderer/index.html',
+        undefined,
+        'file:///app/renderer/index.html'
+      )
+    ).toBe(true);
+    expect(
+      isAllowedTopLevelNavigation(
+        'file:///other.html',
+        undefined,
+        'file:///app/renderer/index.html'
+      )
+    ).toBe(false);
   });
 });

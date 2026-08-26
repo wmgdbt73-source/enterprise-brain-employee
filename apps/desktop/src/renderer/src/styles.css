@@ -109,11 +109,17 @@ nav {
   margin: 24px 0;
 }
 .form input,
-.form select {
+.form select,
+.form textarea {
   padding: 10px;
   border: 1px solid #ded6e6;
   border-radius: 7px;
   background: white;
+}
+.form textarea {
+  min-height: 68px;
+  min-width: 220px;
+  resize: vertical;
 }
 .primary {
   border: 0;
