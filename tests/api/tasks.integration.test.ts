@@ -303,4 +303,197 @@ describe('Task API vertical slice', () => {
     ).resolves.toMatchObject({ status: 'PENDING' });
     await app.close();
   });
+
+  it('rejects invalid list receipts, preserves pending state, and persists only intent', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'list_directory', relativePath: 'docs' }
+      })
+    ).json();
+    expect(
+      await db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } })
+    ).toMatchObject({
+      intent: { name: 'list_directory', relativePath: 'docs' }
+    });
+    for (const metadata of [
+      { relativePath: 'wrong', entryCount: 0 },
+      { relativePath: 'docs', entryCount: 0, size: 1 },
+      { relativePath: 'docs', entryCount: 0, encoding: 'utf-8' },
+      { relativePath: 'docs', entryCount: 0, sha256: 'a'.repeat(64) }
+    ])
+      expect(
+        (
+          await app.inject({
+            method: 'POST',
+            url: `/agent-runs/${created.run.id}/tool-results`,
+            payload: {
+              toolCallId: created.toolRequest.id,
+              status: 'SUCCEEDED',
+              metadata
+            }
+          })
+        ).statusCode
+      ).toBe(400);
+    await expect(
+      db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } })
+    ).resolves.toMatchObject({
+      status: 'RUNNING',
+      intent: { name: 'list_directory', relativePath: 'docs' }
+    });
+    await expect(
+      db.agentToolCall.findUniqueOrThrow({
+        where: { id: created.toolRequest.id }
+      })
+    ).resolves.toMatchObject({ status: 'PENDING' });
+    await app.close();
+  });
+
+  it('hides and refuses completion after membership is revoked', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'list_directory', relativePath: '' }
+      })
+    ).json();
+    await db.projectMember.delete({
+      where: { projectId_userId: { projectId: project.id, userId: 'dev-user' } }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/agent-runs/${created.run.id}`
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/agent-runs/${created.run.id}/tool-results`,
+          payload: {
+            toolCallId: created.toolRequest.id,
+            status: 'SUCCEEDED',
+            metadata: { relativePath: '', entryCount: 0 }
+          }
+        })
+      ).statusCode
+    ).toBe(404);
+    await expect(
+      db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } })
+    ).resolves.toMatchObject({ status: 'RUNNING' });
+    await expect(
+      db.agentToolCall.findUniqueOrThrow({
+        where: { id: created.toolRequest.id }
+      })
+    ).resolves.toMatchObject({ status: 'PENDING' });
+    await app.close();
+  });
+
+  it('handles concurrent identical and conflicting completions without partial state', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const create = async () =>
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/tasks/${task.id}/agent-runs`,
+          payload: { name: 'list_directory', relativePath: '' }
+        })
+      ).json();
+    const first = await create();
+    const same = {
+      toolCallId: first.toolRequest.id,
+      status: 'SUCCEEDED',
+      metadata: { relativePath: '', entryCount: 0 }
+    };
+    expect(
+      (
+        await Promise.all([
+          app.inject({
+            method: 'POST',
+            url: `/agent-runs/${first.run.id}/tool-results`,
+            payload: same
+          }),
+          app.inject({
+            method: 'POST',
+            url: `/agent-runs/${first.run.id}/tool-results`,
+            payload: same
+          })
+        ])
+      ).map((r) => r.statusCode)
+    ).toEqual([200, 200]);
+    const second = await create();
+    const [a, b] = await Promise.all([
+      app.inject({
+        method: 'POST',
+        url: `/agent-runs/${second.run.id}/tool-results`,
+        payload: {
+          toolCallId: second.toolRequest.id,
+          status: 'SUCCEEDED',
+          metadata: { relativePath: '', entryCount: 1 }
+        }
+      }),
+      app.inject({
+        method: 'POST',
+        url: `/agent-runs/${second.run.id}/tool-results`,
+        payload: {
+          toolCallId: second.toolRequest.id,
+          status: 'FAILED',
+          error: { code: 'LOCAL_IO_ERROR', message: 'failed', details: {} }
+        }
+      })
+    ]);
+    expect([a.statusCode, b.statusCode].sort()).toEqual([200, 409]);
+    await app.close();
+  });
 });
