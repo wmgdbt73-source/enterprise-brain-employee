@@ -62,7 +62,7 @@ app.whenReady().then(async () => {
       appVersion: app.getVersion()
     },
     workspace,
-    new DesktopAgentRunCoordinator(gateway, new AgentToolExecutor(workspace))
+    new DesktopAgentRunCoordinator(gateway, new AgentToolExecutor(workspace, gateway))
   );
   createWindow();
 

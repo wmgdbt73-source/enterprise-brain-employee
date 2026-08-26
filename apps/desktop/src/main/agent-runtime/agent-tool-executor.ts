@@ -4,14 +4,18 @@ import type {
   AgentToolRequest
 } from '@enterprise-brain/contracts';
 import type { WorkspaceService } from '../workspace/workspace-service.js';
+import type { DesktopApiGateway } from '../desktop-api-gateway.js';
 import { LocalCapabilityFailure } from '../workspace/workspace-types.js';
 export class AgentToolExecutor {
-  constructor(private readonly workspace: WorkspaceService) {}
+  constructor(private readonly workspace: WorkspaceService, private readonly gateway: DesktopApiGateway) {}
   async execute(
     request: AgentToolRequest
   ): Promise<{ receipt: AgentToolCompletionReceipt; localResult?: unknown }> {
     try {
-      if (request.name === 'list_directory') {
+      const current = await this.gateway.getCurrentUser();
+      if (!current.ok || current.data.id !== request.userId) return { receipt: failed(request.id, 'AGENT_TOOL_REQUEST_INVALID', 'ToolRequest user does not match current identity') };
+      switch (request.name) {
+      case 'list_directory': {
         const result = await this.workspace.listDirectory(
           request.projectId,
           request.relativePath
@@ -28,6 +32,7 @@ export class AgentToolExecutor {
           }
         };
       }
+      case 'read_file': {
       const result = await this.workspace.readFile(
         request.projectId,
         request.relativePath
@@ -47,6 +52,10 @@ export class AgentToolExecutor {
           }
         }
       };
+      }
+      default:
+        return { receipt: failed((request as { id: string }).id, 'AGENT_TOOL_REQUEST_INVALID', 'Unsupported Agent tool request') };
+      }
     } catch (error) {
       const local =
         error instanceof LocalCapabilityFailure
@@ -66,3 +75,4 @@ export class AgentToolExecutor {
     }
   }
 }
+function failed(toolCallId: string, code: string, message: string): AgentToolCompletionReceipt { return { toolCallId, status: 'FAILED', error: { code, message, details: {} } }; }

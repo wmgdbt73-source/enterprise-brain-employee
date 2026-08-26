@@ -179,7 +179,7 @@ describe('Desktop Work Runtime gateway', () => {
         size: 12,
         encoding: 'utf-8'
       })
-    } as never);
+    } as never, { getCurrentUser: async () => ({ ok: true, data: { id: 'user' } }) } as never);
     const result = await executor.execute({
       id: 'call',
       runId: 'run',

@@ -9,7 +9,9 @@ export class DesktopAgentRunCoordinator {
   async run(taskId: string, intent: AgentToolIntent) {
     const created = await this.gateway.createAgentRun(taskId, intent);
     if (!created.ok) return created;
-    const executed = await this.executor.execute(created.data.toolRequest);
+    const request = created.data.toolRequest;
+    if (request.runId !== created.data.run.id || request.userId !== created.data.run.userId || request.projectId !== created.data.run.projectId) return { ok: false as const, error: { code: 'AGENT_TOOL_REQUEST_INVALID', message: 'ToolRequest scope does not match AgentRun', details: {} } };
+    const executed = await this.executor.execute(request);
     const completed = await this.gateway.completeAgentRun(
       created.data.run.id,
       executed.receipt
