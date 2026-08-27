@@ -9,7 +9,8 @@ import {
   asAgentRunId,
   asAgentToolCallId,
   createAgentRun,
-  startAgentRun
+  startAgentRun,
+  waitForHumanAgentRun
 } from '@enterprise-brain/domain';
 import type {
   AgentRunRepository,
@@ -20,6 +21,7 @@ import type { RequestContext } from '../../context/request-context.js';
 export class AgentRunNotFoundError extends Error {}
 export class AgentRunConflictError extends Error {}
 export class AgentRunInvalidResultError extends Error {}
+export class HumanConfirmationRequiredError extends Error {}
 export class AgentRunService {
   constructor(
     private readonly runs: AgentRunRepository,
@@ -29,27 +31,25 @@ export class AgentRunService {
     context: RequestContext,
     taskId: string,
     intent: AgentToolIntent
-  ): Promise<{ run: AgentRunContract; toolRequest: AgentToolRequest }> {
+  ): Promise<{ run: AgentRunContract; toolRequest: AgentToolRequest; humanConfirmation?: import('@enterprise-brain/contracts').HumanConfirmationContract }> {
     const task = await this.tasks.loadDomainTaskForMember(
       taskId,
       context.currentUser.id
     );
     if (!task) throw new AgentRunNotFoundError();
     const now = new Date();
-    const run = startAgentRun(
-      createAgentRun(
+    const draft = createAgentRun(
         {
           id: asAgentRunId(randomUUID()),
           userId: context.currentUser.id,
           projectId: task.projectId,
           taskId: task.id,
-          agentDefinitionKey: 'read-only-work-agent-v1',
+          agentDefinitionKey: intent.name === 'write_file' ? 'confirmed-write-work-agent-v1' : 'read-only-work-agent-v1',
           intent
         },
         now
-      ),
-      now
-    );
+      );
+    const run = intent.name === 'write_file' ? waitForHumanAgentRun(draft, now) : startAgentRun(draft, now);
     const toolRequest: AgentToolRequest = {
       id: asAgentToolCallId(randomUUID()),
       runId: run.id,
@@ -58,6 +58,11 @@ export class AgentRunService {
       ...intent
     };
     const contract = toContract(run);
+    if (intent.name === 'write_file') {
+      const humanConfirmation = { id: randomUUID(), agentRunId: run.id, toolCallId: toolRequest.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, status: 'PENDING' as const, createdAt: now.toISOString() };
+      await this.runs.createWaitingForHuman(contract, toolRequest, humanConfirmation);
+      return { run: contract, toolRequest, humanConfirmation };
+    }
     await this.runs.createRunning(contract, toolRequest);
     return { run: contract, toolRequest };
   }
@@ -74,6 +79,7 @@ export class AgentRunService {
     if (!result) throw new AgentRunNotFoundError();
     if (result === 'CONFLICT') throw new AgentRunConflictError();
     if (result === 'INVALID') throw new AgentRunInvalidResultError();
+    if (result === 'HUMAN_CONFIRMATION_REQUIRED') throw new HumanConfirmationRequiredError();
     return result;
   }
   async get(context: RequestContext, runId: string): Promise<AgentRunContract> {

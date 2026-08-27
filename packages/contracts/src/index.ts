@@ -14,8 +14,11 @@ export type {
   AgentToolCompletionReceipt,
   AgentToolIntent,
   AgentToolName,
-  AgentToolRequest
+  AgentToolRequest,
+  AgentDefinitionKey,
+  WriteFileEffect
 } from './agent-run.js';
+export type { HumanConfirmationContract, HumanConfirmationStatus, ApprovedWriteExecutionGrant } from './human-confirmation.js';
 export type {
   ArtifactContract,
   ArtifactStorageKind,

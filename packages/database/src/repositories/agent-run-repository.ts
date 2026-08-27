@@ -5,6 +5,7 @@ import type {
 } from '@enterprise-brain/contracts';
 import { normalizeToolCompletion } from '@enterprise-brain/contracts';
 import type { PrismaClient } from '../generated/prisma/client.js';
+import type { HumanConfirmationContract } from '@enterprise-brain/contracts';
 
 export class AgentRunRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -40,11 +41,19 @@ export class AgentRunRepository {
       });
     });
   }
+  async createWaitingForHuman(run: AgentRunContract, request: AgentToolRequest, confirmation: HumanConfirmationContract): Promise<void> {
+    if (request.name !== 'write_file') throw new Error('write confirmation requires write_file request');
+    await this.prisma.$transaction(async tx => {
+      await tx.agentRun.create({ data: { id: run.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, agentDefinitionKey: run.agentDefinitionKey, intent: { name: request.name, relativePath: request.relativePath, payloadSize: request.payloadSize, payloadSha256: request.payloadSha256, effect: request.effect, ...(request.expectedCurrentSha256 ? { expectedCurrentSha256: request.expectedCurrentSha256 } : {}) }, status: 'WAITING_HUMAN', createdAt: new Date(run.createdAt), updatedAt: new Date(run.updatedAt) } });
+      await tx.agentToolCall.create({ data: { id: request.id, agentRunId: run.id, sequence: 1, name: 'write_file', deviceId: request.deviceId, request, status: 'PENDING', createdAt: new Date(run.createdAt) } });
+      await tx.humanConfirmation.create({ data: { id: confirmation.id, agentRunId: run.id, toolCallId: request.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, deviceId: request.deviceId, status: 'PENDING', createdAt: new Date(confirmation.createdAt) } });
+    });
+  }
   async complete(
     runId: string,
     userId: string,
     receipt: AgentToolCompletionReceipt
-  ): Promise<AgentRunContract | 'CONFLICT' | 'INVALID' | undefined> {
+  ): Promise<AgentRunContract | 'CONFLICT' | 'INVALID' | 'HUMAN_CONFIRMATION_REQUIRED' | undefined> {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const call = await tx.agentToolCall.findFirst({
@@ -61,8 +70,13 @@ export class AgentRunRepository {
           }))
         )
           return undefined;
-        if (normalizeToolCompletion(call.request, receipt).kind === 'INVALID')
+        const normalized = normalizeToolCompletion(call.request, receipt);
+        if (normalized.kind === 'INVALID')
           return 'INVALID';
+        if (call.name === 'write_file') {
+          const confirmation = await tx.humanConfirmation.findFirst({ where: { toolCallId: call.id, agentRunId: runId, userId, projectId: call.agentRun.projectId, taskId: call.agentRun.taskId, deviceId: call.deviceId ?? '' } });
+          if (!confirmation || confirmation.status !== 'APPROVED' || normalized.kind !== 'WRITE_FILE_SUCCESS') return 'HUMAN_CONFIRMATION_REQUIRED';
+        }
         if (call.status !== 'PENDING')
           return sameReceipt(call.receipt, receipt)
             ? toContract(call.agentRun)
@@ -130,6 +144,7 @@ function toContract(run: {
   userId: string;
   projectId: string;
   taskId: string;
+  agentDefinitionKey: string;
   status: AgentRunContract['status'];
   createdAt: Date;
   startedAt: Date | null;
@@ -141,11 +156,15 @@ function toContract(run: {
     userId: run.userId,
     projectId: run.projectId,
     taskId: run.taskId,
-    agentDefinitionKey: 'read-only-work-agent-v1',
+    agentDefinitionKey: asAgentDefinitionKey(run.agentDefinitionKey),
     status: run.status,
     createdAt: run.createdAt.toISOString(),
     ...(run.startedAt ? { startedAt: run.startedAt.toISOString() } : {}),
     ...(run.finishedAt ? { finishedAt: run.finishedAt.toISOString() } : {}),
     updatedAt: run.updatedAt.toISOString()
   };
+}
+function asAgentDefinitionKey(value: string): AgentRunContract['agentDefinitionKey'] {
+  if (value === 'read-only-work-agent-v1' || value === 'confirmed-write-work-agent-v1') return value;
+  throw new Error('Unknown persisted AgentDefinition key');
 }

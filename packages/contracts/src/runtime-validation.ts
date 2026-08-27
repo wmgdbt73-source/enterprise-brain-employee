@@ -8,6 +8,7 @@ export type NormalizedToolCompletion =
       encoding: 'utf-8';
       sha256: string;
     }
+  | { kind: 'WRITE_FILE_SUCCESS'; relativePath: string; size: number; encoding: 'utf-8'; sha256: string; effect: 'CREATE' | 'REPLACE' }
   | {
       kind: 'FAILED';
       error: { code: string; message: string; details: Record<string, never> };
@@ -18,7 +19,7 @@ export function normalizeToolCompletion(
   request: unknown,
   receipt: unknown
 ): NormalizedToolCompletion {
-  if (!isRecord(request) || !hasOnlyKeys(request, requestKeys)) return invalid();
+  if (!isRecord(request) || !(hasOnlyKeys(request, requestKeys) || isWriteRequest(request))) return invalid();
   const name = request.name;
   const requestedPath = request.relativePath;
   if (
@@ -26,7 +27,7 @@ export function normalizeToolCompletion(
     !isNonBlankString(request.runId) ||
     !isNonBlankString(request.userId) ||
     !isNonBlankString(request.projectId) ||
-    (name !== 'list_directory' && name !== 'read_file') ||
+    (name !== 'list_directory' && name !== 'read_file' && name !== 'write_file') ||
     typeof requestedPath !== 'string' ||
     !isRecord(receipt) ||
     !isNonBlankString(receipt.toolCallId) ||
@@ -71,6 +72,8 @@ export function normalizeToolCompletion(
       relativePath: requestedPath,
       entryCount: metadata.entryCount as number
     };
+  if (name === 'write_file' && hasOnlyKeys(metadata, writeMetadataKeys) && typeof requestedPath === 'string' && requestedPath.length > 0 && Number.isInteger(metadata.size) && (metadata.size as number) >= 0 && metadata.encoding === 'utf-8' && typeof metadata.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(metadata.sha256) && (metadata.effect === 'CREATE' || metadata.effect === 'REPLACE') && isWriteRequest(request) && metadata.size === request.payloadSize && metadata.sha256 === request.payloadSha256 && metadata.effect === request.effect)
+    return { kind: 'WRITE_FILE_SUCCESS', relativePath: requestedPath, size: metadata.size as number, encoding: 'utf-8', sha256: metadata.sha256, effect: metadata.effect };
   if (
     name === 'read_file' &&
     typeof requestedPath === 'string' &&
@@ -97,6 +100,7 @@ const successReceiptKeys = ['toolCallId', 'status', 'metadata'];
 const failedReceiptKeys = ['toolCallId', 'status', 'error'];
 const directoryMetadataKeys = ['relativePath', 'entryCount'];
 const fileMetadataKeys = ['relativePath', 'size', 'encoding', 'sha256'];
+const writeMetadataKeys = ['relativePath', 'size', 'encoding', 'sha256', 'effect'];
 const failedErrorKeys = ['code', 'message', 'details'];
 function invalid(): NormalizedToolCompletion {
   return { kind: 'INVALID' };
@@ -112,4 +116,7 @@ function isNonBlankString(value: unknown): value is string {
 }
 function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]) {
   return Object.keys(value).every((key) => allowed.includes(key));
+}
+function isWriteRequest(value: Record<string, unknown>): value is Record<string, unknown> & { payloadSize: number; payloadSha256: string; effect: 'CREATE' | 'REPLACE'; deviceId: string } {
+  return hasOnlyKeys(value, [...requestKeys, 'payloadSize', 'payloadSha256', 'effect', 'expectedCurrentSha256', 'deviceId']) && Number.isInteger(value.payloadSize) && (value.payloadSize as number) >= 0 && typeof value.payloadSha256 === 'string' && /^[a-f0-9]{64}$/i.test(value.payloadSha256) && (value.effect === 'CREATE' || value.effect === 'REPLACE') && isNonBlankString(value.deviceId);
 }

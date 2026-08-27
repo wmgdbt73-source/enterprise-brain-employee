@@ -45,9 +45,12 @@ export { transitionTaskStatus } from './task-state-machine.js';
 export { createUser, type CreateUserInput, type User } from './user.js';
 export {
   createAgentRun,
+  approveAgentRun,
+  cancelAgentRun,
   failAgentRun,
   startAgentRun,
   succeedAgentRun,
+  waitForHumanAgentRun,
   type AgentRun
 } from './agent-run.js';
 export { createArtifact, type Artifact } from './artifact.js';
