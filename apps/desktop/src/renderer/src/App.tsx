@@ -159,7 +159,17 @@ export function App() {
     setError(undefined);
   }
   async function createResult(artifactIds: string[]) { if (!task) return; const operation = resolveOperation(await window.enterpriseBrain.results.create(task.id, artifactIds)); if (operation.error) return setError(operation.error); setError(undefined); await window.enterpriseBrain.results.listForTask(task.id).then(result => { const listed = resolveOperation(result); if (listed.data) setResults(listed.data); }); }
-  async function submitResult(id: string) { const operation = resolveOperation(await window.enterpriseBrain.results.submitReview(id)); if (operation.error) return setError(operation.error); setError(undefined); if (task) await loadTasks(task.projectId); }
+  async function submitResult(id: string) {
+    const operation = resolveOperation(await window.enterpriseBrain.results.submitReview(id));
+    if (operation.error) return setError(operation.error);
+    setError(undefined);
+    if (operation.data) setResults(current => current.map(result => result.id === operation.data?.id ? operation.data : result));
+    if (task) {
+      const fresh = resolveOperation(await window.enterpriseBrain.tasks.get(task.id));
+      if (fresh.data) setTask(fresh.data);
+      await loadTasks(task.projectId);
+    }
+  }
 
   return (
     <div className="app-shell">

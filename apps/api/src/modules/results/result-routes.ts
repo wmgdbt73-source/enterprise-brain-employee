@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { ResultService } from './result-service.js';
-const artifactBody = { type: 'object', additionalProperties: false, required: ['artifactIds'], properties: { artifactIds: { type: 'array', minItems: 1, items: { type: 'string', minLength: 1 } } } } as const;
+const artifactBody = { type: 'object', additionalProperties: false, required: ['artifactIds'], properties: { artifactIds: { type: 'array', minItems: 1, uniqueItems: true, items: { type: 'string', minLength: 1 } } } } as const;
 const taskParams = { type: 'object', additionalProperties: false, required: ['taskId'], properties: { taskId: { type: 'string', minLength: 1 } } } as const;
 const resultParams = { type: 'object', additionalProperties: false, required: ['id'], properties: { id: { type: 'string', minLength: 1 } } } as const;
 export function registerResultRoutes(app: FastifyInstance, service: ResultService): void {

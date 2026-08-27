@@ -26,14 +26,15 @@ export class ResultRepository {
         include: { artifacts: true, task: { include: { assignment: true, dependencies: true } } }
       });
       if (!row) return 'NOT_FOUND';
+      let result; let submittedTask;
       try {
-        const result = submitResultForReview({ id: asResultId(row.id), taskId: asTaskId(row.taskId), artifactIds: row.artifacts.map(link => asArtifactId(link.artifactId)), status: row.status, submittedBy: asUserId(row.submittedBy), createdAt: row.createdAt, submittedAt: row.submittedAt ?? undefined, updatedAt: row.updatedAt }, now);
+        result = submitResultForReview({ id: asResultId(row.id), taskId: asTaskId(row.taskId), artifactIds: row.artifacts.map(link => asArtifactId(link.artifactId)), status: row.status, submittedBy: asUserId(row.submittedBy), createdAt: row.createdAt, submittedAt: row.submittedAt ?? undefined, updatedAt: row.updatedAt }, now);
         const task = rehydrateTask({ id: asTaskId(row.task.id), projectId: asProjectId(row.task.projectId), title: row.task.title, description: row.task.description ?? undefined, assigneeId: row.task.assignment ? asUserId(row.task.assignment.userId) : undefined, priority: row.task.priority, status: row.task.status, acceptanceCriteria: row.task.acceptanceCriteria, dependencyIds: row.task.dependencies.map(d => asTaskId(d.dependsOnTaskId)), deadline: row.task.deadline ?? undefined, createdAt: row.task.createdAt, updatedAt: row.task.updatedAt });
-        const submittedTask = applyTaskAction(task, 'SUBMIT_FOR_REVIEW', now);
-        const updated = await tx.result.update({ where: { id: row.id }, data: { status: result.status, submittedAt: result.submittedAt, updatedAt: result.updatedAt }, include: { artifacts: true } });
-        await tx.task.update({ where: { id: submittedTask.id }, data: { status: submittedTask.status, updatedAt: submittedTask.updatedAt } });
-        return toContract(updated);
+        submittedTask = applyTaskAction(task, 'SUBMIT_FOR_REVIEW', now);
       } catch { return 'INVALID_STATE'; }
+      const updated = await tx.result.update({ where: { id: row.id }, data: { status: result.status, submittedAt: result.submittedAt, updatedAt: result.updatedAt }, include: { artifacts: true } });
+      await tx.task.update({ where: { id: submittedTask.id }, data: { status: submittedTask.status, updatedAt: submittedTask.updatedAt } });
+      return toContract(updated);
     });
   }
 }
