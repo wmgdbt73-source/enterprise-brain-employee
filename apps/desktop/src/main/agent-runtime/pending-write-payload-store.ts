@@ -1,11 +1,13 @@
-/** Ephemeral, Main-process-only employee payloads. Content is neither persisted nor exposed via preload. */
+export type PendingWritePayload = {
+  confirmationId: string; agentRunId: string; toolCallId: string; userId: string; projectId: string; taskId: string;
+  deviceId: string; relativePath: string; payloadSize: number; payloadSha256: string;
+  effect: 'CREATE' | 'REPLACE'; expectedCurrentSha256?: string; content: string;
+};
+/** Ephemeral, Main-process-only employee payloads. Content and provenance never cross preload. */
 export class PendingWritePayloadStore {
-  private readonly payloads = new Map<string, { content: string }>();
-  put(toolCallId: string, content: string): void { this.payloads.set(toolCallId, { content }); }
-  take(toolCallId: string): { content: string } | undefined {
-    const value = this.payloads.get(toolCallId);
-    this.payloads.delete(toolCallId);
-    return value;
-  }
-  remove(toolCallId: string): void { this.payloads.delete(toolCallId); }
+  private readonly payloads = new Map<string, PendingWritePayload>();
+  put(payload: PendingWritePayload): void { this.payloads.set(payload.confirmationId, payload); }
+  get(confirmationId: string): PendingWritePayload | undefined { return this.payloads.get(confirmationId); }
+  take(confirmationId: string): PendingWritePayload | undefined { const value = this.payloads.get(confirmationId); this.payloads.delete(confirmationId); return value; }
+  remove(confirmationId: string): void { this.payloads.delete(confirmationId); }
 }
