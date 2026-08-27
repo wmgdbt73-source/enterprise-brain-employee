@@ -74,11 +74,14 @@ export class AgentRunRepository {
           }))
         )
           return undefined;
+        const writeRequest = normalizeWriteToolRequest(call.request);
+        // The formal column is authoritative for tool category. A JSON request must never upgrade a read call into a write.
+        if ((call.name === 'write_file' || writeRequest) && (call.name !== 'write_file' || !writeRequest))
+          return 'INVALID';
         const normalized = normalizeToolCompletion(call.request, receipt);
         if (normalized.kind === 'INVALID')
           return 'INVALID';
         if (call.name === 'write_file') {
-          const writeRequest = normalizeWriteToolRequest(call.request);
           const confirmation = await tx.humanConfirmation.findFirst({ where: { toolCallId: call.id, agentRunId: runId, userId, projectId: call.agentRun.projectId, taskId: call.agentRun.taskId, deviceId: call.deviceId ?? '' } });
           if (!writeRequest || writeRequest.id !== call.id || writeRequest.runId !== runId ||
               writeRequest.userId !== userId || writeRequest.projectId !== call.agentRun.projectId ||

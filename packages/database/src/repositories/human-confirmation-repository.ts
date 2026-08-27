@@ -67,7 +67,7 @@ function isEligiblePending(c: ConfirmationWithRelations): boolean {
     request.userId === c.userId && request.projectId === c.projectId && request.deviceId === c.deviceId;
 }
 function isConsistentTerminal(c: ConfirmationWithRelations, decision: Decision): boolean {
-  if (decision === 'REJECT') return c.agentRun.status === 'CANCELLED' && c.toolCall.status === 'CANCELLED';
+  if (decision === 'REJECT') return c.agentRun.status === 'CANCELLED' && c.toolCall.status === 'CANCELLED' && hasMatchingWriteProvenance(c);
   if (!hasMatchingWriteProvenance(c)) return false;
   if (c.agentRun.status === 'RUNNING' && c.toolCall.status === 'PENDING') return true;
   const completion = normalizeToolCompletion(c.toolCall.request, c.toolCall.receipt);
