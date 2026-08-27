@@ -130,6 +130,28 @@ idempotent; a conflicting second completion is `409`.
 
 ## 7. AgentRun future APIs（Agent 执行接口）
 
+## 7.1 Human Confirmation APIs（EB-010）
+
+`POST /tasks/:taskId/agent-runs` additionally accepts a server-validated
+`write_file` intent only through the confirmed-write Desktop Main flow. The
+employee supplies UTF-8 content locally; the request contains only safe operation
+metadata (`relativePath`, byte size, SHA-256, effect, optional replace precondition,
+and opaque device ID), never content or absolute paths.
+
+`GET /human-confirmations/:id` returns server-derived display data: confirmation,
+action, relative path, effect, byte size/hash, risk, reason and required permission.
+It never returns the device ID, payload, local path, raw request or execution grant.
+
+`POST /human-confirmations/:id/approve` and `/reject` are owner-and-current-member
+scoped. An approve response is consumed only by Electron Main and may carry a
+one-shot operation-scoped execution grant; the typed renderer bridge never exposes
+that grant. Repeated same decisions are idempotent; the opposite decision is `409
+HUMAN_CONFIRMATION_CONFLICT`.
+
+Write completion requires an approved matching confirmation. A local success or
+safe failure produces only metadata/a structured error; it creates neither Artifact
+nor Result and does not change Task state.
+
 ### POST /agent-runs
 Create AgentRun（创建 Agent 执行）.
 

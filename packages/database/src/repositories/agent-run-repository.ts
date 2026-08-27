@@ -3,8 +3,9 @@ import type {
   AgentToolCompletionReceipt,
   AgentToolRequest
 } from '@enterprise-brain/contracts';
-import { normalizeToolCompletion } from '@enterprise-brain/contracts';
+import { normalizeToolCompletion, normalizeWriteToolRequest } from '@enterprise-brain/contracts';
 import type { PrismaClient } from '../generated/prisma/client.js';
+import type { HumanConfirmationContract } from '@enterprise-brain/contracts';
 
 export class AgentRunRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -40,11 +41,23 @@ export class AgentRunRepository {
       });
     });
   }
+  async createWaitingForHuman(run: AgentRunContract, request: AgentToolRequest, confirmation: HumanConfirmationContract): Promise<void> {
+    const normalizedRequest = normalizeWriteToolRequest(request);
+    if (!normalizedRequest || run.agentDefinitionKey !== 'confirmed-write-work-agent-v1' ||
+        normalizedRequest.runId !== run.id || normalizedRequest.userId !== run.userId ||
+        normalizedRequest.projectId !== run.projectId || normalizedRequest.id !== confirmation.toolCallId)
+      throw new Error('write confirmation requires a valid write_file request');
+    await this.prisma.$transaction(async tx => {
+      await tx.agentRun.create({ data: { id: run.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, agentDefinitionKey: run.agentDefinitionKey, intent: { name: normalizedRequest.name, relativePath: normalizedRequest.relativePath, payloadSize: normalizedRequest.payloadSize, payloadSha256: normalizedRequest.payloadSha256, effect: normalizedRequest.effect, ...(normalizedRequest.expectedCurrentSha256 ? { expectedCurrentSha256: normalizedRequest.expectedCurrentSha256 } : {}) }, status: 'WAITING_HUMAN', createdAt: new Date(run.createdAt), updatedAt: new Date(run.updatedAt) } });
+      await tx.agentToolCall.create({ data: { id: request.id, agentRunId: run.id, sequence: 1, name: 'write_file', deviceId: normalizedRequest.deviceId, request, status: 'PENDING', createdAt: new Date(run.createdAt) } });
+      await tx.humanConfirmation.create({ data: { id: confirmation.id, agentRunId: run.id, toolCallId: request.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, deviceId: normalizedRequest.deviceId, status: 'PENDING', createdAt: new Date(confirmation.createdAt) } });
+    });
+  }
   async complete(
     runId: string,
     userId: string,
     receipt: AgentToolCompletionReceipt
-  ): Promise<AgentRunContract | 'CONFLICT' | 'INVALID' | undefined> {
+  ): Promise<AgentRunContract | 'CONFLICT' | 'INVALID' | 'HUMAN_CONFIRMATION_REQUIRED' | undefined> {
     try {
       return await this.prisma.$transaction(async (tx) => {
         const call = await tx.agentToolCall.findFirst({
@@ -61,8 +74,22 @@ export class AgentRunRepository {
           }))
         )
           return undefined;
-        if (normalizeToolCompletion(call.request, receipt).kind === 'INVALID')
+        const writeRequest = normalizeWriteToolRequest(call.request);
+        // The formal column is authoritative for tool category. A JSON request must never upgrade a read call into a write.
+        if ((call.name === 'write_file' || writeRequest) && (call.name !== 'write_file' || !writeRequest))
           return 'INVALID';
+        const normalized = normalizeToolCompletion(call.request, receipt);
+        if (normalized.kind === 'INVALID')
+          return 'INVALID';
+        if (call.name === 'write_file') {
+          const confirmation = await tx.humanConfirmation.findFirst({ where: { toolCallId: call.id, agentRunId: runId, userId, projectId: call.agentRun.projectId, taskId: call.agentRun.taskId, deviceId: call.deviceId ?? '' } });
+          if (!writeRequest || writeRequest.id !== call.id || writeRequest.runId !== runId ||
+              writeRequest.userId !== userId || writeRequest.projectId !== call.agentRun.projectId ||
+              writeRequest.deviceId !== call.deviceId || !confirmation || confirmation.status !== 'APPROVED' ||
+              confirmation.deviceId !== call.deviceId ||
+              (normalized.kind !== 'WRITE_FILE_SUCCESS' && normalized.kind !== 'FAILED'))
+            return 'HUMAN_CONFIRMATION_REQUIRED';
+        }
         if (call.status !== 'PENDING')
           return sameReceipt(call.receipt, receipt)
             ? toContract(call.agentRun)
@@ -130,6 +157,7 @@ function toContract(run: {
   userId: string;
   projectId: string;
   taskId: string;
+  agentDefinitionKey: string;
   status: AgentRunContract['status'];
   createdAt: Date;
   startedAt: Date | null;
@@ -141,11 +169,15 @@ function toContract(run: {
     userId: run.userId,
     projectId: run.projectId,
     taskId: run.taskId,
-    agentDefinitionKey: 'read-only-work-agent-v1',
+    agentDefinitionKey: asAgentDefinitionKey(run.agentDefinitionKey),
     status: run.status,
     createdAt: run.createdAt.toISOString(),
     ...(run.startedAt ? { startedAt: run.startedAt.toISOString() } : {}),
     ...(run.finishedAt ? { finishedAt: run.finishedAt.toISOString() } : {}),
     updatedAt: run.updatedAt.toISOString()
   };
+}
+function asAgentDefinitionKey(value: string): AgentRunContract['agentDefinitionKey'] {
+  if (value === 'read-only-work-agent-v1' || value === 'confirmed-write-work-agent-v1') return value;
+  throw new Error('Unknown persisted AgentDefinition key');
 }

@@ -54,6 +54,7 @@ async function createProjectFixture() {
 describe('PostgreSQL persistence constraints', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.humanConfirmation.deleteMany();
     await db.artifact.deleteMany();
     await db.agentToolCall.deleteMany();
     await db.agentRun.deleteMany();
@@ -394,4 +395,62 @@ describe('PostgreSQL persistence constraints', () => {
     expect(isSourceToolCallUniqueConflict(primaryKey)).toBe(false);
     expect(isSourceToolCallUniqueConflict({ code: 'P2003' })).toBe(false);
   });
+
+  it('rejects a deferred write ToolCall creation without its pending confirmation', async () => {
+    const { db, now } = await createProjectFixture();
+    await createWriteTask(db, now);
+    await expect(db.$transaction(async tx => {
+      await tx.agentRun.create({ data: writeRun(now) });
+      await tx.agentToolCall.create({ data: writeCall(now) });
+    })).rejects.toThrow();
+    expect(await db.agentRun.findUnique({ where: { id: 'write-run' } })).toBeNull();
+    expect(await db.agentToolCall.findUnique({ where: { id: 'write-call' } })).toBeNull();
+  });
+
+  it('allows approved write ToolCalls to finish after the insert-only deferred trigger', async () => {
+    const { db, now } = await createProjectFixture();
+    await createWriteTask(db, now);
+    await db.$transaction(async tx => {
+      await tx.agentRun.create({ data: writeRun(now) });
+      await tx.agentToolCall.create({ data: writeCall(now) });
+      await tx.humanConfirmation.create({ data: writeConfirmation(now) });
+    });
+    await db.$transaction(async tx => {
+      await tx.humanConfirmation.update({ where: { id: 'write-confirmation' }, data: { status: 'APPROVED', decidedAt: now } });
+      await tx.agentRun.update({ where: { id: 'write-run' }, data: { status: 'RUNNING', startedAt: now } });
+      await tx.agentToolCall.update({ where: { id: 'write-call' }, data: { status: 'SUCCEEDED', completedAt: now } });
+    });
+    expect(await db.agentToolCall.findUniqueOrThrow({ where: { id: 'write-call' } })).toMatchObject({ status: 'SUCCEEDED' });
+  });
+
+  it('rolls back all write rows when confirmation creation fails and rejects invalid device provenance', async () => {
+    const { db, now } = await createProjectFixture();
+    await createWriteTask(db, now);
+    await expect(db.$transaction(async tx => {
+      await tx.agentRun.create({ data: writeRun(now) });
+      await tx.agentToolCall.create({ data: writeCall(now) });
+      await tx.humanConfirmation.create({ data: { ...writeConfirmation(now), deviceId: '' } });
+    })).rejects.toThrow();
+    expect(await db.agentRun.findUnique({ where: { id: 'write-run' } })).toBeNull();
+    expect(await db.agentToolCall.findUnique({ where: { id: 'write-call' } })).toBeNull();
+    expect(await db.humanConfirmation.findUnique({ where: { id: 'write-confirmation' } })).toBeNull();
+
+    await db.$transaction(async tx => {
+      await tx.agentRun.create({ data: writeRun(now) });
+      await tx.agentToolCall.create({ data: writeCall(now) });
+      await tx.humanConfirmation.create({ data: writeConfirmation(now) });
+    });
+    await expect(db.humanConfirmation.update({ where: { id: 'write-confirmation' }, data: { deviceId: 'other-device' } })).rejects.toThrow();
+    await expect(db.humanConfirmation.update({ where: { id: 'write-confirmation' }, data: { deviceId: '' } })).rejects.toThrow();
+    await db.humanConfirmation.delete({ where: { id: 'write-confirmation' } });
+    await db.agentToolCall.delete({ where: { id: 'write-call' } });
+    await expect(db.agentToolCall.create({ data: { ...writeCall(now), id: 'blank-device-call', deviceId: '' } })).rejects.toThrow();
+  });
 });
+
+async function createWriteTask(db: ReturnType<typeof requireDatabase>, now: Date) {
+  await db.task.create({ data: { id: 'write-task', projectId: 'project-1', title: 'Write', priority: 'P2', status: 'TODO', acceptanceCriteria: [], createdAt: now, updatedAt: now } });
+}
+function writeRun(now: Date) { return { id: 'write-run', userId: 'user-owner', projectId: 'project-1', taskId: 'write-task', agentDefinitionKey: 'confirmed-write-work-agent-v1', intent: { name: 'write_file', relativePath: 'a.md' }, status: 'WAITING_HUMAN' as const, createdAt: now, updatedAt: now }; }
+function writeCall(now: Date) { return { id: 'write-call', agentRunId: 'write-run', sequence: 1, name: 'write_file', deviceId: 'device-1', request: { id: 'write-call', runId: 'write-run', userId: 'user-owner', projectId: 'project-1', name: 'write_file', relativePath: 'a.md', deviceId: 'device-1', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE' }, status: 'PENDING' as const, createdAt: now }; }
+function writeConfirmation(now: Date) { return { id: 'write-confirmation', agentRunId: 'write-run', toolCallId: 'write-call', userId: 'user-owner', projectId: 'project-1', taskId: 'write-task', deviceId: 'device-1', status: 'PENDING' as const, createdAt: now }; }

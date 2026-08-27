@@ -9,6 +9,7 @@ import { WorkspaceStore } from './workspace/workspace-store.js';
 import { WorkspaceService } from './workspace/workspace-service.js';
 import { AgentToolExecutor } from './agent-runtime/agent-tool-executor.js';
 import { DesktopAgentRunCoordinator } from './agent-runtime/agent-run-coordinator.js';
+import { ConfirmedWriteCoordinator } from './agent-runtime/confirmed-write-coordinator.js';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -62,7 +63,8 @@ app.whenReady().then(async () => {
       appVersion: app.getVersion()
     },
     workspace,
-    new DesktopAgentRunCoordinator(gateway, new AgentToolExecutor(workspace, gateway))
+    new DesktopAgentRunCoordinator(gateway, new AgentToolExecutor(workspace, gateway)),
+    new ConfirmedWriteCoordinator(gateway, workspace)
   );
   createWindow();
 

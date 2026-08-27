@@ -53,6 +53,13 @@ enum AgentToolCallStatus {
   PENDING
   SUCCEEDED
   FAILED
+  CANCELLED
+}
+
+enum HumanConfirmationStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum ArtifactType {
@@ -145,6 +152,7 @@ model AgentRun {
   task               Task           @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Restrict)
   toolCalls          AgentToolCall[]
   artifacts          Artifact[] @relation("ArtifactRun")
+  confirmations      HumanConfirmation[]
 
   @@unique([id, userId, projectId, taskId], map: "agent_runs_agent_run_id_user_id_project_id_task_id_key")
   @@map("agent_runs")
@@ -155,6 +163,7 @@ model AgentToolCall {
   agentRunId  String              @map("agent_run_id")
   sequence    Int
   name        String
+  deviceId    String?             @map("device_id")
   request     Json
   status      AgentToolCallStatus
   receipt     Json?
@@ -162,10 +171,30 @@ model AgentToolCall {
   completedAt DateTime?           @map("completed_at") @db.Timestamptz(3)
   agentRun    AgentRun            @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
   artifacts   Artifact[]          @relation("ArtifactSourceToolCall")
+  confirmation HumanConfirmation?
 
   @@unique([id, agentRunId], map: "agent_tool_calls_agent_tool_call_id_agent_run_id_key")
+  @@unique([id, agentRunId, deviceId], map: "agent_tool_calls_agent_tool_call_id_agent_run_id_device_id_key")
   @@unique([agentRunId, sequence], map: "agent_tool_calls_agent_run_id_sequence_key")
   @@map("agent_tool_calls")
+}
+
+model HumanConfirmation {
+  id          String                  @id @map("human_confirmation_id")
+  agentRunId  String                  @map("agent_run_id")
+  toolCallId  String                  @unique @map("tool_call_id")
+  userId      String                  @map("user_id")
+  projectId   String                  @map("project_id")
+  taskId      String                  @map("task_id")
+  deviceId    String                  @map("device_id")
+  status      HumanConfirmationStatus
+  createdAt   DateTime                @map("created_at") @db.Timestamptz(3)
+  decidedAt   DateTime?               @map("decided_at") @db.Timestamptz(3)
+  agentRun    AgentRun                @relation(fields: [agentRunId, userId, projectId, taskId], references: [id, userId, projectId, taskId], onDelete: Restrict)
+  toolCall    AgentToolCall           @relation(fields: [toolCallId, agentRunId, deviceId], references: [id, agentRunId, deviceId], onDelete: Restrict)
+
+  @@unique([toolCallId, agentRunId, deviceId], map: "human_confirmations_tool_call_id_agent_run_id_device_id_key")
+  @@map("human_confirmations")
 }
 
 model Artifact {

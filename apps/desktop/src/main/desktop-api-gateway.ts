@@ -5,6 +5,9 @@ import type {
   AgentToolRequest,
   ArtifactContract,
   CurrentUserContract,
+  HumanConfirmationContract,
+  HumanConfirmationDetailContract,
+  ApprovedWriteExecutionGrant,
   ProjectContract,
   TaskContract
 } from '@enterprise-brain/contracts';
@@ -87,15 +90,22 @@ export class DesktopApiGateway {
   createAgentRun(
     taskId: string,
     intent: AgentToolIntent
-  ): Promise<
-    DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest }>
-  > {
+  ): Promise<DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest; humanConfirmation?: HumanConfirmationContract }>> {
     return this.request(`/tasks/${encodeURIComponent(taskId)}/agent-runs`, {
       method: 'POST',
       body: intent
     }) as Promise<
-      DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest }>
+      DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest; humanConfirmation?: HumanConfirmationContract }>
     >;
+  }
+  getHumanConfirmation(id: string): Promise<DesktopResult<HumanConfirmationDetailContract>> {
+    return this.request(`/human-confirmations/${encodeURIComponent(id)}`) as Promise<DesktopResult<HumanConfirmationDetailContract>>;
+  }
+  approveHumanConfirmation(id: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract; executionGrant?: ApprovedWriteExecutionGrant }>> {
+    return this.request(`/human-confirmations/${encodeURIComponent(id)}/approve`, { method: 'POST' }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract; executionGrant?: ApprovedWriteExecutionGrant }>>;
+  }
+  rejectHumanConfirmation(id: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>> {
+    return this.request(`/human-confirmations/${encodeURIComponent(id)}/reject`, { method: 'POST' }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>;
   }
   completeAgentRun(
     runId: string,

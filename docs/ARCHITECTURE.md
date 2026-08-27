@@ -180,3 +180,17 @@ on Desktop, while PostgreSQL records only safe completion metadata.
 EB-009 adds explicit employee Artifact registration: successful `read_file`
 AgentRun → persisted safe receipt → `POST /artifacts` → immutable backend
 Artifact metadata. No local file content or absolute path crosses this boundary.
+
+## 13. Confirmed Local Write Boundary（已确认本地写入边界）
+
+```text
+Renderer employee-supplied text → typed confirmed-write bridge → Electron Main
+→ pending in-memory payload + server HumanConfirmation → one-shot Main-only grant
+→ WorkspaceBinding/device/path checks → atomic local CREATE or guarded REPLACE
+→ safe completion receipt → backend AgentRun/ToolCall state
+```
+
+The Renderer never receives a grant, device ID, absolute local path or file
+content returned from this flow. The backend owns confirmation state; Electron
+Main owns bytes and execution. This is not autonomous or model-generated file
+authoring, and it creates neither Artifact nor Result automatically.

@@ -6,6 +6,7 @@ import {
   TaskRepository,
   AgentRunRepository,
   ArtifactRepository,
+  HumanConfirmationRepository,
   createPrismaClient,
   ensureUser,
   type PrismaClient
@@ -27,6 +28,7 @@ import { registerAgentRunRoutes } from './modules/agent-runs/agent-run-routes.js
 import {
   AgentRunConflictError,
   AgentRunInvalidResultError,
+  HumanConfirmationRequiredError,
   AgentRunNotFoundError,
   AgentRunService
 } from './modules/agent-runs/agent-run-service.js';
@@ -36,6 +38,8 @@ import {
   ArtifactService,
   ArtifactSourceInvalidError
 } from './modules/artifacts/artifact-service.js';
+import { registerHumanConfirmationRoutes } from './modules/human-confirmations/human-confirmation-routes.js';
+import { HumanConfirmationConflictError, HumanConfirmationNotFoundError, HumanConfirmationService } from './modules/human-confirmations/human-confirmation-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -86,6 +90,7 @@ export async function createApp(
     app,
     new ArtifactService(new ArtifactRepository(prisma))
   );
+  registerHumanConfirmationRoutes(app, new HumanConfirmationService(new HumanConfirmationRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
     if (isDomainError(error) && error.code === 'INVALID_STATE_TRANSITION') {
@@ -112,6 +117,7 @@ export async function createApp(
       error instanceof TaskNotFoundError ||
       error instanceof AgentRunNotFoundError ||
       error instanceof ArtifactNotFoundError
+      || error instanceof HumanConfirmationNotFoundError
     ) {
       return reply.code(404).send({
         error: {
@@ -137,6 +143,7 @@ export async function createApp(
           details: {}
         }
       });
+    if (error instanceof HumanConfirmationRequiredError) return reply.code(409).send({ error: { code: 'HUMAN_CONFIRMATION_REQUIRED', message: 'Approved human confirmation is required', details: {} } });
     if (error instanceof ArtifactSourceInvalidError)
       return reply.code(409).send({
         error: {
@@ -145,6 +152,7 @@ export async function createApp(
           details: {}
         }
       });
+    if (error instanceof HumanConfirmationConflictError) return reply.code(409).send({ error: { code: 'HUMAN_CONFIRMATION_CONFLICT', message: 'Conflicting confirmation decision', details: {} } });
 
     app.log.error(error);
     return reply.code(500).send({

@@ -275,6 +275,28 @@ read and never mutates Task or AgentRun state.
 
 ---
 
+## ADR-021 — Server-Owned Human Confirmation with Operation-Scoped Local Write Grant
+
+EB-010 activates confirmed `write_file` without expanding permanent local
+permissions. Backend/PostgreSQL owns `HumanConfirmation` and the formal
+AgentRun/ToolCall transitions. A confirmation is scoped to one User, Project,
+Task, ToolCall and random app-local device ID, plus one relative path, exact
+UTF-8 payload byte size/SHA-256 and `CREATE` or `REPLACE` effect.
+
+The Alpha payload is employee-supplied in the Desktop Renderer and retained only
+in Electron Main memory. EB-010 makes no claim that an Agent or model authored
+the content; autonomous/model-generated authoring needs a future explicit policy.
+The raw execution grant is Main-process-only, one-shot and never crosses preload
+to Renderer. Desktop re-checks current identity, Project membership,
+WorkspaceBinding and exact provenance before mutation. `CREATE` never overwrites;
+`REPLACE` verifies the approved current-file hash immediately before atomic rename.
+
+Reject atomically cancels the confirmation, ToolCall and Run. Completion requires
+an approved matching confirmation and produces safe metadata only. EB-010 changes
+neither Task state nor creates Artifact or Result automatically.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

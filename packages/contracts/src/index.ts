@@ -13,9 +13,13 @@ export type {
   AgentToolCallStatus,
   AgentToolCompletionReceipt,
   AgentToolIntent,
+  ReadOnlyAgentToolIntent,
   AgentToolName,
-  AgentToolRequest
+  AgentToolRequest,
+  AgentDefinitionKey,
+  WriteFileEffect
 } from './agent-run.js';
+export type { HumanConfirmationContract, HumanConfirmationDetailContract, HumanConfirmationStatus, ApprovedWriteExecutionGrant } from './human-confirmation.js';
 export type {
   ArtifactContract,
   ArtifactStorageKind,
@@ -24,7 +28,10 @@ export type {
 } from './artifact.js';
 export {
   normalizeToolCompletion,
-  type NormalizedToolCompletion
+  normalizeWriteToolRequest,
+  MAX_WRITE_PAYLOAD_BYTES,
+  type NormalizedToolCompletion,
+  type NormalizedWriteToolRequest
 } from './runtime-validation.js';
 export type { ProjectContract, ProjectStatus } from './project.js';
 export type {

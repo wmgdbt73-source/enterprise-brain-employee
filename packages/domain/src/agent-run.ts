@@ -10,7 +10,9 @@ export interface AgentRun {
   readonly userId: UserId;
   readonly projectId: ProjectId;
   readonly taskId: TaskId;
-  readonly agentDefinitionKey: 'read-only-work-agent-v1';
+  readonly agentDefinitionKey:
+    | 'read-only-work-agent-v1'
+    | 'confirmed-write-work-agent-v1';
   readonly intent: AgentToolIntent;
   readonly status: AgentRunStatus;
   readonly createdAt: Date;
@@ -34,6 +36,18 @@ export function createAgentRun(
 }
 export function startAgentRun(run: AgentRun, now: Date): AgentRun {
   return transition(run, 'RUNNING', now);
+}
+export function waitForHumanAgentRun(run: AgentRun, now: Date): AgentRun {
+  if (run.status !== 'QUEUED') throw new DomainError('INVALID_STATE_TRANSITION', 'AgentRun cannot wait from its current state');
+  return Object.freeze({ ...run, status: 'WAITING_HUMAN' as const, updatedAt: new Date(now) });
+}
+export function approveAgentRun(run: AgentRun, now: Date): AgentRun {
+  if (run.status !== 'WAITING_HUMAN') throw new DomainError('INVALID_STATE_TRANSITION', 'AgentRun cannot be approved from its current state');
+  return Object.freeze({ ...run, status: 'RUNNING' as const, startedAt: new Date(now), updatedAt: new Date(now) });
+}
+export function cancelAgentRun(run: AgentRun, now: Date): AgentRun {
+  if (run.status !== 'WAITING_HUMAN') throw new DomainError('INVALID_STATE_TRANSITION', 'AgentRun cannot be cancelled from its current state');
+  return Object.freeze({ ...run, status: 'CANCELLED' as const, finishedAt: new Date(now), updatedAt: new Date(now) });
 }
 export function succeedAgentRun(run: AgentRun, now: Date): AgentRun {
   return transition(run, 'SUCCEEDED', now);

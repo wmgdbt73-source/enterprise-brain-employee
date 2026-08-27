@@ -173,3 +173,13 @@ Not a P0 feature for Alpha, but runtime design should leave room for:
 - human confirmation for high-risk local actions（高风险本地动作人工确认）;
 - structured audit（结构化审计）;
 - backend owns formal state（后端持有正式状态）.
+
+## 13. EB-010 Confirmed write_file（已确认写文件）
+
+`write_file` is excluded from the Renderer generic Agent API. It enters only the
+Desktop Main confirmed-write workflow. The Alpha payload is employee-supplied
+UTF-8 text, retained in Main-process memory and never persisted by the backend.
+It is not Agent/model generated. HumanConfirmation binds one ToolCall, device,
+path, exact byte length/hash and effect. Its Main-only grant is one-shot; no
+permanent `LOCAL_CREATE` or `LOCAL_MODIFY` permission is created. `CREATE` is
+exclusive and `REPLACE` requires the approved current-file SHA-256 precondition.

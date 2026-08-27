@@ -1,7 +1,9 @@
 import type {
   AgentRunContract,
-  AgentToolIntent,
+  ReadOnlyAgentToolIntent,
   ArtifactContract,
+  HumanConfirmationContract,
+  HumanConfirmationDetailContract,
   LocalPermission,
   ProjectContract,
   TaskContract,
@@ -96,12 +98,17 @@ export interface EnterpriseBrainBridge {
   agents: {
     run(
       taskId: string,
-      intent: AgentToolIntent
+      intent: ReadOnlyAgentToolIntent
     ): Promise<DesktopResult<{ run: AgentRunContract; localResult?: unknown }>>;
   };
   artifacts: {
     register(agentRunId: string): Promise<DesktopResult<ArtifactContract>>;
     listForTask(taskId: string): Promise<DesktopResult<ArtifactContract[]>>;
+  };
+  confirmedWrites: {
+    prepare(taskId: string, input: { relativePath: string; content: string }): Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>;
+    approve(confirmationId: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>>;
+    reject(confirmationId: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>;
   };
 }
 
@@ -179,6 +186,14 @@ export function createEnterpriseBrainBridge(
         invoke('artifacts:list-for-task', { taskId }) as Promise<
           DesktopResult<ArtifactContract[]>
         >
+    }
+    ,confirmedWrites: {
+      prepare: (taskId, input) => invoke('confirmed-writes:prepare', { taskId, input }) as Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>,
+      approve: async (confirmationId) => {
+        const result = await invoke('confirmed-writes:approve', { confirmationId }) as DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>;
+        return result.ok ? { ok: true as const, data: { confirmation: result.data.confirmation, ...(result.data.run ? { run: result.data.run } : {}) } } : result;
+      },
+      reject: (confirmationId) => invoke('confirmed-writes:reject', { confirmationId }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>
     }
   };
 }

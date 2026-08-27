@@ -102,6 +102,11 @@ export class WorkspaceService {
       relativePath
     );
   }
+  /** Main-process-only write context; no renderer bridge exposes this local path or device identifier. */
+  async getConfirmedWriteContext(projectId: string): Promise<{ localPath: string; deviceId: string }> {
+    const binding = await this.authorizedBinding(projectId);
+    return { localPath: binding.localPath, deviceId: this.options.deviceId };
+  }
   private async authorizedBinding(
     projectId: string
   ): Promise<WorkspaceBinding> {

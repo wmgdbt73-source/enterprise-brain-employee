@@ -5,6 +5,7 @@ import { isAllowedTopLevelNavigation } from '../../apps/desktop/src/main/navigat
 import { resolveOperation } from '../../apps/desktop/src/renderer/src/features/runtime/operation-state.js';
 import { toTaskInput } from '../../apps/desktop/src/renderer/src/features/tasks/task-input.js';
 import { AgentToolExecutor } from '../../apps/desktop/src/main/agent-runtime/agent-tool-executor.js';
+import { DesktopAgentRunCoordinator } from '../../apps/desktop/src/main/agent-runtime/agent-run-coordinator.js';
 
 describe('Desktop Work Runtime gateway', () => {
   it('uses fixed Project API method, path and JSON body', async () => {
@@ -77,12 +78,14 @@ describe('Desktop Work Runtime gateway', () => {
     expect(Object.keys(bridge).sort()).toEqual([
       'agents',
       'artifacts',
+      'confirmedWrites',
       'projects',
       'runtime',
       'tasks',
       'workspace'
     ]);
     expect(Object.keys(bridge.agents)).toEqual(['run']);
+    expect(Object.keys(bridge.confirmedWrites).sort()).toEqual(['approve', 'prepare', 'reject']);
     expect(Object.keys(bridge.artifacts).sort()).toEqual([
       'listForTask',
       'register'
@@ -223,5 +226,12 @@ describe('Desktop Work Runtime gateway', () => {
         body: JSON.stringify({ agentRunId: 'run-1' })
       })
     );
+  });
+  it('rejects generic write_file execution before any backend create call', async () => {
+    const createAgentRun = vi.fn();
+    const gateway = { createAgentRun } as never;
+    const coordinator = new DesktopAgentRunCoordinator(gateway, {} as never);
+    await expect(coordinator.run('task', { name: 'write_file', relativePath: 'a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device' })).resolves.toMatchObject({ ok: false, error: { code: 'AGENT_TOOL_REQUEST_INVALID' } });
+    expect(createAgentRun).not.toHaveBeenCalled();
   });
 });
