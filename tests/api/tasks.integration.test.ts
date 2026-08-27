@@ -1111,4 +1111,43 @@ describe('Task API vertical slice', () => {
     expect((await app.inject({ method: 'POST', url: `/human-confirmations/${body.humanConfirmation.id}/approve` })).json().confirmation.status).toBe('APPROVED');
     await app.close();
   });
+
+  it('accepts a valid approved write success receipt and records a safe failed write receipt', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
+    const createWrite = async (suffix: string) => app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: `docs/${suffix}.md`, payloadSize: 4, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } });
+    const first = (await createWrite('success')).json();
+    const approved = await app.inject({ method: 'POST', url: `/human-confirmations/${first.humanConfirmation.id}/approve` });
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json().executionGrant).toMatchObject({ deviceId: 'device-a', effect: 'CREATE' });
+    const succeeded = await app.inject({ method: 'POST', url: `/agent-runs/${first.run.id}/tool-results`, payload: { toolCallId: first.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'docs/success.md', size: 4, encoding: 'utf-8', sha256: 'a'.repeat(64), effect: 'CREATE' } } });
+    expect(succeeded.statusCode).toBe(200);
+    const second = (await createWrite('failure')).json();
+    await app.inject({ method: 'POST', url: `/human-confirmations/${second.humanConfirmation.id}/approve` });
+    const failed = await app.inject({ method: 'POST', url: `/agent-runs/${second.run.id}/tool-results`, payload: { toolCallId: second.toolRequest.id, status: 'FAILED', error: { code: 'LOCAL_IO_ERROR', message: 'safe failure', details: {} } } });
+    expect(failed.statusCode).toBe(200);
+    expect(await db.agentToolCall.findUniqueOrThrow({ where: { id: second.toolRequest.id } })).toMatchObject({ status: 'FAILED' });
+    expect(await db.agentRun.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({ status: 'FAILED' });
+    await app.close();
+  });
+
+  it('uses decision CAS so concurrent approve and reject have one durable winner', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
+    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
+    const id = created.humanConfirmation.id;
+    const [approve, reject] = await Promise.all([
+      app.inject({ method: 'POST', url: `/human-confirmations/${id}/approve` }),
+      app.inject({ method: 'POST', url: `/human-confirmations/${id}/reject` })
+    ]);
+    expect([approve.statusCode, reject.statusCode].sort()).toEqual([200, 409]);
+    const stored = await db.humanConfirmation.findUniqueOrThrow({ where: { id }, include: { agentRun: true, toolCall: true } });
+    if (stored.status === 'APPROVED') expect([stored.agentRun.status, stored.toolCall.status]).toEqual(['RUNNING', 'PENDING']);
+    else expect([stored.status, stored.agentRun.status, stored.toolCall.status]).toEqual(['REJECTED', 'CANCELLED', 'CANCELLED']);
+    await app.close();
+  });
 });

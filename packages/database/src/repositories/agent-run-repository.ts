@@ -3,7 +3,7 @@ import type {
   AgentToolCompletionReceipt,
   AgentToolRequest
 } from '@enterprise-brain/contracts';
-import { normalizeToolCompletion } from '@enterprise-brain/contracts';
+import { normalizeToolCompletion, normalizeWriteToolRequest } from '@enterprise-brain/contracts';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { HumanConfirmationContract } from '@enterprise-brain/contracts';
 
@@ -42,11 +42,15 @@ export class AgentRunRepository {
     });
   }
   async createWaitingForHuman(run: AgentRunContract, request: AgentToolRequest, confirmation: HumanConfirmationContract): Promise<void> {
-    if (request.name !== 'write_file') throw new Error('write confirmation requires write_file request');
+    const normalizedRequest = normalizeWriteToolRequest(request);
+    if (!normalizedRequest || run.agentDefinitionKey !== 'confirmed-write-work-agent-v1' ||
+        normalizedRequest.runId !== run.id || normalizedRequest.userId !== run.userId ||
+        normalizedRequest.projectId !== run.projectId || normalizedRequest.id !== confirmation.toolCallId)
+      throw new Error('write confirmation requires a valid write_file request');
     await this.prisma.$transaction(async tx => {
-      await tx.agentRun.create({ data: { id: run.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, agentDefinitionKey: run.agentDefinitionKey, intent: { name: request.name, relativePath: request.relativePath, payloadSize: request.payloadSize, payloadSha256: request.payloadSha256, effect: request.effect, ...(request.expectedCurrentSha256 ? { expectedCurrentSha256: request.expectedCurrentSha256 } : {}) }, status: 'WAITING_HUMAN', createdAt: new Date(run.createdAt), updatedAt: new Date(run.updatedAt) } });
-      await tx.agentToolCall.create({ data: { id: request.id, agentRunId: run.id, sequence: 1, name: 'write_file', deviceId: request.deviceId, request, status: 'PENDING', createdAt: new Date(run.createdAt) } });
-      await tx.humanConfirmation.create({ data: { id: confirmation.id, agentRunId: run.id, toolCallId: request.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, deviceId: request.deviceId, status: 'PENDING', createdAt: new Date(confirmation.createdAt) } });
+      await tx.agentRun.create({ data: { id: run.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, agentDefinitionKey: run.agentDefinitionKey, intent: { name: normalizedRequest.name, relativePath: normalizedRequest.relativePath, payloadSize: normalizedRequest.payloadSize, payloadSha256: normalizedRequest.payloadSha256, effect: normalizedRequest.effect, ...(normalizedRequest.expectedCurrentSha256 ? { expectedCurrentSha256: normalizedRequest.expectedCurrentSha256 } : {}) }, status: 'WAITING_HUMAN', createdAt: new Date(run.createdAt), updatedAt: new Date(run.updatedAt) } });
+      await tx.agentToolCall.create({ data: { id: request.id, agentRunId: run.id, sequence: 1, name: 'write_file', deviceId: normalizedRequest.deviceId, request, status: 'PENDING', createdAt: new Date(run.createdAt) } });
+      await tx.humanConfirmation.create({ data: { id: confirmation.id, agentRunId: run.id, toolCallId: request.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, deviceId: normalizedRequest.deviceId, status: 'PENDING', createdAt: new Date(confirmation.createdAt) } });
     });
   }
   async complete(
@@ -74,8 +78,14 @@ export class AgentRunRepository {
         if (normalized.kind === 'INVALID')
           return 'INVALID';
         if (call.name === 'write_file') {
+          const writeRequest = normalizeWriteToolRequest(call.request);
           const confirmation = await tx.humanConfirmation.findFirst({ where: { toolCallId: call.id, agentRunId: runId, userId, projectId: call.agentRun.projectId, taskId: call.agentRun.taskId, deviceId: call.deviceId ?? '' } });
-          if (!confirmation || confirmation.status !== 'APPROVED' || normalized.kind !== 'WRITE_FILE_SUCCESS') return 'HUMAN_CONFIRMATION_REQUIRED';
+          if (!writeRequest || writeRequest.id !== call.id || writeRequest.runId !== runId ||
+              writeRequest.userId !== userId || writeRequest.projectId !== call.agentRun.projectId ||
+              writeRequest.deviceId !== call.deviceId || !confirmation || confirmation.status !== 'APPROVED' ||
+              confirmation.deviceId !== call.deviceId ||
+              (normalized.kind !== 'WRITE_FILE_SUCCESS' && normalized.kind !== 'FAILED'))
+            return 'HUMAN_CONFIRMATION_REQUIRED';
         }
         if (call.status !== 'PENDING')
           return sameReceipt(call.receipt, receipt)

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeToolCompletion } from '../../packages/contracts/src/index.js';
+import { normalizeToolCompletion, normalizeWriteToolRequest } from '../../packages/contracts/src/index.js';
 
 const request = (name: 'list_directory' | 'read_file', relativePath: string) => ({
   id: 'call-1',
@@ -16,6 +16,18 @@ describe('persisted ToolRequest and receipt runtime validation', () => {
     const valid = { toolCallId: 'call-write', status: 'SUCCEEDED' as const, metadata: { relativePath: '你好😀.md', size: 10, encoding: 'utf-8' as const, sha256: 'a'.repeat(64), effect: 'CREATE' as const } };
     expect(normalizeToolCompletion(write, valid)).toMatchObject({ kind: 'WRITE_FILE_SUCCESS' });
     for (const receipt of [{ ...valid, toolCallId: 'other' }, { ...valid, metadata: { ...valid.metadata, size: 9 } }, { ...valid, metadata: { ...valid.metadata, sha256: 'b'.repeat(64) } }, { ...valid, metadata: { ...valid.metadata, effect: 'REPLACE' as const } }, { ...valid, metadata: { ...valid.metadata, content: 'private' } }]) expect(normalizeToolCompletion(write, receipt)).toEqual({ kind: 'INVALID' });
+  });
+  it('strictly validates persisted write requests and CREATE/REPLACE preconditions', () => {
+    const base = { id: 'call-write', runId: 'run-1', userId: 'user-1', projectId: 'project-1', name: 'write_file' as const, relativePath: 'doc.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE' as const, deviceId: 'device-1' };
+    expect(normalizeWriteToolRequest(base)).toMatchObject({ name: 'write_file', effect: 'CREATE' });
+    for (const request of [
+      { ...base, id: '' }, { ...base, deviceId: '' }, { ...base, payloadSize: 1048577 },
+      { ...base, payloadSha256: 'bad' }, { ...base, expectedCurrentSha256: 'b'.repeat(64) },
+      { ...base, content: 'must-not-persist' }, { ...base, localPath: '/private' }
+    ]) expect(normalizeWriteToolRequest(request)).toBeUndefined();
+    expect(normalizeWriteToolRequest({ ...base, effect: 'REPLACE' })).toBeUndefined();
+    expect(normalizeWriteToolRequest({ ...base, effect: 'REPLACE', expectedCurrentSha256: 'bad' })).toBeUndefined();
+    expect(normalizeWriteToolRequest({ ...base, effect: 'REPLACE', expectedCurrentSha256: 'b'.repeat(64) })).toMatchObject({ effect: 'REPLACE' });
   });
   it('preserves valid EB-008 read_file, list_directory, and failed semantics', () => {
     expect(

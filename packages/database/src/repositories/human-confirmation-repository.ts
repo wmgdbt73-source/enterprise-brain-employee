@@ -1,29 +1,92 @@
-import type { ApprovedWriteExecutionGrant, HumanConfirmationContract } from '@enterprise-brain/contracts';
-import type { PrismaClient } from '../generated/prisma/client.js';
+import { normalizeWriteToolRequest, type ApprovedWriteExecutionGrant, type HumanConfirmationContract } from '@enterprise-brain/contracts';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 
+type Decision = 'APPROVE' | 'REJECT';
+type Decided = { confirmation: HumanConfirmationContract; grant?: ApprovedWriteExecutionGrant };
+type ConfirmationWithRelations = Prisma.HumanConfirmationGetPayload<{ include: { agentRun: true; toolCall: true } }>;
+type ScopedClient = PrismaClient | Prisma.TransactionClient;
+/** Owns server-side confirmation decisions. Each state write is a CAS in one transaction. */
 export class HumanConfirmationRepository {
   constructor(private readonly prisma: PrismaClient) {}
-  async decide(id: string, userId: string, decision: 'APPROVE' | 'REJECT'): Promise<{ confirmation: HumanConfirmationContract; grant?: ApprovedWriteExecutionGrant } | 'NOT_FOUND' | 'CONFLICT'> {
-    return this.prisma.$transaction(async tx => {
-      const confirmation = await tx.humanConfirmation.findFirst({ where: { id, userId, agentRun: { project: { members: { some: { userId } } } } }, include: { agentRun: true, toolCall: true } });
-      if (!confirmation) return 'NOT_FOUND';
+
+  async decide(id: string, userId: string, decision: Decision): Promise<Decided | 'NOT_FOUND' | 'CONFLICT'> {
+    try {
+      return await this.prisma.$transaction(async tx => {
+        const confirmation = await scoped(tx, id, userId);
+        if (!confirmation) return 'NOT_FOUND';
+        const desired = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
+        if (confirmation.status !== 'PENDING') return terminalDecision(confirmation, desired);
+        if (!isEligiblePending(confirmation)) return 'CONFLICT';
+        const now = new Date();
+        if ((await tx.humanConfirmation.updateMany({ where: { id, status: 'PENDING' }, data: { status: desired, decidedAt: now } })).count !== 1)
+          throw new DecisionCasConflict();
+        if (decision === 'APPROVE') {
+          if ((await tx.agentRun.updateMany({ where: { id: confirmation.agentRunId, status: 'WAITING_HUMAN' }, data: { status: 'RUNNING', startedAt: now, updatedAt: now } })).count !== 1)
+            throw new DecisionCasConflict();
+        } else {
+          if ((await tx.agentToolCall.updateMany({ where: { id: confirmation.toolCallId, agentRunId: confirmation.agentRunId, status: 'PENDING' }, data: { status: 'CANCELLED', completedAt: now } })).count !== 1 ||
+              (await tx.agentRun.updateMany({ where: { id: confirmation.agentRunId, status: 'WAITING_HUMAN' }, data: { status: 'CANCELLED', finishedAt: now, updatedAt: now } })).count !== 1)
+            throw new DecisionCasConflict();
+        }
+        const updated = await scoped(tx, id, userId);
+        if (!updated) throw new DecisionCasConflict();
+        return withOptionalGrant(updated);
+      });
+    } catch (error) {
+      if (!(error instanceof DecisionCasConflict)) throw error;
+      // The failed transaction is aborted; classify only via a fresh authorization-scoped read.
+      const durable = await scoped(this.prisma, id, userId);
+      if (!durable) return 'NOT_FOUND';
       const desired = decision === 'APPROVE' ? 'APPROVED' : 'REJECTED';
-      if (confirmation.status !== 'PENDING') return confirmation.status === desired ? { confirmation: toContract(confirmation), ...(grantFor(confirmation) ? { grant: grantFor(confirmation)! } : {}) } : 'CONFLICT';
-      if (confirmation.agentRun.status !== 'WAITING_HUMAN' || confirmation.toolCall.status !== 'PENDING' || confirmation.toolCall.name !== 'write_file' || confirmation.toolCall.deviceId !== confirmation.deviceId) return 'CONFLICT';
-      const now = new Date();
-      const won = await tx.humanConfirmation.updateMany({ where: { id, status: 'PENDING' }, data: { status: desired, decidedAt: now } });
-      if (!won.count) throw new Error('confirmation CAS conflict');
-      if (decision === 'APPROVE') await tx.agentRun.update({ where: { id: confirmation.agentRunId }, data: { status: 'RUNNING', startedAt: now, updatedAt: now } });
-      else { await tx.agentToolCall.update({ where: { id: confirmation.toolCallId }, data: { status: 'CANCELLED', completedAt: now } }); await tx.agentRun.update({ where: { id: confirmation.agentRunId }, data: { status: 'CANCELLED', finishedAt: now, updatedAt: now } }); }
-      const updated = await tx.humanConfirmation.findUniqueOrThrow({ where: { id }, include: { agentRun: true, toolCall: true } });
-      return { confirmation: toContract(updated), ...(grantFor(updated) ? { grant: grantFor(updated)! } : {}) };
-    });
+      if (durable.status === desired && isConsistentTerminal(durable, decision)) return withOptionalGrant(durable);
+      return 'CONFLICT';
+    }
   }
+
   async findForUser(id: string, userId: string): Promise<HumanConfirmationContract | undefined> {
-    const c = await this.prisma.humanConfirmation.findFirst({ where: { id, userId, agentRun: { project: { members: { some: { userId } } } } } });
-    return c ? toContract(c) : undefined;
+    const confirmation = await scoped(this.prisma, id, userId);
+    return confirmation ? toContract(confirmation) : undefined;
   }
 }
-function toContract(c: { id:string; agentRunId:string; toolCallId:string; userId:string; projectId:string; taskId:string; status:'PENDING'|'APPROVED'|'REJECTED'; createdAt:Date; decidedAt:Date|null }): HumanConfirmationContract { return { id:c.id, agentRunId:c.agentRunId, toolCallId:c.toolCallId, userId:c.userId, projectId:c.projectId, taskId:c.taskId, status:c.status, createdAt:c.createdAt.toISOString(), ...(c.decidedAt?{decidedAt:c.decidedAt.toISOString()}: {}) }; }
-function grantFor(c: { id:string; agentRunId:string; toolCallId:string; userId:string; projectId:string; taskId:string; deviceId:string; status:string; agentRun:{status:string}; toolCall:{status:string; request:unknown} }): ApprovedWriteExecutionGrant | undefined { if (c.status !== 'APPROVED' || c.agentRun.status !== 'RUNNING' || c.toolCall.status !== 'PENDING') return; const r = c.toolCall.request; if (!isWrite(r) || r.deviceId !== c.deviceId) return; return { confirmationId:c.id, agentRunId:c.agentRunId, toolCallId:c.toolCallId, userId:c.userId, projectId:c.projectId, taskId:c.taskId, deviceId:c.deviceId, relativePath:r.relativePath, payloadSize:r.payloadSize, payloadSha256:r.payloadSha256, effect:r.effect, ...(r.expectedCurrentSha256?{expectedCurrentSha256:r.expectedCurrentSha256}:{}) }; }
-function isWrite(value: unknown): value is { name:'write_file'; deviceId:string; relativePath:string; payloadSize:number; payloadSha256:string; effect:'CREATE'|'REPLACE'; expectedCurrentSha256?:string } { return typeof value === 'object' && value !== null && (value as Record<string,unknown>).name === 'write_file' && typeof (value as Record<string,unknown>).deviceId === 'string' && typeof (value as Record<string,unknown>).relativePath === 'string' && typeof (value as Record<string,unknown>).payloadSize === 'number' && typeof (value as Record<string,unknown>).payloadSha256 === 'string' && ((value as Record<string,unknown>).effect === 'CREATE' || (value as Record<string,unknown>).effect === 'REPLACE'); }
+
+async function scoped(client: ScopedClient, id: string, userId: string): Promise<ConfirmationWithRelations | null> {
+  return client.humanConfirmation.findFirst({
+    where: { id, userId, agentRun: { project: { members: { some: { userId } } } } },
+    include: { agentRun: true, toolCall: true }
+  });
+}
+function isEligiblePending(c: ConfirmationWithRelations): boolean {
+  const request = normalizeWriteToolRequest(c.toolCall.request);
+  return c.agentRun.status === 'WAITING_HUMAN' && c.toolCall.status === 'PENDING' && c.toolCall.name === 'write_file' &&
+    c.toolCall.deviceId === c.deviceId && !!request && request.id === c.toolCallId && request.runId === c.agentRunId &&
+    request.userId === c.userId && request.projectId === c.projectId && request.deviceId === c.deviceId;
+}
+function isConsistentTerminal(c: ConfirmationWithRelations, decision: Decision): boolean {
+  return decision === 'APPROVE'
+    ? c.agentRun.status === 'RUNNING' && c.toolCall.status === 'PENDING' && isEligibleApproved(c)
+    : c.agentRun.status === 'CANCELLED' && c.toolCall.status === 'CANCELLED';
+}
+function terminalDecision(c: ConfirmationWithRelations, desired: 'APPROVED' | 'REJECTED'): Decided | 'CONFLICT' {
+  return c.status === desired && isConsistentTerminal(c, desired === 'APPROVED' ? 'APPROVE' : 'REJECT') ? withOptionalGrant(c) : 'CONFLICT';
+}
+function isEligibleApproved(c: ConfirmationWithRelations): boolean {
+  const request = normalizeWriteToolRequest(c.toolCall.request);
+  return c.status === 'APPROVED' && c.agentRun.status === 'RUNNING' && c.toolCall.status === 'PENDING' &&
+    c.toolCall.name === 'write_file' && c.toolCall.deviceId === c.deviceId && !!request &&
+    request.id === c.toolCallId && request.runId === c.agentRunId && request.userId === c.userId &&
+    request.projectId === c.projectId && request.deviceId === c.deviceId;
+}
+function withOptionalGrant(c: ConfirmationWithRelations): Decided {
+  const confirmation = toContract(c);
+  if (!isEligibleApproved(c)) return { confirmation };
+  const request = normalizeWriteToolRequest(c.toolCall.request)!;
+  return { confirmation, grant: { confirmationId: c.id, agentRunId: c.agentRunId, toolCallId: c.toolCallId,
+    userId: c.userId, projectId: c.projectId, taskId: c.taskId, deviceId: c.deviceId,
+    relativePath: request.relativePath, payloadSize: request.payloadSize, payloadSha256: request.payloadSha256,
+    effect: request.effect, ...(request.expectedCurrentSha256 ? { expectedCurrentSha256: request.expectedCurrentSha256 } : {}) } };
+}
+function toContract(c: ConfirmationWithRelations): HumanConfirmationContract {
+  return { id: c.id, agentRunId: c.agentRunId, toolCallId: c.toolCallId, userId: c.userId, projectId: c.projectId,
+    taskId: c.taskId, status: c.status, createdAt: c.createdAt.toISOString(), ...(c.decidedAt ? { decidedAt: c.decidedAt.toISOString() } : {}) };
+}
+class DecisionCasConflict extends Error {}

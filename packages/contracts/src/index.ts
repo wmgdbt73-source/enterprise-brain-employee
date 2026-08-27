@@ -27,7 +27,10 @@ export type {
 } from './artifact.js';
 export {
   normalizeToolCompletion,
-  type NormalizedToolCompletion
+  normalizeWriteToolRequest,
+  MAX_WRITE_PAYLOAD_BYTES,
+  type NormalizedToolCompletion,
+  type NormalizedWriteToolRequest
 } from './runtime-validation.js';
 export type { ProjectContract, ProjectStatus } from './project.js';
 export type {

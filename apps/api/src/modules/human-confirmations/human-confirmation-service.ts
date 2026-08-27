@@ -8,7 +8,9 @@ export class HumanConfirmationService {
     const result = await this.confirmations.decide(id, context.currentUser.id, decision);
     if (result === 'NOT_FOUND') throw new HumanConfirmationNotFoundError();
     if (result === 'CONFLICT') throw new HumanConfirmationConflictError();
-    return { confirmation: result.confirmation };
+    return decision === 'APPROVE'
+      ? { confirmation: result.confirmation, ...(result.grant ? { executionGrant: result.grant } : {}) }
+      : { confirmation: result.confirmation };
   }
   async get(context: RequestContext, id: string) { const result = await this.confirmations.findForUser(id, context.currentUser.id); if (!result) throw new HumanConfirmationNotFoundError(); return { confirmation: result }; }
 }

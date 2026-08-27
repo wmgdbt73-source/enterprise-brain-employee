@@ -20,11 +20,14 @@ const intent = {
         name: { const: 'read_file' },
         relativePath: { type: 'string', minLength: 1 }
       }
-    }
-    ,{
+    }, {
       type: 'object', additionalProperties: false,
       required: ['name', 'relativePath', 'payloadSize', 'payloadSha256', 'effect', 'deviceId'],
-      properties: { name: { const: 'write_file' }, relativePath: { type: 'string', minLength: 1 }, payloadSize: { type: 'integer', minimum: 0, maximum: 1048576 }, payloadSha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' }, effect: { enum: ['CREATE', 'REPLACE'] }, expectedCurrentSha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' }, deviceId: { type: 'string', minLength: 1 } }
+      properties: { name: { const: 'write_file' }, relativePath: { type: 'string', minLength: 1 }, payloadSize: { type: 'integer', minimum: 0, maximum: 1048576 }, payloadSha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' }, effect: { const: 'CREATE' }, deviceId: { type: 'string', minLength: 1 } }
+    }, {
+      type: 'object', additionalProperties: false,
+      required: ['name', 'relativePath', 'payloadSize', 'payloadSha256', 'effect', 'expectedCurrentSha256', 'deviceId'],
+      properties: { name: { const: 'write_file' }, relativePath: { type: 'string', minLength: 1 }, payloadSize: { type: 'integer', minimum: 0, maximum: 1048576 }, payloadSha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' }, effect: { const: 'REPLACE' }, expectedCurrentSha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' }, deviceId: { type: 'string', minLength: 1 } }
     }
   ]
 } as const;
@@ -58,7 +61,8 @@ const receipt = {
             entryCount: { type: 'integer', minimum: 0 },
             size: { type: 'integer', minimum: 0 },
             encoding: { const: 'utf-8' },
-            sha256: { type: 'string' }
+            sha256: { type: 'string' },
+            effect: { enum: ['CREATE', 'REPLACE'] }
           }
         }
       }
