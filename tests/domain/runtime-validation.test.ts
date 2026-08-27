@@ -11,6 +11,12 @@ const request = (name: 'list_directory' | 'read_file', relativePath: string) => 
 });
 
 describe('persisted ToolRequest and receipt runtime validation', () => {
+  it('validates write_file receipt metadata against exact approved bytes metadata', () => {
+    const write = { id: 'call-write', runId: 'run-1', userId: 'user-1', projectId: 'project-1', name: 'write_file' as const, relativePath: '你好😀.md', payloadSize: 10, payloadSha256: 'a'.repeat(64), effect: 'CREATE' as const, deviceId: 'device-1' };
+    const valid = { toolCallId: 'call-write', status: 'SUCCEEDED' as const, metadata: { relativePath: '你好😀.md', size: 10, encoding: 'utf-8' as const, sha256: 'a'.repeat(64), effect: 'CREATE' as const } };
+    expect(normalizeToolCompletion(write, valid)).toMatchObject({ kind: 'WRITE_FILE_SUCCESS' });
+    for (const receipt of [{ ...valid, toolCallId: 'other' }, { ...valid, metadata: { ...valid.metadata, size: 9 } }, { ...valid, metadata: { ...valid.metadata, sha256: 'b'.repeat(64) } }, { ...valid, metadata: { ...valid.metadata, effect: 'REPLACE' as const } }, { ...valid, metadata: { ...valid.metadata, content: 'private' } }]) expect(normalizeToolCompletion(write, receipt)).toEqual({ kind: 'INVALID' });
+  });
   it('preserves valid EB-008 read_file, list_directory, and failed semantics', () => {
     expect(
       normalizeToolCompletion(request('list_directory', ''), {
