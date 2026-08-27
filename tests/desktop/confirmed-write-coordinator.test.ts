@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { AgentRunContract, ApprovedWriteExecutionGrant, HumanConfirmationDetailContract } from '../../packages/contracts/src/index.js';
+import type { AgentRunContract, ApprovedWriteExecutionGrant, HumanConfirmationContract, HumanConfirmationDetailContract } from '../../packages/contracts/src/index.js';
 import { ConfirmedWriteCoordinator } from '../../apps/desktop/src/main/agent-runtime/confirmed-write-coordinator.js';
 import { createEnterpriseBrainBridge } from '../../apps/desktop/src/shared/enterprise-brain.js';
 
@@ -17,11 +17,28 @@ function setup() {
   const writer = { prepare: vi.fn().mockResolvedValue({ relativePath: 'docs/file.md', payloadSize: 4, payloadSha256: ids.hash, effect: 'CREATE' }), execute };
   return { coordinator: new ConfirmedWriteCoordinator(gateway as never, workspace as never, writer as never), gateway, execute, approveHumanConfirmation, rejectHumanConfirmation, completeAgentRun };
 }
+type CreationResponse = { data: { run: AgentRunContract; humanConfirmation: HumanConfirmationContract } };
 
 describe('ConfirmedWriteCoordinator', () => {
   it('does not call approve when its Main-only pending payload is missing', async () => {
     const { coordinator, approveHumanConfirmation } = setup();
     await expect(coordinator.approve(ids.confirmation)).resolves.toMatchObject({ ok: false });
+    expect(approveHumanConfirmation).not.toHaveBeenCalled();
+  });
+  it.each([
+    ['wrong Task', (created: CreationResponse) => { created.data.run = { ...created.data.run, taskId: 'other-task' as never }; }],
+    ['wrong Run status', (created: CreationResponse) => { created.data.run = { ...created.data.run, status: 'RUNNING' }; }],
+    ['wrong Agent definition key', (created: CreationResponse) => { created.data.run = { ...created.data.run, agentDefinitionKey: 'read-only-work-agent-v1' }; }],
+    ['non-pending confirmation', (created: CreationResponse) => { created.data.humanConfirmation = { ...created.data.humanConfirmation, status: 'APPROVED' }; }],
+    ['mismatched confirmation identity', (created: CreationResponse) => { created.data.humanConfirmation = { ...created.data.humanConfirmation, id: 'other-confirmation' as never }; }]
+  ])('fails closed for %s creation provenance without retaining a payload', async (_label, mutate) => {
+    const { coordinator, gateway, execute, approveHumanConfirmation } = setup();
+    const created = await gateway.createAgentRun();
+    mutate(created);
+    gateway.createAgentRun.mockResolvedValue(created);
+    await expect(coordinator.prepare(ids.task, { relativePath: 'docs/file.md', content: 'text' })).resolves.toMatchObject({ ok: false, error: { code: 'HUMAN_CONFIRMATION_INVALID' } });
+    await coordinator.approve(ids.confirmation);
+    expect(execute).not.toHaveBeenCalled();
     expect(approveHumanConfirmation).not.toHaveBeenCalled();
   });
   it('fails closed on grant provenance mismatch without writing', async () => {
