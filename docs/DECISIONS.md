@@ -297,6 +297,16 @@ neither Task state nor creates Artifact or Result automatically.
 
 ---
 
+## ADR-022 — Result Candidate is employee-confirmed structured delivery
+
+Artifact is not Result. EB-011 creates a Result only after explicit employee
+confirmation over persisted Artifact references; it never rereads local files.
+The backend owns `CANDIDATE → HUMAN_REVIEW`, and submit-review atomically moves
+the linked Task to `READY_FOR_REVIEW` through its Domain action. Human Acceptance
+is EB-012 work and cannot be performed by AI or by Result creation.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

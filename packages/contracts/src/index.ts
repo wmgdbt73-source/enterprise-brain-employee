@@ -2,6 +2,7 @@ export type {
   AgentRunId,
   AgentToolCallId,
   ArtifactId,
+  ResultId,
   ProjectId,
   ProjectMemberId,
   TaskId,
@@ -26,6 +27,7 @@ export type {
   ArtifactType,
   RegisterArtifactRequest
 } from './artifact.js';
+export type { ResultContract, ResultStatus } from './result.js';
 export {
   normalizeToolCompletion,
   normalizeWriteToolRequest,

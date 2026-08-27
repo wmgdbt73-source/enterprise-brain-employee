@@ -7,12 +7,14 @@ export {
   asAgentRunId,
   asAgentToolCallId,
   asArtifactId,
+  asResultId,
   asWorkspaceBindingId,
   asDeviceId,
   type DeviceId,
   type AgentRunId,
   type AgentToolCallId,
   type ArtifactId,
+  type ResultId,
   type ProjectId,
   type ProjectMemberId,
   type TaskId,
@@ -54,6 +56,7 @@ export {
   type AgentRun
 } from './agent-run.js';
 export { createArtifact, type Artifact } from './artifact.js';
+export { createResult, submitResultForReview, type Result } from './result.js';
 export {
   createWorkspaceBinding,
   rehydrateWorkspaceBinding,

@@ -1,6 +1,7 @@
 import type {
   ProjectContract,
   ArtifactContract,
+  ResultContract,
   TaskContract
 } from '@enterprise-brain/contracts';
 import type { TaskInput } from '../../../../shared/enterprise-brain.js';
@@ -23,11 +24,14 @@ export function ProjectWorkspace({
   onSelectTask,
   onStartTask,
   artifacts,
+  results,
   onReadFile,
-  onRegisterArtifact
-  ,onPrepareWrite,
+  onRegisterArtifact,
+  onPrepareWrite,
   onApproveWrite,
-  onRejectWrite
+  onRejectWrite,
+  onCreateResult,
+  onSubmitResult
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -38,6 +42,7 @@ export function ProjectWorkspace({
   onSelectTask: (task: TaskContract) => void;
   onStartTask: (task: TaskContract) => Promise<void>;
   artifacts: ArtifactContract[];
+  results: ResultContract[];
   onReadFile: (
     task: TaskContract,
     relativePath: string
@@ -48,6 +53,8 @@ export function ProjectWorkspace({
   onPrepareWrite: (task: TaskContract, input: { relativePath: string; content: string }) => Promise<import('@enterprise-brain/contracts').HumanConfirmationDetailContract | undefined>;
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
+  onCreateResult: (artifactIds: string[]) => Promise<void>;
+  onSubmitResult: (id: string) => Promise<void>;
 }) {
   return (
     <section className="page">
@@ -83,11 +90,14 @@ export function ProjectWorkspace({
             task={task}
             onStart={onStartTask}
             artifacts={artifacts}
+            results={results}
             onReadFile={onReadFile}
             onRegisterArtifact={onRegisterArtifact}
             onPrepareWrite={onPrepareWrite}
             onApproveWrite={onApproveWrite}
             onRejectWrite={onRejectWrite}
+            onCreateResult={onCreateResult}
+            onSubmitResult={onSubmitResult}
           />
         </div>
       )}

@@ -203,6 +203,14 @@ List Task Artifacts（任务工作产物列表）.
 
 ## 8. Result APIs（结果接口）
 
+EB-011 implements `POST /tasks/:taskId/results` with exactly
+`{ "artifactIds": ["..."] }`, plus `GET /results/:id`,
+`GET /tasks/:taskId/results`, and `POST /results/:id/submit-review`. Artifact
+IDs must be unique, nonempty, persisted, and scoped to the same member-visible
+Task. Creation returns `CANDIDATE`; submit-review atomically produces
+`HUMAN_REVIEW` and Task `READY_FOR_REVIEW`. All routes use hidden `404` member
+scope and reject invalid transitions with `409 INVALID_STATE_TRANSITION`.
+
 ### POST /tasks/:taskId/results
 Create Result Candidate（创建正式候选结果）.
 

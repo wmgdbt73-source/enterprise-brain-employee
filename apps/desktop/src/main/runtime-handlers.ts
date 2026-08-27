@@ -83,6 +83,10 @@ export function registerRuntimeHandlers(
   ipc.handle('artifacts:list-for-task', (_event, payload: { taskId: string }) =>
     gateway.listArtifactsForTask(payload.taskId)
   );
+  ipc.handle('results:create', (_event, payload: { taskId: string; artifactIds: string[] }) => gateway.createResult(payload.taskId, payload.artifactIds));
+  ipc.handle('results:list-for-task', (_event, payload: { taskId: string }) => gateway.listResultsForTask(payload.taskId));
+  ipc.handle('results:get', (_event, payload: { id: string }) => gateway.getResult(payload.id));
+  ipc.handle('results:submit-review', (_event, payload: { id: string }) => gateway.submitResultForReview(payload.id));
 }
 
 async function handleWorkspace<T>(operation: () => Promise<T>) {

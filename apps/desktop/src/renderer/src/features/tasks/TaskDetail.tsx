@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type {
   AgentRunContract,
   ArtifactContract,
+  ResultContract,
   TaskContract
 } from '@enterprise-brain/contracts';
 import type { DesktopApiError } from '../../../../shared/enterprise-brain.js';
@@ -11,14 +12,18 @@ export function TaskDetail({
   onStart,
   artifacts,
   onReadFile,
-  onRegisterArtifact
-  ,onPrepareWrite,
+  onRegisterArtifact,
+  results,
+  onPrepareWrite,
   onApproveWrite,
-  onRejectWrite
+  onRejectWrite,
+  onCreateResult,
+  onSubmitResult
 }: {
   task?: TaskContract;
   onStart: (task: TaskContract) => Promise<void>;
   artifacts: ArtifactContract[];
+  results: ResultContract[];
   onReadFile: (
     task: TaskContract,
     relativePath: string
@@ -27,6 +32,8 @@ export function TaskDetail({
   onPrepareWrite: (task: TaskContract, input: { relativePath: string; content: string }) => Promise<import('@enterprise-brain/contracts').HumanConfirmationDetailContract | undefined>;
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
+  onCreateResult: (artifactIds: string[]) => Promise<void>;
+  onSubmitResult: (id: string) => Promise<void>;
 }) {
   const [relativePath, setRelativePath] = useState('');
   const [eligibleRun, setEligibleRun] = useState<AgentRunContract>();
@@ -34,6 +41,7 @@ export function TaskDetail({
   const [writePath, setWritePath] = useState('');
   const [writeContent, setWriteContent] = useState('');
   const [confirmation, setConfirmation] = useState<import('@enterprise-brain/contracts').HumanConfirmationDetailContract>();
+  const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
   useEffect(() => {
     setEligibleRun(undefined);
     setError(undefined);
@@ -100,10 +108,15 @@ export function TaskDetail({
             <ul>
               {artifacts.map((artifact) => (
                 <li key={artifact.id}>
+                  <label><input type="checkbox" checked={selectedArtifactIds.includes(artifact.id)} onChange={() => setSelectedArtifactIds(current => current.includes(artifact.id) ? current.filter(id => id !== artifact.id) : [...current, artifact.id])} />
                   {artifact.relativePath} · {artifact.size} bytes · FILE
+                  </label>
                 </li>
               ))}
             </ul>
+            <p>已选择 {selectedArtifactIds.length} 个 Artifact。</p>
+            <button className="primary" disabled={selectedArtifactIds.length === 0} onClick={() => void onCreateResult(selectedArtifactIds)}>Confirm Result</button>
+            <ul>{results.map(result => <li key={result.id}>{result.status} · {result.artifactIds.length} Artifacts {result.status === 'CANDIDATE' && <button onClick={() => void onSubmitResult(result.id)}>Submit for Human Review</button>}</li>)}</ul>
           </section>
           <section className="artifact-panel">
             <p className="eyebrow">CONFIRMED LOCAL WRITE · EMPLOYEE-SUPPLIED CONTENT</p>

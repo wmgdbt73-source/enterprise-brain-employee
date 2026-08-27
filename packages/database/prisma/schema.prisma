@@ -70,6 +70,14 @@ enum ArtifactStorageKind {
   LOCAL_WORKSPACE
 }
 
+enum ResultStatus {
+  DRAFT
+  CANDIDATE
+  HUMAN_REVIEW
+  ACCEPTED
+  REWORK
+}
+
 model User {
   id             String          @id @map("user_id")
   name           String
@@ -79,6 +87,7 @@ model User {
   updatedAt      DateTime        @map("updated_at") @db.Timestamptz(3)
   projectMembers ProjectMember[]
   agentRuns      AgentRun[]
+  results        Result[]
 
   @@map("users")
 }
@@ -130,6 +139,7 @@ model Task {
   dependents         TaskDependency[] @relation("TaskDependents")
   agentRuns          AgentRun[]
   artifacts          Artifact[]
+  results            Result[]
 
   @@unique([id, projectId], map: "tasks_task_id_project_id_key")
   @@map("tasks")
@@ -216,8 +226,35 @@ model Artifact {
   task             Task                @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Restrict)
   agentRun         AgentRun            @relation("ArtifactRun", fields: [agentRunId, createdByUserId, projectId, taskId], references: [id, userId, projectId, taskId], onDelete: Restrict)
   sourceToolCall   AgentToolCall       @relation("ArtifactSourceToolCall", fields: [sourceToolCallId, agentRunId], references: [id, agentRunId], onDelete: Restrict)
+  resultLinks      ResultArtifact[]
 
   @@map("artifacts")
+}
+
+model Result {
+  id          String       @id @map("result_id")
+  taskId      String       @map("task_id")
+  projectId   String       @map("project_id")
+  status      ResultStatus
+  submittedBy String       @map("submitted_by")
+  createdAt   DateTime     @map("created_at") @db.Timestamptz(3)
+  submittedAt DateTime?    @map("submitted_at") @db.Timestamptz(3)
+  updatedAt   DateTime     @map("updated_at") @db.Timestamptz(3)
+  task        Task         @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Restrict)
+  user        User         @relation(fields: [submittedBy], references: [id], onDelete: Restrict)
+  artifacts   ResultArtifact[]
+
+  @@map("results")
+}
+
+model ResultArtifact {
+  resultId   String   @map("result_id")
+  artifactId String   @map("artifact_id")
+  result     Result   @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  artifact   Artifact @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+
+  @@id([resultId, artifactId])
+  @@map("result_artifacts")
 }
 
 model TaskAssignment {
