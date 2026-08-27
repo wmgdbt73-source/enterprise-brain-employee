@@ -1105,10 +1105,16 @@ describe('Task API vertical slice', () => {
     expect([stored.status, stored.agentRun.status, stored.toolCall.status, stored.toolCall.deviceId]).toEqual(['PENDING', 'WAITING_HUMAN', 'PENDING', 'device-a']);
     expect(JSON.stringify(stored)).not.toContain('content');
     expect((await app.inject({ method: 'POST', url: `/agent-runs/${body.run.id}/tool-results`, payload: { toolCallId: body.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: input.relativePath, size: 10, encoding: 'utf-8', sha256: input.payloadSha256, effect: 'CREATE' } } })).statusCode).toBe(409);
+    const detail = await app.inject({ method: 'GET', url: `/human-confirmations/${body.humanConfirmation.id}` });
+    expect(detail.json()).toMatchObject({ action: 'write_file', relativePath: input.relativePath, effect: 'CREATE', payloadSize: 10, payloadSha256: input.payloadSha256, risk: 'MEDIUM', requiredPermission: 'LOCAL_CREATE' });
+    expect(JSON.stringify(detail.json())).not.toMatch(/deviceId|localPath|content|executionGrant/);
     expect((await app.inject({ method: 'POST', url: `/human-confirmations/${body.humanConfirmation.id}/approve` })).statusCode).toBe(200);
     expect((await app.inject({ method: 'POST', url: `/human-confirmations/${body.humanConfirmation.id}/approve` })).statusCode).toBe(200);
     expect((await app.inject({ method: 'POST', url: `/agent-runs/${body.run.id}/tool-results`, payload: { toolCallId: body.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: input.relativePath, size: 10, encoding: 'utf-8', sha256: input.payloadSha256, effect: 'CREATE' } } })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'POST', url: `/human-confirmations/${body.humanConfirmation.id}/approve` })).json().confirmation.status).toBe('APPROVED');
+    const terminalRetry = await app.inject({ method: 'POST', url: `/human-confirmations/${body.humanConfirmation.id}/approve` });
+    expect(terminalRetry.statusCode).toBe(200);
+    expect(terminalRetry.json()).toMatchObject({ confirmation: { status: 'APPROVED' } });
+    expect(terminalRetry.json().executionGrant).toBeUndefined();
     await app.close();
   });
 
@@ -1130,6 +1136,9 @@ describe('Task API vertical slice', () => {
     expect(failed.statusCode).toBe(200);
     expect(await db.agentToolCall.findUniqueOrThrow({ where: { id: second.toolRequest.id } })).toMatchObject({ status: 'FAILED' });
     expect(await db.agentRun.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({ status: 'FAILED' });
+    const failedRetry = await app.inject({ method: 'POST', url: `/human-confirmations/${second.humanConfirmation.id}/approve` });
+    expect(failedRetry.statusCode).toBe(200);
+    expect(failedRetry.json().executionGrant).toBeUndefined();
     await app.close();
   });
 
@@ -1148,6 +1157,32 @@ describe('Task API vertical slice', () => {
     const stored = await db.humanConfirmation.findUniqueOrThrow({ where: { id }, include: { agentRun: true, toolCall: true } });
     if (stored.status === 'APPROVED') expect([stored.agentRun.status, stored.toolCall.status]).toEqual(['RUNNING', 'PENDING']);
     else expect([stored.status, stored.agentRun.status, stored.toolCall.status]).toEqual(['REJECTED', 'CANCELLED', 'CANCELLED']);
+    await app.close();
+  });
+
+  it('rejects idempotently and cancels the pending write run and ToolCall', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
+    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
+    const first = await app.inject({ method: 'POST', url: `/human-confirmations/${created.humanConfirmation.id}/reject` });
+    const retry = await app.inject({ method: 'POST', url: `/human-confirmations/${created.humanConfirmation.id}/reject` });
+    expect([first.statusCode, retry.statusCode]).toEqual([200, 200]);
+    const stored = await db.humanConfirmation.findUniqueOrThrow({ where: { id: created.humanConfirmation.id }, include: { agentRun: true, toolCall: true } });
+    expect([stored.status, stored.agentRun.status, stored.toolCall.status]).toEqual(['REJECTED', 'CANCELLED', 'CANCELLED']);
+    await app.close();
+  });
+
+  it('fails closed when the persisted write request is malformed', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
+    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
+    await db.agentToolCall.update({ where: { id: created.toolRequest.id }, data: { request: { ...created.toolRequest, content: 'not-permitted' } } });
+    expect((await app.inject({ method: 'GET', url: `/human-confirmations/${created.humanConfirmation.id}` })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: `/human-confirmations/${created.humanConfirmation.id}/approve` })).statusCode).toBe(409);
     await app.close();
   });
 });

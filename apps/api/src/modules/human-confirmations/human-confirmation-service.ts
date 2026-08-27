@@ -12,5 +12,9 @@ export class HumanConfirmationService {
       ? { confirmation: result.confirmation, ...(result.grant ? { executionGrant: result.grant } : {}) }
       : { confirmation: result.confirmation };
   }
-  async get(context: RequestContext, id: string) { const result = await this.confirmations.findForUser(id, context.currentUser.id); if (!result) throw new HumanConfirmationNotFoundError(); return { confirmation: result }; }
+  async get(context: RequestContext, id: string) {
+    const result = await this.confirmations.findDetailForUser(id, context.currentUser.id);
+    if (!result) throw new HumanConfirmationNotFoundError();
+    return result;
+  }
 }
