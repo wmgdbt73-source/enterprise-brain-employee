@@ -12,6 +12,9 @@ export function TaskDetail({
   artifacts,
   onReadFile,
   onRegisterArtifact
+  ,onPrepareWrite,
+  onApproveWrite,
+  onRejectWrite
 }: {
   task?: TaskContract;
   onStart: (task: TaskContract) => Promise<void>;
@@ -21,10 +24,16 @@ export function TaskDetail({
     relativePath: string
   ) => Promise<AgentRunContract | undefined>;
   onRegisterArtifact: (agentRunId: string) => Promise<void>;
+  onPrepareWrite: (task: TaskContract, input: { relativePath: string; content: string }) => Promise<import('@enterprise-brain/contracts').HumanConfirmationDetailContract | undefined>;
+  onApproveWrite: (confirmationId: string) => Promise<void>;
+  onRejectWrite: (confirmationId: string) => Promise<void>;
 }) {
   const [relativePath, setRelativePath] = useState('');
   const [eligibleRun, setEligibleRun] = useState<AgentRunContract>();
   const [error, setError] = useState<DesktopApiError>();
+  const [writePath, setWritePath] = useState('');
+  const [writeContent, setWriteContent] = useState('');
+  const [confirmation, setConfirmation] = useState<import('@enterprise-brain/contracts').HumanConfirmationDetailContract>();
   useEffect(() => {
     setEligibleRun(undefined);
     setError(undefined);
@@ -95,6 +104,13 @@ export function TaskDetail({
                 </li>
               ))}
             </ul>
+          </section>
+          <section className="artifact-panel">
+            <p className="eyebrow">CONFIRMED LOCAL WRITE</p>
+            <label>文件相对路径<input value={writePath} onChange={(event) => setWritePath(event.target.value)} placeholder="docs/summary.md" /></label>
+            <label>员工提供的内容<textarea value={writeContent} onChange={(event) => setWriteContent(event.target.value)} /></label>
+            <button onClick={() => task && void onPrepareWrite(task, { relativePath: writePath, content: writeContent }).then(setConfirmation)}>Prepare write</button>
+            {confirmation && <div><p>{confirmation.effect} · {confirmation.risk} · {confirmation.relativePath}</p><p>{confirmation.reason}</p><button className="primary" onClick={() => void onApproveWrite(confirmation.confirmation.id)}>Approve and write</button><button onClick={() => void onRejectWrite(confirmation.confirmation.id)}>Reject</button></div>}
           </section>
         </>
       ) : (

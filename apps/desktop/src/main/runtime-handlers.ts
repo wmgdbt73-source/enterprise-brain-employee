@@ -7,13 +7,15 @@ import {
 } from './workspace/workspace-types.js';
 import type { WorkspaceService } from './workspace/workspace-service.js';
 import type { DesktopAgentRunCoordinator } from './agent-runtime/agent-run-coordinator.js';
+import type { ConfirmedWriteCoordinator } from './agent-runtime/confirmed-write-coordinator.js';
 
 export function registerRuntimeHandlers(
   ipc: Pick<IpcMain, 'handle'>,
   gateway: DesktopApiGateway,
   runtimeInfo: Omit<RuntimeInfo, 'runtime'>,
   workspace?: WorkspaceService,
-  agents?: DesktopAgentRunCoordinator
+  agents?: DesktopAgentRunCoordinator,
+  confirmedWrites?: ConfirmedWriteCoordinator
 ): void {
   ipc.handle('runtime:get-info', () => ({
     ok: true,
@@ -69,6 +71,11 @@ export function registerRuntimeHandlers(
     ipc.handle('agent-runs:run', (_event, payload) =>
       agents.run(payload.taskId, payload.intent)
     );
+  }
+  if (confirmedWrites) {
+    ipc.handle('confirmed-writes:prepare', (_event, payload) => confirmedWrites.prepare(payload.taskId, payload.input));
+    ipc.handle('confirmed-writes:approve', (_event, payload) => confirmedWrites.approve(payload.confirmationId));
+    ipc.handle('confirmed-writes:reject', (_event, payload) => confirmedWrites.reject(payload.confirmationId));
   }
   ipc.handle('artifacts:register', (_event, payload: { agentRunId: string }) =>
     gateway.registerArtifact(payload.agentRunId)

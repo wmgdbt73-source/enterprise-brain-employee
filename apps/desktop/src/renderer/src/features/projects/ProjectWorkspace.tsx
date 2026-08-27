@@ -25,6 +25,9 @@ export function ProjectWorkspace({
   artifacts,
   onReadFile,
   onRegisterArtifact
+  ,onPrepareWrite,
+  onApproveWrite,
+  onRejectWrite
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -42,6 +45,9 @@ export function ProjectWorkspace({
     import('@enterprise-brain/contracts').AgentRunContract | undefined
   >;
   onRegisterArtifact: (agentRunId: string) => Promise<void>;
+  onPrepareWrite: (task: TaskContract, input: { relativePath: string; content: string }) => Promise<import('@enterprise-brain/contracts').HumanConfirmationDetailContract | undefined>;
+  onApproveWrite: (confirmationId: string) => Promise<void>;
+  onRejectWrite: (confirmationId: string) => Promise<void>;
 }) {
   return (
     <section className="page">
@@ -79,6 +85,9 @@ export function ProjectWorkspace({
             artifacts={artifacts}
             onReadFile={onReadFile}
             onRegisterArtifact={onRegisterArtifact}
+            onPrepareWrite={onPrepareWrite}
+            onApproveWrite={onApproveWrite}
+            onRejectWrite={onRejectWrite}
           />
         </div>
       )}

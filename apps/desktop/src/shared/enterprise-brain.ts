@@ -2,6 +2,8 @@ import type {
   AgentRunContract,
   AgentToolIntent,
   ArtifactContract,
+  HumanConfirmationContract,
+  HumanConfirmationDetailContract,
   LocalPermission,
   ProjectContract,
   TaskContract,
@@ -103,6 +105,11 @@ export interface EnterpriseBrainBridge {
     register(agentRunId: string): Promise<DesktopResult<ArtifactContract>>;
     listForTask(taskId: string): Promise<DesktopResult<ArtifactContract[]>>;
   };
+  confirmedWrites: {
+    prepare(taskId: string, input: { relativePath: string; content: string }): Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>;
+    approve(confirmationId: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>>;
+    reject(confirmationId: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>;
+  };
 }
 
 type Invoke = (channel: string, payload?: unknown) => Promise<unknown>;
@@ -179,6 +186,11 @@ export function createEnterpriseBrainBridge(
         invoke('artifacts:list-for-task', { taskId }) as Promise<
           DesktopResult<ArtifactContract[]>
         >
+    }
+    ,confirmedWrites: {
+      prepare: (taskId, input) => invoke('confirmed-writes:prepare', { taskId, input }) as Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>,
+      approve: (confirmationId) => invoke('confirmed-writes:approve', { confirmationId }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>>,
+      reject: (confirmationId) => invoke('confirmed-writes:reject', { confirmationId }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>
     }
   };
 }

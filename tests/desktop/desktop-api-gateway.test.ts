@@ -77,12 +77,14 @@ describe('Desktop Work Runtime gateway', () => {
     expect(Object.keys(bridge).sort()).toEqual([
       'agents',
       'artifacts',
+      'confirmedWrites',
       'projects',
       'runtime',
       'tasks',
       'workspace'
     ]);
     expect(Object.keys(bridge.agents)).toEqual(['run']);
+    expect(Object.keys(bridge.confirmedWrites).sort()).toEqual(['approve', 'prepare', 'reject']);
     expect(Object.keys(bridge.artifacts).sort()).toEqual([
       'listForTask',
       'register'

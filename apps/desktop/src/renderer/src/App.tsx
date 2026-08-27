@@ -140,6 +140,22 @@ export function App() {
       if (listed.data) setArtifacts(listed.data);
     }
   }
+  async function prepareWrite(value: TaskContract, input: { relativePath: string; content: string }) {
+    const operation = resolveOperation(await window.enterpriseBrain.confirmedWrites.prepare(value.id, input));
+    if (operation.error) { setError(operation.error); return undefined; }
+    setError(undefined);
+    return operation.data?.confirmation;
+  }
+  async function approveWrite(confirmationId: string) {
+    const operation = resolveOperation(await window.enterpriseBrain.confirmedWrites.approve(confirmationId));
+    if (operation.error) return setError(operation.error);
+    setError(undefined);
+  }
+  async function rejectWrite(confirmationId: string) {
+    const operation = resolveOperation(await window.enterpriseBrain.confirmedWrites.reject(confirmationId));
+    if (operation.error) return setError(operation.error);
+    setError(undefined);
+  }
 
   return (
     <div className="app-shell">
@@ -176,6 +192,9 @@ export function App() {
             artifacts={artifacts}
             onReadFile={readFile}
             onRegisterArtifact={registerArtifact}
+            onPrepareWrite={prepareWrite}
+            onApproveWrite={approveWrite}
+            onRejectWrite={rejectWrite}
           />
         )}
       </main>

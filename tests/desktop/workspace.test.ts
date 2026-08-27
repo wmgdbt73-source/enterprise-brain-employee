@@ -15,6 +15,7 @@ import { LocalReadService } from '../../apps/desktop/src/main/workspace/local-re
 import { LocalCapabilityFailure } from '../../apps/desktop/src/main/workspace/workspace-types.js';
 import { WorkspaceStore } from '../../apps/desktop/src/main/workspace/workspace-store.js';
 import { WorkspaceService } from '../../apps/desktop/src/main/workspace/workspace-service.js';
+import { LocalWriteService } from '../../apps/desktop/src/main/workspace/local-write-service.js';
 
 const directories: string[] = [];
 async function createTemp() {
@@ -41,6 +42,19 @@ function failureCode(error: unknown) {
 }
 
 describe('device-local workspace read capabilities', () => {
+  it('writes confirmed CREATE exclusively and rejects traversal or stale REPLACE targets', async () => {
+    const root = await createTemp();
+    await mkdir(path.join(root, 'docs'));
+    const writer = new LocalWriteService();
+    const create = await writer.prepare(root, 'docs/new.md', '你好😀');
+    await writer.execute(root, create, '你好😀');
+    expect(await import('node:fs/promises').then(({ readFile }) => readFile(path.join(root, 'docs/new.md'), 'utf8'))).toBe('你好😀');
+    await expect(writer.execute(root, create, '你好😀')).rejects.toSatisfy(error => failureCode(error) === 'LOCAL_WRITE_PRECONDITION_FAILED');
+    const replace = await writer.prepare(root, 'docs/new.md', 'replacement');
+    await writeFile(path.join(root, 'docs/new.md'), 'changed');
+    await expect(writer.execute(root, replace, 'replacement')).rejects.toSatisfy(error => failureCode(error) === 'LOCAL_WRITE_PRECONDITION_FAILED');
+    await expect(writer.prepare(root, '../escape.md', 'x')).rejects.toSatisfy(error => failureCode(error) === 'LOCAL_PATH_OUTSIDE_WORKSPACE');
+  });
   it('persists a stable DeviceId and one binding per user/project/device', async () => {
     const directory = await createTemp();
     const first = await new DeviceIdStore(directory).get();
