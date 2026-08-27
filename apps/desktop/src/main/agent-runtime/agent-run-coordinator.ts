@@ -1,4 +1,4 @@
-import type { AgentToolIntent } from '@enterprise-brain/contracts';
+import type { AgentToolIntent, ReadOnlyAgentToolIntent } from '@enterprise-brain/contracts';
 import type { DesktopApiGateway } from '../desktop-api-gateway.js';
 import { AgentToolExecutor } from './agent-tool-executor.js';
 export class DesktopAgentRunCoordinator {
@@ -6,7 +6,7 @@ export class DesktopAgentRunCoordinator {
     private readonly gateway: DesktopApiGateway,
     private readonly executor: AgentToolExecutor
   ) {}
-  async run(taskId: string, intent: AgentToolIntent) {
+  async run(taskId: string, intent: ReadOnlyAgentToolIntent | AgentToolIntent) {
     if (intent.name === 'write_file')
       return { ok: false as const, error: { code: 'AGENT_TOOL_REQUEST_INVALID', message: 'write_file requires the confirmed write workflow', details: {} } };
     const created = await this.gateway.createAgentRun(taskId, intent);

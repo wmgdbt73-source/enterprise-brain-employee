@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { lstat, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { lstat, open, realpath, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { LocalCapabilityFailure, localFailure } from './workspace-types.js';
 
@@ -33,12 +33,12 @@ export class LocalWriteService {
     if (prepared.payloadSize !== approved.payloadSize || prepared.payloadSha256 !== approved.payloadSha256 || prepared.effect !== approved.effect || prepared.expectedCurrentSha256 !== approved.expectedCurrentSha256)
       localFailure('LOCAL_WRITE_PRECONDITION_FAILED', 'Approved write precondition changed');
     if (approved.effect === 'CREATE') {
-      try { await writeFile(target, prepared.bytes, { flag: 'wx' }); }
+      try { await writeAndSync(target, prepared.bytes); await syncDirectory(path.dirname(target)); }
       catch (error) { if (isExists(error)) localFailure('LOCAL_WRITE_PRECONDITION_FAILED', 'Create target already exists'); localFailure('LOCAL_IO_ERROR', 'Local write failed'); }
       return;
     }
     const temp = path.join(path.dirname(target), `.${path.basename(target)}.enterprise-brain-${randomUUID()}.tmp`);
-    try { await writeFile(temp, prepared.bytes, { flag: 'wx' }); if (await hashFile(target) !== approved.expectedCurrentSha256) localFailure('LOCAL_WRITE_PRECONDITION_FAILED', 'Write target changed before replacement'); await rename(temp, target); }
+    try { await writeAndSync(temp, prepared.bytes); if (await hashFile(target) !== approved.expectedCurrentSha256) localFailure('LOCAL_WRITE_PRECONDITION_FAILED', 'Write target changed before replacement'); await rename(temp, target); await syncDirectory(path.dirname(target)); }
     catch (error) {
       await rm(temp, { force: true }).catch(() => undefined);
       if (error instanceof LocalCapabilityFailure) throw error;
@@ -66,6 +66,8 @@ async function resolveTarget(root: string, relativePath: string) {
 }
 function sha(bytes: Buffer): string { return createHash('sha256').update(bytes).digest('hex'); }
 async function hashFile(file: string): Promise<string> { return new Promise((resolve, reject) => { const hash = createHash('sha256'); const stream = createReadStream(file); stream.on('data', chunk => hash.update(chunk)); stream.on('error', reject); stream.on('end', () => resolve(hash.digest('hex'))); }); }
+async function writeAndSync(file: string, bytes: Buffer): Promise<void> { const handle = await open(file, 'wx'); try { await handle.writeFile(bytes); await handle.sync(); } finally { await handle.close(); } }
+async function syncDirectory(directory: string): Promise<void> { try { const handle = await open(directory, 'r'); try { await handle.sync(); } finally { await handle.close(); } } catch { /* directory fsync is not supported on every platform */ } }
 function within(root: string, target: string): boolean { const relative = path.relative(root, target); return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative); }
 function isNotFound(error: unknown): boolean { return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'ENOENT'; }
 function isExists(error: unknown): boolean { return typeof error === 'object' && error !== null && 'code' in error && (error as { code?: string }).code === 'EEXIST'; }

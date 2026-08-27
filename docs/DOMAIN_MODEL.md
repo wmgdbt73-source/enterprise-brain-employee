@@ -168,10 +168,21 @@ interface AgentRun {
 
 EB-008 binds every AgentRun to one User, Project and Task. Backend persists the
 AgentRun and safe ToolCall receipts; Electron Main holds full local tool output.
-Enabled transitions are `QUEUED → RUNNING → SUCCEEDED | FAILED`. `WAITING_HUMAN`
-and `CANCELLED` remain reserved enum values.
+For confirmed local writes, EB-010 enables `WAITING_HUMAN → RUNNING | CANCELLED`.
+The write ToolCall remains `PENDING` while the confirmation is pending or approved;
+approval does not mutate a Task. A completed write transitions its ToolCall and
+AgentRun together to `SUCCEEDED` or `FAILED`.
 
-## 9. Artifact（工作产物）
+## 9. HumanConfirmation（人工确认）
+
+`HumanConfirmation` is backend-owned formal state for one sensitive operation.
+It binds one AgentRun, one ToolCall, one User, Project, Task, and opaque app-local
+device ID. Its status is `PENDING | APPROVED | REJECTED`. It contains no local
+path or file bytes. For EB-010 it authorizes exactly one employee-supplied UTF-8
+`write_file` payload, path, hash, size, and `CREATE`/`REPLACE` effect; it does not
+grant a persistent local-write permission.
+
+## 10. Artifact（工作产物）
 
 ```ts
 interface Artifact {
@@ -196,7 +207,7 @@ Artifact is an immutable metadata reference derived from a successful local
 `read_file` observation. It stores neither an absolute local path nor file
 content and is not a Result.
 
-## 10. Result（正式候选结果 / 正式结果）
+## 11. Result（正式候选结果 / 正式结果）
 
 ```ts
 type ResultStatus =

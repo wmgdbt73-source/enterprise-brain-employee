@@ -13,6 +13,7 @@ export type {
   AgentToolCallStatus,
   AgentToolCompletionReceipt,
   AgentToolIntent,
+  ReadOnlyAgentToolIntent,
   AgentToolName,
   AgentToolRequest,
   AgentDefinitionKey,

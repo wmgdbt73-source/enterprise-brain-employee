@@ -1,6 +1,6 @@
 import type {
   AgentRunContract,
-  AgentToolIntent,
+  ReadOnlyAgentToolIntent,
   ArtifactContract,
   HumanConfirmationContract,
   HumanConfirmationDetailContract,
@@ -98,7 +98,7 @@ export interface EnterpriseBrainBridge {
   agents: {
     run(
       taskId: string,
-      intent: AgentToolIntent
+      intent: ReadOnlyAgentToolIntent
     ): Promise<DesktopResult<{ run: AgentRunContract; localResult?: unknown }>>;
   };
   artifacts: {
@@ -189,7 +189,10 @@ export function createEnterpriseBrainBridge(
     }
     ,confirmedWrites: {
       prepare: (taskId, input) => invoke('confirmed-writes:prepare', { taskId, input }) as Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>,
-      approve: (confirmationId) => invoke('confirmed-writes:approve', { confirmationId }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>>,
+      approve: async (confirmationId) => {
+        const result = await invoke('confirmed-writes:approve', { confirmationId }) as DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>;
+        return result.ok ? { ok: true as const, data: { confirmation: result.data.confirmation, ...(result.data.run ? { run: result.data.run } : {}) } } : result;
+      },
       reject: (confirmationId) => invoke('confirmed-writes:reject', { confirmationId }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>
     }
   };

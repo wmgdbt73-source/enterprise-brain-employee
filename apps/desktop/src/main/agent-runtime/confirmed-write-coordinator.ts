@@ -18,7 +18,7 @@ export class ConfirmedWriteCoordinator {
       if (!created.ok || !created.data.humanConfirmation || created.data.toolRequest.name !== 'write_file') return created.ok ? fail('HUMAN_CONFIRMATION_INVALID', 'Write confirmation was not created') : created;
       const detail = await this.gateway.getHumanConfirmation(created.data.humanConfirmation.id); if (!detail.ok) return detail;
       const request = created.data.toolRequest;
-      if (detail.data.confirmation.toolCallId !== request.id || !sameDetail(detail.data, { relativePath: prepared.relativePath, payloadSize: prepared.payloadSize, payloadSha256: prepared.payloadSha256, effect: prepared.effect })) return fail('HUMAN_CONFIRMATION_INVALID', 'Write confirmation detail does not match pending operation');
+      if (!sameCreation(created.data.run, request, detail.data, context.deviceId, prepared)) return fail('HUMAN_CONFIRMATION_INVALID', 'Write confirmation provenance does not match pending operation');
       this.payloads.put({ confirmationId: detail.data.confirmation.id, agentRunId: created.data.run.id, toolCallId: request.id, userId: created.data.run.userId, projectId: created.data.run.projectId, taskId: created.data.run.taskId, deviceId: context.deviceId, relativePath: prepared.relativePath, payloadSize: prepared.payloadSize, payloadSha256: prepared.payloadSha256, effect: prepared.effect, ...(prepared.expectedCurrentSha256 ? { expectedCurrentSha256: prepared.expectedCurrentSha256 } : {}), content: input.content });
       return { ok: true as const, data: { run: created.data.run, confirmation: detail.data } satisfies SafeConfirmation };
     } catch { return fail('LOCAL_WRITE_PRECONDITION_FAILED', 'Unable to prepare confirmed local write'); }
@@ -31,7 +31,7 @@ export class ConfirmedWriteCoordinator {
     const approved = await this.gateway.approveHumanConfirmation(confirmationId); if (!approved.ok) return approved;
     const grant = approved.data.executionGrant; if (!grant) return { ok: true as const, data: { confirmation: approved.data.confirmation } };
     if (!sameGrant(grant, pending)) return fail('LOCAL_PERMISSION_DENIED', 'Approved write grant does not match pending operation');
-    this.grants.put(grant);
+    if (!this.grants.put(grant)) return fail('LOCAL_WRITE_PRECONDITION_FAILED', 'Write grant was already consumed');
     const oneShotGrant = this.grants.take(grant.toolCallId); const payload = this.payloads.take(confirmationId);
     if (!oneShotGrant || !payload) return fail('LOCAL_WRITE_PRECONDITION_FAILED', 'Write grant was already consumed');
     try { await this.writer.execute(context.localPath, oneShotGrant, payload.content); }
@@ -45,6 +45,9 @@ export class ConfirmedWriteCoordinator {
   async reject(confirmationId: string) { const result = await this.gateway.rejectHumanConfirmation(confirmationId); if (result.ok) this.payloads.remove(confirmationId); return result.ok ? { ok: true as const, data: { confirmation: result.data.confirmation } } : result; }
 }
 function sameDetail(detail: HumanConfirmationDetailContract, pending: Pick<PendingWritePayload, 'relativePath'|'payloadSize'|'payloadSha256'|'effect'>) { return detail.action === 'write_file' && detail.relativePath === pending.relativePath && detail.payloadSize === pending.payloadSize && detail.payloadSha256 === pending.payloadSha256 && detail.effect === pending.effect; }
+function sameCreation(run: AgentRunContract, request: Extract<import('@enterprise-brain/contracts').AgentToolRequest, { name: 'write_file' }>, detail: HumanConfirmationDetailContract, deviceId: string, prepared: { relativePath: string; payloadSize: number; payloadSha256: string; effect: 'CREATE' | 'REPLACE'; expectedCurrentSha256?: string }) {
+  return request.name === 'write_file' && request.runId === run.id && request.userId === run.userId && request.projectId === run.projectId && request.deviceId === deviceId && detail.confirmation.toolCallId === request.id && detail.confirmation.agentRunId === run.id && detail.confirmation.userId === run.userId && detail.confirmation.projectId === run.projectId && detail.confirmation.taskId === run.taskId && sameDetail(detail, prepared) && request.relativePath === prepared.relativePath && request.payloadSize === prepared.payloadSize && request.payloadSha256 === prepared.payloadSha256 && request.effect === prepared.effect && request.expectedCurrentSha256 === prepared.expectedCurrentSha256;
+}
 function sameGrant(grant: ApprovedWriteExecutionGrant, pending: PendingWritePayload) { return grant.confirmationId === pending.confirmationId && grant.agentRunId === pending.agentRunId && grant.toolCallId === pending.toolCallId && grant.userId === pending.userId && grant.projectId === pending.projectId && grant.taskId === pending.taskId && grant.deviceId === pending.deviceId && grant.relativePath === pending.relativePath && grant.payloadSize === pending.payloadSize && grant.payloadSha256 === pending.payloadSha256 && grant.effect === pending.effect && grant.expectedCurrentSha256 === pending.expectedCurrentSha256; }
 function successReceipt(g: ApprovedWriteExecutionGrant) { return { toolCallId: g.toolCallId, status: 'SUCCEEDED' as const, metadata: { relativePath: g.relativePath, size: g.payloadSize, encoding: 'utf-8' as const, sha256: g.payloadSha256, effect: g.effect } }; }
 function failedReceipt(toolCallId: string) { return { toolCallId, status: 'FAILED' as const, error: { code: 'LOCAL_IO_ERROR', message: 'Confirmed local write failed', details: {} } }; }

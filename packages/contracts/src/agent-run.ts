@@ -18,6 +18,9 @@ export type AgentToolIntent =
   | { name: 'read_file'; relativePath: string }
   | { name: 'write_file'; relativePath: string; payloadSize: number; payloadSha256: string; effect: WriteFileEffect; expectedCurrentSha256?: string; deviceId: string };
 
+/** The renderer's generic Agent entrypoint is deliberately read-only. */
+export type ReadOnlyAgentToolIntent = Exclude<AgentToolIntent, { name: 'write_file' }>;
+
 export type AgentToolRequest = AgentToolIntent & {
   id: AgentToolCallId;
   runId: AgentRunId;

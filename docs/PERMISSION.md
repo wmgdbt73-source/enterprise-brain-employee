@@ -65,6 +65,12 @@ Alpha baseline:
 - execute command: confirmation required;
 - expanding Workspace scope: confirmation required.
 
+For EB-010, confirmation is operation-scoped—not a persistent grant of
+`LOCAL_CREATE` or `LOCAL_MODIFY`. A write is bound to the current
+`user_id + project_id + device_id` WorkspaceBinding, one ToolCall, relative path,
+exact UTF-8 byte hash/size and `CREATE` or guarded `REPLACE` effect. The
+Renderer cannot receive or replay its Main-only execution grant.
+
 ## 7. Agent Permission（Agent 权限）
 
 Agent receives a derived permission scope from:
