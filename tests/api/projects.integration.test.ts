@@ -27,6 +27,7 @@ function requireDatabase() {
 describe('Project API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.artifact.deleteMany();
     await db.agentToolCall.deleteMany();
     await db.agentRun.deleteMany();
     await db.taskDependency.deleteMany();

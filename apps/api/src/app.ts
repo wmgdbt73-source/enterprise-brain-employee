@@ -5,6 +5,7 @@ import {
   ProjectRepository,
   TaskRepository,
   AgentRunRepository,
+  ArtifactRepository,
   createPrismaClient,
   ensureUser,
   type PrismaClient
@@ -29,6 +30,12 @@ import {
   AgentRunNotFoundError,
   AgentRunService
 } from './modules/agent-runs/agent-run-service.js';
+import { registerArtifactRoutes } from './modules/artifacts/artifact-routes.js';
+import {
+  ArtifactNotFoundError,
+  ArtifactService,
+  ArtifactSourceInvalidError
+} from './modules/artifacts/artifact-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -75,6 +82,10 @@ export async function createApp(
       new TaskRepository(prisma)
     )
   );
+  registerArtifactRoutes(
+    app,
+    new ArtifactService(new ArtifactRepository(prisma))
+  );
 
   app.setErrorHandler((error, _request, reply) => {
     if (isDomainError(error) && error.code === 'INVALID_STATE_TRANSITION') {
@@ -99,7 +110,8 @@ export async function createApp(
     if (
       error instanceof ProjectNotFoundError ||
       error instanceof TaskNotFoundError ||
-      error instanceof AgentRunNotFoundError
+      error instanceof AgentRunNotFoundError ||
+      error instanceof ArtifactNotFoundError
     ) {
       return reply.code(404).send({
         error: {
@@ -110,17 +122,29 @@ export async function createApp(
       });
     }
     if (error instanceof AgentRunConflictError)
-      return reply
-        .code(409)
-        .send({
-          error: {
-            code: 'AGENT_RUN_CONFLICT',
-            message: 'Conflicting AgentRun completion',
-            details: {}
-          }
+      return reply.code(409).send({
+        error: {
+          code: 'AGENT_RUN_CONFLICT',
+          message: 'Conflicting AgentRun completion',
+          details: {}
+        }
       });
     if (error instanceof AgentRunInvalidResultError)
-      return reply.code(400).send({ error: { code: 'AGENT_TOOL_RESULT_INVALID', message: 'Tool completion does not match request', details: {} } });
+      return reply.code(400).send({
+        error: {
+          code: 'AGENT_TOOL_RESULT_INVALID',
+          message: 'Tool completion does not match request',
+          details: {}
+        }
+      });
+    if (error instanceof ArtifactSourceInvalidError)
+      return reply.code(409).send({
+        error: {
+          code: 'ARTIFACT_SOURCE_INVALID',
+          message: 'AgentRun source is not eligible for Artifact registration',
+          details: {}
+        }
+      });
 
     app.log.error(error);
     return reply.code(500).send({

@@ -1,6 +1,7 @@
 export type {
   AgentRunId,
   AgentToolCallId,
+  ArtifactId,
   ProjectId,
   ProjectMemberId,
   TaskId,
@@ -15,6 +16,16 @@ export type {
   AgentToolName,
   AgentToolRequest
 } from './agent-run.js';
+export type {
+  ArtifactContract,
+  ArtifactStorageKind,
+  ArtifactType,
+  RegisterArtifactRequest
+} from './artifact.js';
+export {
+  normalizeToolCompletion,
+  type NormalizedToolCompletion
+} from './runtime-validation.js';
 export type { ProjectContract, ProjectStatus } from './project.js';
 export type {
   ProjectMemberContract,

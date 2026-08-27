@@ -70,6 +70,12 @@ export function registerRuntimeHandlers(
       agents.run(payload.taskId, payload.intent)
     );
   }
+  ipc.handle('artifacts:register', (_event, payload: { agentRunId: string }) =>
+    gateway.registerArtifact(payload.agentRunId)
+  );
+  ipc.handle('artifacts:list-for-task', (_event, payload: { taskId: string }) =>
+    gateway.listArtifactsForTask(payload.taskId)
+  );
 }
 
 async function handleWorkspace<T>(operation: () => Promise<T>) {

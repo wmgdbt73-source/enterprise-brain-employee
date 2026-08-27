@@ -176,3 +176,7 @@ Backend owns AgentRun/ToolCall persistence and returns a deterministic allowlist
 ToolRequest. Electron Main is the local executor and reuses WorkspaceService;
 Backend never imports or accesses local filesystem APIs. Full local results stay
 on Desktop, while PostgreSQL records only safe completion metadata.
+
+EB-009 adds explicit employee Artifact registration: successful `read_file`
+AgentRun → persisted safe receipt → `POST /artifacts` → immutable backend
+Artifact metadata. No local file content or absolute path crosses this boundary.

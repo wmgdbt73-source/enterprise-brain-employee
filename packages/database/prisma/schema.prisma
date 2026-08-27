@@ -55,6 +55,14 @@ enum AgentToolCallStatus {
   FAILED
 }
 
+enum ArtifactType {
+  FILE
+}
+
+enum ArtifactStorageKind {
+  LOCAL_WORKSPACE
+}
+
 model User {
   id             String          @id @map("user_id")
   name           String
@@ -78,6 +86,7 @@ model Project {
   members   ProjectMember[]
   tasks     Task[]
   agentRuns AgentRun[]
+  artifacts Artifact[]
 
   @@map("projects")
 }
@@ -113,6 +122,7 @@ model Task {
   dependencies       TaskDependency[] @relation("TaskDependencies")
   dependents         TaskDependency[] @relation("TaskDependents")
   agentRuns          AgentRun[]
+  artifacts          Artifact[]
 
   @@unique([id, projectId], map: "tasks_task_id_project_id_key")
   @@map("tasks")
@@ -134,7 +144,9 @@ model AgentRun {
   project            Project        @relation(fields: [projectId], references: [id], onDelete: Restrict)
   task               Task           @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Restrict)
   toolCalls          AgentToolCall[]
+  artifacts          Artifact[] @relation("ArtifactRun")
 
+  @@unique([id, userId, projectId, taskId], map: "agent_runs_agent_run_id_user_id_project_id_task_id_key")
   @@map("agent_runs")
 }
 
@@ -149,9 +161,34 @@ model AgentToolCall {
   createdAt   DateTime            @map("created_at") @db.Timestamptz(3)
   completedAt DateTime?           @map("completed_at") @db.Timestamptz(3)
   agentRun    AgentRun            @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  artifacts   Artifact[]          @relation("ArtifactSourceToolCall")
 
+  @@unique([id, agentRunId], map: "agent_tool_calls_agent_tool_call_id_agent_run_id_key")
   @@unique([agentRunId, sequence], map: "agent_tool_calls_agent_run_id_sequence_key")
   @@map("agent_tool_calls")
+}
+
+model Artifact {
+  id               String              @id @map("artifact_id")
+  projectId        String              @map("project_id")
+  taskId           String              @map("task_id")
+  agentRunId       String              @map("agent_run_id")
+  sourceToolCallId String              @unique(map: "artifacts_source_tool_call_id_key") @map("source_tool_call_id")
+  type             ArtifactType
+  storageKind      ArtifactStorageKind @map("storage_kind")
+  relativePath     String              @map("relative_path")
+  size             Int
+  encoding         String
+  sha256           String
+  version          Int
+  createdByUserId  String              @map("created_by_user_id")
+  createdAt        DateTime            @map("created_at") @db.Timestamptz(3)
+  project          Project             @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  task             Task                @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Restrict)
+  agentRun         AgentRun            @relation("ArtifactRun", fields: [agentRunId, createdByUserId, projectId, taskId], references: [id, userId, projectId, taskId], onDelete: Restrict)
+  sourceToolCall   AgentToolCall       @relation("ArtifactSourceToolCall", fields: [sourceToolCallId, agentRunId], references: [id, agentRunId], onDelete: Restrict)
+
+  @@map("artifacts")
 }
 
 model TaskAssignment {

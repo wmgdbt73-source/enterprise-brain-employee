@@ -3,6 +3,7 @@ import type {
   AgentToolCompletionReceipt,
   AgentToolIntent,
   AgentToolRequest,
+  ArtifactContract,
   CurrentUserContract,
   ProjectContract,
   TaskContract
@@ -107,6 +108,27 @@ export class DesktopApiGateway {
         body: receipt
       }
     ) as Promise<DesktopResult<AgentRunContract>>;
+  }
+  registerArtifact(
+    agentRunId: string
+  ): Promise<DesktopResult<ArtifactContract>> {
+    return this.request('/artifacts', {
+      method: 'POST',
+      body: { agentRunId }
+    }) as Promise<DesktopResult<ArtifactContract>>;
+  }
+  listArtifactsForTask(
+    taskId: string
+  ): Promise<DesktopResult<ArtifactContract[]>> {
+    return this.request(`/tasks/${encodeURIComponent(taskId)}/artifacts`).then(
+      (result) =>
+        result.ok
+          ? {
+              ok: true,
+              data: (result.data as { artifacts: ArtifactContract[] }).artifacts
+            }
+          : result
+    );
   }
   private async request(
     path: string,

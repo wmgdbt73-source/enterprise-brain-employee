@@ -1,5 +1,6 @@
 import type {
   ProjectContract,
+  ArtifactContract,
   TaskContract
 } from '@enterprise-brain/contracts';
 import type { TaskInput } from '../../../../shared/enterprise-brain.js';
@@ -20,7 +21,10 @@ export function ProjectWorkspace({
   task,
   onCreateTask,
   onSelectTask,
-  onStartTask
+  onStartTask,
+  artifacts,
+  onReadFile,
+  onRegisterArtifact
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -30,6 +34,14 @@ export function ProjectWorkspace({
   onCreateTask: (input: TaskInput) => Promise<void>;
   onSelectTask: (task: TaskContract) => void;
   onStartTask: (task: TaskContract) => Promise<void>;
+  artifacts: ArtifactContract[];
+  onReadFile: (
+    task: TaskContract,
+    relativePath: string
+  ) => Promise<
+    import('@enterprise-brain/contracts').AgentRunContract | undefined
+  >;
+  onRegisterArtifact: (agentRunId: string) => Promise<void>;
 }) {
   return (
     <section className="page">
@@ -61,7 +73,13 @@ export function ProjectWorkspace({
             <TaskForm onSubmit={onCreateTask} />
             <TaskList tasks={tasks} onSelect={onSelectTask} />
           </section>
-          <TaskDetail task={task} onStart={onStartTask} />
+          <TaskDetail
+            task={task}
+            onStart={onStartTask}
+            artifacts={artifacts}
+            onReadFile={onReadFile}
+            onRegisterArtifact={onRegisterArtifact}
+          />
         </div>
       )}
     </section>

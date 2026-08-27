@@ -250,6 +250,31 @@ never changed by AgentRun outcome.
 
 ---
 
+## ADR-020 — Local Artifact Metadata Authority
+
+EB-009 registers an Artifact only through explicit employee action from one
+successful persisted `read_file` ToolCall. Artifact is an immutable metadata
+reference to an observed local Workspace file, not a claim that the Agent
+created, modified, uploaded, or still retains that file; Artifact is not Result.
+
+Metadata is derived only from the persisted AgentRun, sequence-one ToolCall, and
+the shared normalized successful receipt. PostgreSQL stores relative path, size,
+UTF-8 encoding, SHA-256, provenance, creator, version and timestamp—never local
+absolute paths, content, directory entries, symlink targets, errno or stacks.
+
+Composite foreign keys bind Artifact creator to AgentRun owner and bind Project,
+Task, Run and ToolCall provenance. A source ToolCall has at most one Artifact;
+concurrent duplicate registration recovers only from that specific uniqueness
+conflict outside an aborted transaction.
+
+EB-009 relies on the EB-008 Alpha invariant: an eligible AgentRun contains
+exactly one ToolCall with `sequence = 1`. Artifact registration resolves that
+exact source and requires successful `read_file`; future multi-tool AgentRuns
+must redesign source selection explicitly. Registration performs no new local
+read and never mutates Task or AgentRun state.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

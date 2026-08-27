@@ -1,6 +1,7 @@
 import type {
   AgentRunContract,
   AgentToolIntent,
+  ArtifactContract,
   LocalPermission,
   ProjectContract,
   TaskContract,
@@ -98,6 +99,10 @@ export interface EnterpriseBrainBridge {
       intent: AgentToolIntent
     ): Promise<DesktopResult<{ run: AgentRunContract; localResult?: unknown }>>;
   };
+  artifacts: {
+    register(agentRunId: string): Promise<DesktopResult<ArtifactContract>>;
+    listForTask(taskId: string): Promise<DesktopResult<ArtifactContract[]>>;
+  };
 }
 
 type Invoke = (channel: string, payload?: unknown) => Promise<unknown>;
@@ -163,6 +168,16 @@ export function createEnterpriseBrainBridge(
       run: (taskId, intent) =>
         invoke('agent-runs:run', { taskId, intent }) as Promise<
           DesktopResult<{ run: AgentRunContract; localResult?: unknown }>
+        >
+    },
+    artifacts: {
+      register: (agentRunId) =>
+        invoke('artifacts:register', { agentRunId }) as Promise<
+          DesktopResult<ArtifactContract>
+        >,
+      listForTask: (taskId) =>
+        invoke('artifacts:list-for-task', { taskId }) as Promise<
+          DesktopResult<ArtifactContract[]>
         >
     }
   };
