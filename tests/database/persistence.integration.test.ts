@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPrismaClient } from '../../packages/database/src/index.js';
+import { isSourceToolCallUniqueConflict } from '../../packages/database/src/repositories/artifact-repository.js';
 
 const connectionString = process.env.DATABASE_URL;
 const database = connectionString
@@ -54,6 +55,8 @@ describe('PostgreSQL persistence constraints', () => {
   beforeEach(async () => {
     const db = requireDatabase();
     await db.artifact.deleteMany();
+    await db.agentToolCall.deleteMany();
+    await db.agentRun.deleteMany();
     await db.taskDependency.deleteMany();
     await db.taskAssignment.deleteMany();
     await db.task.deleteMany();
@@ -292,9 +295,13 @@ describe('PostgreSQL persistence constraints', () => {
       createdAt: now
     };
     await db.artifact.create({ data: valid });
-    await expect(
-      db.artifact.create({ data: { ...valid, id: 'duplicate-source' } })
-    ).rejects.toMatchObject({ code: 'P2002' });
+    let duplicateSourceError: unknown;
+    try {
+      await db.artifact.create({ data: { ...valid, id: 'duplicate-source' } });
+    } catch (error) {
+      duplicateSourceError = error;
+    }
+    expect(isSourceToolCallUniqueConflict(duplicateSourceError)).toBe(true);
     await expect(
       db.artifact.create({
         data: {
@@ -354,5 +361,37 @@ describe('PostgreSQL persistence constraints', () => {
         }
       })
     ).rejects.toThrow();
+    await db.project.create({ data: { id: 'project-2', name: 'Other', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+    await db.projectMember.create({ data: { id: 'member-other-project', projectId: 'project-2', userId: 'user-owner', role: 'OWNER', createdAt: now, updatedAt: now } });
+    await db.task.create({ data: { id: 'task-other-project', projectId: 'project-2', title: 'Other', priority: 'P2', status: 'TODO', acceptanceCriteria: [], createdAt: now, updatedAt: now } });
+    await expect(db.artifact.create({ data: { ...valid, id: 'project-task-run-mismatch', sourceToolCallId: 'call-2', projectId: 'project-2', taskId: 'task-other-project' } })).rejects.toThrow();
+  });
+
+  it('classifies only the adapter-pg source ToolCall unique violation', () => {
+    const source = {
+      code: 'P2002',
+      meta: {
+        driverAdapterError: {
+          cause: {
+            kind: 'UniqueConstraintViolation',
+            constraint: { fields: ['source_tool_call_id'] }
+          }
+        }
+      }
+    };
+    const primaryKey = {
+      code: 'P2002',
+      meta: {
+        driverAdapterError: {
+          cause: {
+            kind: 'UniqueConstraintViolation',
+            constraint: { fields: ['artifact_id'] }
+          }
+        }
+      }
+    };
+    expect(isSourceToolCallUniqueConflict(source)).toBe(true);
+    expect(isSourceToolCallUniqueConflict(primaryKey)).toBe(false);
+    expect(isSourceToolCallUniqueConflict({ code: 'P2003' })).toBe(false);
   });
 });

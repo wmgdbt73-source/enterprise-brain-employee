@@ -23,6 +23,9 @@ CREATE TABLE "artifacts" (
   "created_at" TIMESTAMPTZ(3) NOT NULL,
   CONSTRAINT "artifacts_pkey" PRIMARY KEY ("artifact_id"),
   CONSTRAINT "artifacts_source_tool_call_id_key" UNIQUE ("source_tool_call_id"),
+  CONSTRAINT "artifacts_project_id_fkey"
+    FOREIGN KEY ("project_id")
+    REFERENCES "projects"("project_id") ON DELETE RESTRICT ON UPDATE CASCADE,
   CONSTRAINT "artifacts_task_id_project_id_fkey"
     FOREIGN KEY ("task_id", "project_id")
     REFERENCES "tasks"("task_id", "project_id") ON DELETE RESTRICT ON UPDATE CASCADE,

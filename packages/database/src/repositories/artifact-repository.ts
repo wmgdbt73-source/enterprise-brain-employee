@@ -36,7 +36,7 @@ export class ArtifactRepository {
         this.registerInTransaction(tx, input)
       );
     } catch (error) {
-      if (!isArtifactUniqueConflict(error)) throw error;
+      if (!isSourceToolCallUniqueConflict(error)) throw error;
       const artifact = await this.findExistingSourceArtifactForUser(
         input.agentRunId,
         input.userId
@@ -81,7 +81,11 @@ export class ArtifactRepository {
       where: { agentRunId_sequence: { agentRunId: run.id, sequence: 1 } }
     });
     if (!call || call.id !== calls[0]?.id) return 'SOURCE_INVALID';
-    if (run.status !== 'SUCCEEDED' || call.status !== 'SUCCEEDED')
+    if (
+      run.status !== 'SUCCEEDED' ||
+      call.status !== 'SUCCEEDED' ||
+      call.name !== 'read_file'
+    )
       return 'SOURCE_INVALID';
     const completion = normalizeToolCompletion(call.request, call.receipt);
     if (completion.kind !== 'READ_FILE_SUCCESS') return 'SOURCE_INVALID';
@@ -183,7 +187,21 @@ function toContract(artifact: {
   };
 }
 
-function isArtifactUniqueConflict(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) return false;
-  return (error as { code?: unknown }).code === 'P2002';
+export function isSourceToolCallUniqueConflict(error: unknown): boolean {
+  if (!isRecord(error) || error.code !== 'P2002') return false;
+  const adapterError = isRecord(error.meta)
+    ? error.meta.driverAdapterError
+    : undefined;
+  if (!isRecord(adapterError) || !isRecord(adapterError.cause)) return false;
+  const constraint = adapterError.cause.constraint;
+  return (
+    adapterError.cause.kind === 'UniqueConstraintViolation' &&
+    isRecord(constraint) &&
+    Array.isArray(constraint.fields) &&
+    constraint.fields.length === 1 &&
+    constraint.fields[0] === 'source_tool_call_id'
+  );
+}
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

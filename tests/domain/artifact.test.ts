@@ -30,4 +30,24 @@ describe('Artifact domain', () => {
     expect(artifact.version).toBe(1);
     expect(Object.isFrozen(artifact)).toBe(true);
   });
+  it('preserves a valid relativePath exactly without trimming it', () => {
+    const relativePath = ' docs/a.md ';
+    const artifact = createArtifact({
+      id: asArtifactId('artifact-2'),
+      projectId: asProjectId('project'),
+      taskId: asTaskId('task'),
+      agentRunId: asAgentRunId('run'),
+      sourceToolCallId: asAgentToolCallId('call-2'),
+      type: 'FILE',
+      storageKind: 'LOCAL_WORKSPACE',
+      relativePath,
+      size: 1,
+      encoding: 'utf-8',
+      sha256: 'a'.repeat(64),
+      version: 1,
+      createdByUserId: asUserId('user'),
+      createdAt: new Date()
+    });
+    expect(artifact.relativePath).toBe(relativePath);
+  });
 });

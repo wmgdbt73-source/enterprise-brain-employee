@@ -1,4 +1,4 @@
-import { DomainError, requireNonBlank } from './errors.js';
+import { DomainError } from './errors.js';
 import type {
   AgentRunId,
   AgentToolCallId,
@@ -25,7 +25,8 @@ export interface Artifact {
   readonly createdAt: Date;
 }
 export function createArtifact(input: Artifact): Artifact {
-  const relativePath = requireNonBlank(input.relativePath, 'relativePath');
+  if (input.relativePath.trim().length === 0)
+    throw new DomainError('INVALID_ARGUMENT', 'relativePath must not be blank');
   if (!Number.isInteger(input.size) || input.size < 0)
     throw new DomainError(
       'INVALID_ARGUMENT',
@@ -37,7 +38,6 @@ export function createArtifact(input: Artifact): Artifact {
     throw new DomainError('INVALID_ARGUMENT', 'sha256 must be a SHA-256 hash');
   return Object.freeze({
     ...input,
-    relativePath,
     createdAt: new Date(input.createdAt)
   });
 }

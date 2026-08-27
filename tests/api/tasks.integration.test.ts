@@ -707,6 +707,62 @@ describe('Task API vertical slice', () => {
     await app.close();
   });
 
+  it('preserves the receipt relativePath exactly when registering an Artifact', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const relativePath = ' docs/brief.md ';
+    const run = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'read_file', relativePath }
+      })
+    ).json();
+    await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${run.run.id}/tool-results`,
+      payload: {
+        toolCallId: run.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: {
+          relativePath,
+          size: 1,
+          encoding: 'utf-8',
+          sha256: 'f'.repeat(64)
+        }
+      }
+    });
+    const registered = await app.inject({
+      method: 'POST',
+      url: '/artifacts',
+      payload: { agentRunId: run.run.id }
+    });
+    expect(registered.statusCode).toBe(201);
+    expect(registered.json().relativePath).toBe(relativePath);
+    expect(
+      (
+        await db.artifact.findUniqueOrThrow({
+          where: { id: registered.json().id }
+        })
+      ).relativePath
+    ).toBe(relativePath);
+    await app.close();
+  });
+
   it('rejects forged, ineligible, and hidden Artifact sources', async () => {
     const db = requireDatabase();
     const app = await createApp({ prisma: db });
@@ -939,6 +995,36 @@ describe('Task API vertical slice', () => {
         })
       ).statusCode
     ).toBe(409);
+    await app.close();
+  });
+
+  it('rejects a ToolCall name that disagrees with its persisted read_file request', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
+    const run = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'read_file', relativePath: 'a.md' } })).json();
+    await app.inject({ method: 'POST', url: `/agent-runs/${run.run.id}/tool-results`, payload: { toolCallId: run.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'a.md', size: 1, encoding: 'utf-8', sha256: 'f'.repeat(64) } } });
+    await db.agentToolCall.update({ where: { id: run.toolRequest.id }, data: { name: 'list_directory' } });
+    const response = await app.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: run.run.id } });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: 'ARTIFACT_SOURCE_INVALID' } });
+    await app.close();
+  });
+
+  it('hides Artifact registration after membership revocation and from another member', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
+    const run = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'read_file', relativePath: 'a.md' } })).json();
+    await app.inject({ method: 'POST', url: `/agent-runs/${run.run.id}/tool-results`, payload: { toolCallId: run.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'a.md', size: 1, encoding: 'utf-8', sha256: 'a'.repeat(64) } } });
+    const other = await createApp({ prisma: db, identityProvider: new DevIdentityProvider({ id: 'other-member' }) });
+    await db.projectMember.create({ data: { id: 'other-member-project', projectId: project.id, userId: 'other-member', role: 'MEMBER', createdAt: new Date(), updatedAt: new Date() } });
+    expect((await other.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: run.run.id } })).statusCode).toBe(404);
+    await db.projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: 'dev-user' } } });
+    expect((await app.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: run.run.id } })).statusCode).toBe(404);
+    await other.close();
     await app.close();
   });
 
