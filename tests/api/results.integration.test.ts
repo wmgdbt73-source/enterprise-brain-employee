@@ -40,4 +40,26 @@ describe('Result API vertical slice', () => {
     expect((await outsider.inject({ method: 'POST', url: `/tasks/${task.id}/results`, payload: { artifactIds: [artifactId] } })).statusCode).toBe(404);
     await outsider.close(); await app.close();
   });
+  it('hides a cross-task Artifact and creates no Result', async () => {
+    const { app, project, task } = await fixture();
+    const otherTask = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Other task' } })).json();
+    const now = new Date();
+    await db().agentRun.create({ data: { id: 'other-run', userId: 'dev-user', projectId: project.id, taskId: otherTask.id, agentDefinitionKey: 'read-only-work-agent-v1', intent: { name: 'read_file', relativePath: 'other.md' }, status: 'SUCCEEDED', createdAt: now, startedAt: now, finishedAt: now, updatedAt: now } });
+    await db().agentToolCall.create({ data: { id: 'other-call', agentRunId: 'other-run', sequence: 1, name: 'read_file', request: { id: 'other-call', runId: 'other-run', userId: 'dev-user', projectId: project.id, name: 'read_file', relativePath: 'other.md' }, status: 'SUCCEEDED', receipt: { toolCallId: 'other-call', status: 'SUCCEEDED', metadata: { relativePath: 'other.md', size: 1, encoding: 'utf-8', sha256: 'b'.repeat(64) } }, createdAt: now, completedAt: now } });
+    await db().artifact.create({ data: { id: 'other-artifact', projectId: project.id, taskId: otherTask.id, agentRunId: 'other-run', sourceToolCallId: 'other-call', type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath: 'other.md', size: 1, encoding: 'utf-8', sha256: 'b'.repeat(64), version: 1, createdByUserId: 'dev-user', createdAt: now } });
+    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, payload: { artifactIds: ['other-artifact'] } })).statusCode).toBe(404);
+    expect(await db().result.count()).toBe(0);
+    await app.close();
+  });
+  it('rolls back Result submission when the Task state is invalid', async () => {
+    const { app, task, artifactId } = await fixture();
+    const result = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, payload: { artifactIds: [artifactId] } })).json();
+    await db().task.update({ where: { id: task.id }, data: { status: 'TODO' } });
+    const response = await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review` });
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toMatchObject({ error: { code: 'INVALID_STATE_TRANSITION' } });
+    expect(await db().result.findUniqueOrThrow({ where: { id: result.id } })).toMatchObject({ status: 'CANDIDATE' });
+    expect(await db().task.findUniqueOrThrow({ where: { id: task.id } })).toMatchObject({ status: 'TODO' });
+    await app.close();
+  });
 });
