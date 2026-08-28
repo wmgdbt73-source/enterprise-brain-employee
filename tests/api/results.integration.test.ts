@@ -93,15 +93,20 @@ describe('Result Candidate API', () => {
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const a = await artifact(app, task.id, 'a.md');
     const b = await artifact(app, task.id, 'b.md', 'b'.repeat(64));
-    const sameRequest = () => app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
+    const sameGate = barrier(2);
+    const sameRequest = async () => {
+      await sameGate.wait();
+      return app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
+    };
     const [sameA, sameB] = await Promise.all([sameRequest(), sameRequest()]);
     expect([sameA.statusCode, sameB.statusCode].sort()).toEqual([200, 201]);
     expect(sameA.json().id).toBe(sameB.json().id);
     expect(await db().result.count({ where: { taskId: task.id } })).toBe(1);
     expect(await db().resultArtifact.count({ where: { resultId: sameA.json().id } })).toBe(2);
 
-    const left = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [a.id] } });
-    const right = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [b.id] } });
+    const conflictGate = barrier(2);
+    const left = (async () => { await conflictGate.wait(); return app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [a.id] } }); })();
+    const right = (async () => { await conflictGate.wait(); return app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [b.id] } }); })();
     const responses = await Promise.all([left, right]);
     expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(1);
     expect(responses.filter((response) => response.statusCode === 409)).toHaveLength(1);
@@ -111,3 +116,16 @@ describe('Result Candidate API', () => {
     await app.close();
   });
 });
+
+function barrier(parties: number) {
+  let arrived = 0;
+  let release!: () => void;
+  const opened = new Promise<void>((resolve) => { release = resolve; });
+  return {
+    async wait() {
+      arrived += 1;
+      if (arrived === parties) release();
+      await opened;
+    }
+  };
+}
