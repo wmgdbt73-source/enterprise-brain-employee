@@ -87,7 +87,9 @@ export class ResultRepository {
   }
 }
 
-function canonicalArtifactIds(ids: string[]): string[] { return [...ids].sort((a, b) => a.localeCompare(b)); }
+export function canonicalArtifactIds(ids: string[]): string[] { return [...ids].sort(compareArtifactIds); }
+/** Deliberate code-unit order: independent of database collation and locale. */
+export function compareArtifactIds(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
 export function requestFingerprint(taskId: string, artifactIds: string[]): string {
   return createHash('sha256').update(JSON.stringify({ version: 1, taskId, artifactIds })).digest('hex');
 }

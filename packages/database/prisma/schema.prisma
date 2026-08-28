@@ -239,8 +239,8 @@ model Result {
   taskId             String       @map("task_id")
   createdByUserId    String       @map("created_by_user_id")
   status             ResultStatus
-  idempotencyKey     String       @map("idempotency_key")
-  requestFingerprint String       @map("request_fingerprint")
+  idempotencyKey     String       @db.VarChar(64) @map("idempotency_key")
+  requestFingerprint String       @db.Char(64) @map("request_fingerprint")
   createdAt          DateTime     @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime     @map("updated_at") @db.Timestamptz(3)
   project            Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)

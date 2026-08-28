@@ -5,6 +5,7 @@ import type {
   TaskContract
 } from '@enterprise-brain/contracts';
 import type { DesktopApiError } from '../../../../shared/enterprise-brain.js';
+import { resultConfirmationAttempt, type ResultConfirmationAttempt } from './result-confirmation.js';
 
 export function TaskDetail({
   task,
@@ -38,13 +39,13 @@ export function TaskDetail({
   const [confirmation, setConfirmation] = useState<import('@enterprise-brain/contracts').HumanConfirmationDetailContract>();
   const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
   const [candidate, setCandidate] = useState<import('@enterprise-brain/contracts').ResultContract>();
-  const [pendingKey, setPendingKey] = useState<string>();
+  const [pendingAttempt, setPendingAttempt] = useState<ResultConfirmationAttempt>();
   useEffect(() => {
     setEligibleRun(undefined);
     setError(undefined);
     setSelectedArtifactIds([]);
     setCandidate(undefined);
-    setPendingKey(undefined);
+    setPendingAttempt(undefined);
   }, [task?.id]);
   async function readFile() {
     if (!task || relativePath.trim().length === 0) return;
@@ -116,12 +117,12 @@ export function TaskDetail({
           <section className="artifact-panel">
             <p className="eyebrow">RESULT CANDIDATE · EMPLOYEE CONFIRMATION</p>
             <p>选择已登记的 Artifact 后明确创建候选结果。不会提交人工评审、不会验收，也不会改变任务状态。</p>
-            {artifacts.map((artifact) => <label key={`result-${artifact.id}`}><input type="checkbox" checked={selectedArtifactIds.includes(artifact.id)} onChange={() => { setPendingKey(undefined); setSelectedArtifactIds((ids) => ids.includes(artifact.id) ? ids.filter((id) => id !== artifact.id) : [...ids, artifact.id]); }} /> {artifact.relativePath}</label>)}
+            {artifacts.map((artifact) => <label key={`result-${artifact.id}`}><input type="checkbox" checked={selectedArtifactIds.includes(artifact.id)} onChange={() => { setSelectedArtifactIds((ids) => ids.includes(artifact.id) ? ids.filter((id) => id !== artifact.id) : [...ids, artifact.id]); }} /> {artifact.relativePath}</label>)}
             <button className="primary" disabled={!selectedArtifactIds.length} onClick={() => {
               if (!task) return;
-              const key = pendingKey ?? crypto.randomUUID();
-              if (!pendingKey) setPendingKey(key);
-              void onCreateResult(task, selectedArtifactIds, key).then((result) => { if (result) { setCandidate(result); setPendingKey(undefined); } });
+              const attempt = resultConfirmationAttempt(selectedArtifactIds, pendingAttempt, () => crypto.randomUUID());
+              setPendingAttempt(attempt);
+              void onCreateResult(task, [...attempt.artifactIds], attempt.idempotencyKey).then((result) => { if (result) { setCandidate(result); setPendingAttempt(undefined); } });
             }}>Create Result Candidate</button>
             {candidate && <p>Result Candidate: {candidate.status} · {candidate.id}</p>}
           </section>

@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
+import { DevIdentityProvider } from '../../apps/api/src/identity/dev-identity-provider.js';
 import { createPrismaClient } from '../../packages/database/src/index.js';
 
 const database = process.env.DATABASE_URL ? createPrismaClient(process.env.DATABASE_URL) : undefined;
@@ -18,18 +19,29 @@ describe('Result Candidate API', () => {
   });
   afterAll(async () => database?.$disconnect());
 
-  it('creates canonical Candidate Results idempotently without changing Task or AgentRun', async () => {
+  it('creates canonical Candidate Results idempotently without changing Artifact, Task, or AgentRun', async () => {
     const app = await createApp({ prisma: db() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const a = await artifact(app, task.id, 'a.md'); const b = await artifact(app, task.id, 'b.md', 'b'.repeat(64));
-    const canonicalIds = [a.id, b.id].sort((left: string, right: string) => left.localeCompare(right));
+    const canonicalIds = [a.id, b.id].sort((left: string, right: string) => left < right ? -1 : left > right ? 1 : 0);
+    const artifactsBefore = await db().artifact.findMany({ where: { taskId: task.id }, orderBy: { id: 'asc' } });
+    const runsBefore = await db().agentRun.findMany({ where: { taskId: task.id }, orderBy: { id: 'asc' }, select: { id: true, status: true } });
     const first = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('1') }, payload: { artifactIds: [b.id, a.id] } });
     expect(first.statusCode).toBe(201); expect(first.json()).toMatchObject({ status: 'CANDIDATE', createdByUserId: 'dev-user', artifactIds: canonicalIds });
     const retry = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('1') }, payload: { artifactIds: canonicalIds } });
     expect(retry.statusCode).toBe(200); expect(retry.json()).toEqual(first.json());
     expect((await app.inject({ method: 'GET', url: `/results/${first.json().id}` })).json()).toEqual(first.json());
     expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('TODO');
+    expect(await db().artifact.findMany({ where: { taskId: task.id }, orderBy: { id: 'asc' } })).toEqual(artifactsBefore);
+    expect(await db().agentRun.findMany({ where: { taskId: task.id }, orderBy: { id: 'asc' }, select: { id: true, status: true } })).toEqual(runsBefore);
+
+    const sameKeyDifferentSet = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('1') }, payload: { artifactIds: [a.id] } });
+    expect(sameKeyDifferentSet).toMatchObject({ statusCode: 409 });
+    expect(sameKeyDifferentSet.json()).toMatchObject({ error: { code: 'IDEMPOTENCY_KEY_CONFLICT' } });
+    const differentKeySameSet = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('3') }, payload: { artifactIds: canonicalIds } });
+    expect(differentKeySameSet.statusCode).toBe(201);
+    expect(differentKeySameSet.json().id).not.toBe(first.json().id);
     await app.close();
   });
 
@@ -39,9 +51,39 @@ describe('Result Candidate API', () => {
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const otherTask = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Other' } })).json();
     const foreign = await artifact(app, otherTask.id, 'other.md');
-    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('2') }, payload: { artifactIds: [] } })).statusCode).toBe(400);
-    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('2') }, payload: { artifactIds: [foreign.id, foreign.id] } })).statusCode).toBe(400);
-    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('2') }, payload: { artifactIds: [foreign.id] } })).statusCode).toBe(404);
+    const secondProject = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P2' } })).json();
+    const secondProjectTask = (await app.inject({ method: 'POST', url: `/projects/${secondProject.id}/tasks`, payload: { title: 'Other project' } })).json();
+    const crossProject = await artifact(app, secondProjectTask.id, 'cross.md');
+    const request = async (
+      payload: { artifactIds: string[]; [field: string]: string | string[] },
+      idempotencyKey = key('2')
+    ) => app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': idempotencyKey }, payload });
+    expect((await request({ artifactIds: [] })).statusCode).toBe(400);
+    expect((await request({ artifactIds: [foreign.id, foreign.id] })).statusCode).toBe(400);
+    expect((await request({ artifactIds: [foreign.id] })).statusCode).toBe(404);
+    expect((await request({ artifactIds: [crossProject.id] }, key('4'))).statusCode).toBe(404);
+    expect((await request({ artifactIds: ['missing-artifact'] }, key('5'))).statusCode).toBe(404);
+    expect((await request({ artifactIds: [foreign.id], id: 'forged', projectId: 'forged', status: 'ACCEPTED', createdByUserId: 'forged', createdAt: 'now', updatedAt: 'now' }, key('6'))).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, payload: { artifactIds: [foreign.id] } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': 'not-a-key' }, payload: { artifactIds: [foreign.id] } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': 'x'.repeat(100) }, payload: { artifactIds: [foreign.id] } })).statusCode).toBe(400);
+    expect(await db().result.count()).toBe(0);
     await app.close();
+  });
+
+  it('hides Result creation and reads when membership is absent or revoked', async () => {
+    const app = await createApp({ prisma: db() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const registered = await artifact(app, task.id, 'a.md');
+    const created = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('7') }, payload: { artifactIds: [registered.id] } });
+    expect(created.statusCode).toBe(201);
+    const outsider = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'result-outsider' }) });
+    expect((await outsider.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('8') }, payload: { artifactIds: [registered.id] } })).statusCode).toBe(404);
+    expect((await outsider.inject({ method: 'GET', url: `/results/${created.json().id}` })).statusCode).toBe(404);
+    await db().projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: 'dev-user' } } });
+    expect((await app.inject({ method: 'GET', url: `/results/${created.json().id}` })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('9') }, payload: { artifactIds: [registered.id] } })).statusCode).toBe(404);
+    await outsider.close(); await app.close();
   });
 });
