@@ -209,6 +209,13 @@ content and is not a Result.
 
 ## 11. Result（正式候选结果 / 正式结果）
 
+EB-011 persists a Result as a backend-owned structured delivery record:
+`id`, `taskId`, one-or-more persisted `artifactIds`, `status`, `submittedBy`,
+`createdAt`, optional `submittedAt`, and `updatedAt`. Explicit employee action
+creates `CANDIDATE`; `DRAFT` is not activated. Submission formally moves
+`CANDIDATE → HUMAN_REVIEW` and atomically moves its Task
+`IN_PROGRESS → READY_FOR_REVIEW`. Acceptance and rework remain EB-012.
+
 ```ts
 type ResultStatus =
   | 'DRAFT'

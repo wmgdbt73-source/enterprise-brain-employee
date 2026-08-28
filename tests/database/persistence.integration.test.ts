@@ -54,6 +54,8 @@ async function createProjectFixture() {
 describe('PostgreSQL persistence constraints', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.resultArtifact.deleteMany();
+    await db.result.deleteMany();
     await db.humanConfirmation.deleteMany();
     await db.artifact.deleteMany();
     await db.agentToolCall.deleteMany();
@@ -78,6 +80,13 @@ describe('PostgreSQL persistence constraints', () => {
 
     expect(user.createdAt.toISOString()).toBe(now.toISOString());
     expect(user.updatedAt.toISOString()).toBe(now.toISOString());
+  });
+
+  it('enforces Result task/user and Result–Artifact foreign keys', async () => {
+    const { db, now } = await createProjectFixture();
+    await db.task.create({ data: { id: 'result-task', projectId: 'project-1', title: 'Task', priority: 'P2', status: 'IN_PROGRESS', acceptanceCriteria: [], createdAt: now, updatedAt: now } });
+    await db.result.create({ data: { id: 'result-1', taskId: 'result-task', projectId: 'project-1', status: 'CANDIDATE', submittedBy: 'user-owner', createdAt: now, updatedAt: now } });
+    await expect(db.resultArtifact.create({ data: { resultId: 'result-1', artifactId: 'missing-artifact' } })).rejects.toMatchObject({ code: 'P2003' });
   });
 
   it('rejects duplicate membership and a second OWNER', async () => {

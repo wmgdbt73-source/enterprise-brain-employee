@@ -4,6 +4,7 @@ import type {
   AgentToolIntent,
   AgentToolRequest,
   ArtifactContract,
+  ResultContract,
   CurrentUserContract,
   HumanConfirmationContract,
   HumanConfirmationDetailContract,
@@ -140,6 +141,10 @@ export class DesktopApiGateway {
           : result
     );
   }
+  createResult(taskId: string, artifactIds: string[]): Promise<DesktopResult<ResultContract>> { return this.request(`/tasks/${encodeURIComponent(taskId)}/results`, { method: 'POST', body: { artifactIds } }) as Promise<DesktopResult<ResultContract>>; }
+  listResultsForTask(taskId: string): Promise<DesktopResult<ResultContract[]>> { return this.request(`/tasks/${encodeURIComponent(taskId)}/results`).then(result => result.ok ? { ok: true, data: (result.data as { results: ResultContract[] }).results } : result); }
+  getResult(id: string): Promise<DesktopResult<ResultContract>> { return this.request(`/results/${encodeURIComponent(id)}`) as Promise<DesktopResult<ResultContract>>; }
+  submitResultForReview(id: string): Promise<DesktopResult<ResultContract>> { return this.request(`/results/${encodeURIComponent(id)}/submit-review`, { method: 'POST' }) as Promise<DesktopResult<ResultContract>>; }
   private async request(
     path: string,
     options: { method?: 'POST'; body?: unknown } = {}

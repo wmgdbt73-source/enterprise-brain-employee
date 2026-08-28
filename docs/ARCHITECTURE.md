@@ -181,6 +181,14 @@ EB-009 adds explicit employee Artifact registration: successful `read_file`
 AgentRun → persisted safe receipt → `POST /artifacts` → immutable backend
 Artifact metadata. No local file content or absolute path crosses this boundary.
 
+## 14. Result Candidate Boundary
+
+Electron selects already registered Artifact references and sends their IDs through
+the fixed API gateway. Backend validates Task/member scope and persisted Artifact
+metadata, then stores Result and Result–Artifact relations. Result creation does
+not read the local filesystem; submission uses the Domain Task action inside one
+PostgreSQL transaction. Human Review and acceptance remain separate from this flow.
+
 ## 13. Confirmed Local Write Boundary（已确认本地写入边界）
 
 ```text

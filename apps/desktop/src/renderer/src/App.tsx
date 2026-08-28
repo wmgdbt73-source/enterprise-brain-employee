@@ -3,7 +3,7 @@ import type {
   ProjectContract,
   TaskContract,
   ArtifactContract,
-  AgentRunContract
+  AgentRunContract, ResultContract
 } from '@enterprise-brain/contracts';
 import type {
   DesktopApiError,
@@ -26,6 +26,7 @@ export function App() {
   const [tasks, setTasks] = useState<TaskContract[]>([]);
   const [task, setTask] = useState<TaskContract>();
   const [artifacts, setArtifacts] = useState<ArtifactContract[]>([]);
+  const [results, setResults] = useState<ResultContract[]>([]);
   const [tab, setTab] = useState<ProjectTab>('任务');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DesktopApiError>();
@@ -64,6 +65,7 @@ export function App() {
         if (operation.data) setArtifacts(operation.data);
       });
   }, [task]);
+  useEffect(() => { if (!task) return void setResults([]); void window.enterpriseBrain.results.listForTask(task.id).then(result => { const operation = resolveOperation(result); if (operation.data) setResults(operation.data); }); }, [task]);
   useEffect(() => {
     void window.enterpriseBrain.runtime.getInfo().then((result) => {
       const operation = resolveOperation(result);
@@ -156,6 +158,18 @@ export function App() {
     if (operation.error) return setError(operation.error);
     setError(undefined);
   }
+  async function createResult(artifactIds: string[]) { if (!task) return; const operation = resolveOperation(await window.enterpriseBrain.results.create(task.id, artifactIds)); if (operation.error) return setError(operation.error); setError(undefined); await window.enterpriseBrain.results.listForTask(task.id).then(result => { const listed = resolveOperation(result); if (listed.data) setResults(listed.data); }); }
+  async function submitResult(id: string) {
+    const operation = resolveOperation(await window.enterpriseBrain.results.submitReview(id));
+    if (operation.error) return setError(operation.error);
+    setError(undefined);
+    if (operation.data) setResults(current => current.map(result => result.id === operation.data?.id ? operation.data : result));
+    if (task) {
+      const fresh = resolveOperation(await window.enterpriseBrain.tasks.get(task.id));
+      if (fresh.data) setTask(fresh.data);
+      await loadTasks(task.projectId);
+    }
+  }
 
   return (
     <div className="app-shell">
@@ -190,11 +204,14 @@ export function App() {
             onSelectTask={setTask}
             onStartTask={startTask}
             artifacts={artifacts}
+            results={results}
             onReadFile={readFile}
             onRegisterArtifact={registerArtifact}
             onPrepareWrite={prepareWrite}
             onApproveWrite={approveWrite}
             onRejectWrite={rejectWrite}
+            onCreateResult={createResult}
+            onSubmitResult={submitResult}
           />
         )}
       </main>

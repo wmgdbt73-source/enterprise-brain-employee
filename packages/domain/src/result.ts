@@ -1,0 +1,6 @@
+import type { ResultStatus } from '@enterprise-brain/contracts';
+import { DomainError } from './errors.js';
+import type { ArtifactId, ResultId, TaskId, UserId } from './ids.js';
+export interface Result { readonly id: ResultId; readonly taskId: TaskId; readonly artifactIds: readonly ArtifactId[]; readonly status: ResultStatus; readonly submittedBy: UserId; readonly createdAt: Date; readonly submittedAt?: Date; readonly updatedAt: Date; }
+export function createResult(input: Omit<Result, 'status' | 'submittedAt'>): Result { if (input.artifactIds.length === 0) throw new DomainError('INVALID_ARGUMENT', 'Result requires at least one Artifact'); if (new Set(input.artifactIds).size !== input.artifactIds.length) throw new DomainError('INVALID_ARGUMENT', 'Result Artifact IDs must be unique'); return Object.freeze({ ...input, artifactIds: Object.freeze([...input.artifactIds]), status: 'CANDIDATE' as const, createdAt: new Date(input.createdAt), updatedAt: new Date(input.updatedAt) }); }
+export function submitResultForReview(result: Result, now: Date): Result { if (result.status !== 'CANDIDATE') throw new DomainError('INVALID_STATE_TRANSITION', 'Result must be CANDIDATE before review submission'); return Object.freeze({ ...result, status: 'HUMAN_REVIEW' as const, submittedAt: new Date(now), updatedAt: new Date(now) }); }

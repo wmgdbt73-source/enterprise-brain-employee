@@ -2,6 +2,7 @@ import type {
   AgentRunContract,
   ReadOnlyAgentToolIntent,
   ArtifactContract,
+  ResultContract,
   HumanConfirmationContract,
   HumanConfirmationDetailContract,
   LocalPermission,
@@ -105,6 +106,7 @@ export interface EnterpriseBrainBridge {
     register(agentRunId: string): Promise<DesktopResult<ArtifactContract>>;
     listForTask(taskId: string): Promise<DesktopResult<ArtifactContract[]>>;
   };
+  results: { create(taskId: string, artifactIds: string[]): Promise<DesktopResult<ResultContract>>; listForTask(taskId: string): Promise<DesktopResult<ResultContract[]>>; get(id: string): Promise<DesktopResult<ResultContract>>; submitReview(id: string): Promise<DesktopResult<ResultContract>>; };
   confirmedWrites: {
     prepare(taskId: string, input: { relativePath: string; content: string }): Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>;
     approve(confirmationId: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>>;
@@ -186,6 +188,12 @@ export function createEnterpriseBrainBridge(
         invoke('artifacts:list-for-task', { taskId }) as Promise<
           DesktopResult<ArtifactContract[]>
         >
+    }
+    ,results: {
+      create: (taskId, artifactIds) => invoke('results:create', { taskId, artifactIds }) as Promise<DesktopResult<ResultContract>>,
+      listForTask: (taskId) => invoke('results:list-for-task', { taskId }) as Promise<DesktopResult<ResultContract[]>>,
+      get: (id) => invoke('results:get', { id }) as Promise<DesktopResult<ResultContract>>,
+      submitReview: (id) => invoke('results:submit-review', { id }) as Promise<DesktopResult<ResultContract>>
     }
     ,confirmedWrites: {
       prepare: (taskId, input) => invoke('confirmed-writes:prepare', { taskId, input }) as Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>,
