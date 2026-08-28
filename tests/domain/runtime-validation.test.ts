@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeToolCompletion, normalizeWriteToolRequest } from '../../packages/contracts/src/index.js';
+import { normalizeToolCompletion, normalizeToolRequest, normalizeWriteToolRequest } from '../../packages/contracts/src/index.js';
 
 const request = (name: 'list_directory' | 'read_file', relativePath: string) => ({
   id: 'call-1',
@@ -97,6 +97,24 @@ describe('persisted ToolRequest and receipt runtime validation', () => {
       expect(normalizeToolCompletion(storedRequest, storedReceipt)).toEqual({
         kind: 'INVALID'
       });
+    }
+  });
+
+  it('accepts only portable workspace-relative paths from untrusted persisted requests', () => {
+    const receipt = {
+      toolCallId: 'call-1', status: 'SUCCEEDED',
+      metadata: { relativePath: ' docs/brief.md ', size: 1, encoding: 'utf-8', sha256: 'a'.repeat(64) }
+    };
+    const valid = request('read_file', ' docs/brief.md ');
+    expect(normalizeToolRequest(valid)).toMatchObject({ relativePath: ' docs/brief.md ' });
+    expect(normalizeToolCompletion(valid, receipt)).toMatchObject({ kind: 'READ_FILE_SUCCESS', relativePath: ' docs/brief.md ' });
+    for (const relativePath of [
+      '/etc/passwd', '\\Windows\\system32', '\\\\server\\share\\file',
+      'C:\\temp\\file', 'C:relative-file', 'docs/../secret', 'docs\\..\\secret', 'safe\0file'
+    ]) {
+      const stored = request('read_file', relativePath);
+      expect(normalizeToolRequest(stored)).toBeUndefined();
+      expect(normalizeToolCompletion(stored, { ...receipt, metadata: { ...receipt.metadata, relativePath } })).toEqual({ kind: 'INVALID' });
     }
   });
 });

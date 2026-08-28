@@ -1013,6 +1013,29 @@ describe('Task API vertical slice', () => {
     await app.close();
   });
 
+  it('rejects Artifact registration when persisted request provenance or path is unsafe', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
+    const complete = async (relativePath: string) => {
+      const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'read_file', relativePath } })).json();
+      await app.inject({ method: 'POST', url: `/agent-runs/${created.run.id}/tool-results`, payload: { toolCallId: created.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath, size: 1, encoding: 'utf-8', sha256: 'a'.repeat(64) } } });
+      return created;
+    };
+    const provenance = await complete('safe.md');
+    await db.agentToolCall.update({ where: { id: provenance.toolRequest.id }, data: { request: { ...provenance.toolRequest, userId: 'forged-user' } } });
+    expect((await app.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: provenance.run.id } })).statusCode).toBe(409);
+    const unsafe = await complete('safe-two.md');
+    await db.agentToolCall.update({ where: { id: unsafe.toolRequest.id }, data: {
+      request: { ...unsafe.toolRequest, relativePath: 'docs/../secret.md' },
+      receipt: { toolCallId: unsafe.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'docs/../secret.md', size: 1, encoding: 'utf-8', sha256: 'a'.repeat(64) } }
+    } });
+    expect((await app.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: unsafe.run.id } })).statusCode).toBe(409);
+    expect(await db.artifact.count()).toBe(0);
+    await app.close();
+  });
+
   it('hides Artifact registration after membership revocation and from another member', async () => {
     const db = requireDatabase();
     const app = await createApp({ prisma: db });

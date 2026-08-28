@@ -1,4 +1,5 @@
 import { DomainError } from './errors.js';
+import { isSafeWorkspaceRelativePath } from '@enterprise-brain/contracts';
 import type {
   AgentRunId,
   AgentToolCallId,
@@ -25,8 +26,8 @@ export interface Artifact {
   readonly createdAt: Date;
 }
 export function createArtifact(input: Artifact): Artifact {
-  if (input.relativePath.trim().length === 0)
-    throw new DomainError('INVALID_ARGUMENT', 'relativePath must not be blank');
+  if (!isSafeWorkspaceRelativePath(input.relativePath))
+    throw new DomainError('INVALID_ARGUMENT', 'relativePath must be a safe workspace-relative path');
   if (!Number.isInteger(input.size) || input.size < 0)
     throw new DomainError(
       'INVALID_ARGUMENT',

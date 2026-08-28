@@ -4,6 +4,16 @@ export type NormalizedWriteToolRequest = {
   relativePath: string; deviceId: string; payloadSize: number; payloadSha256: string;
   effect: 'CREATE' | 'REPLACE'; expectedCurrentSha256?: string;
 };
+export type NormalizedToolRequest =
+  | {
+      id: string; runId: string; userId: string; projectId: string;
+      name: 'list_directory'; relativePath: string;
+    }
+  | {
+      id: string; runId: string; userId: string; projectId: string;
+      name: 'read_file'; relativePath: string;
+    }
+  | NormalizedWriteToolRequest;
 export type NormalizedToolCompletion =
   | { kind: 'LIST_DIRECTORY_SUCCESS'; relativePath: string; entryCount: number }
   | { kind: 'READ_FILE_SUCCESS'; relativePath: string; size: number; encoding: 'utf-8'; sha256: string }
@@ -13,9 +23,24 @@ export type NormalizedToolCompletion =
 
 /** Validates the complete persisted write request; TypeScript types never make JSON trustworthy. */
 export function normalizeWriteToolRequest(request: unknown): NormalizedWriteToolRequest | undefined {
-  if (!isRecord(request) || !hasOnlyKeys(request, writeRequestKeys)) return undefined;
-  if (!isNonBlankString(request.id) || !isNonBlankString(request.runId) || !isNonBlankString(request.userId) ||
-      !isNonBlankString(request.projectId) || request.name !== 'write_file' || !isNonBlankString(request.relativePath) ||
+  const normalized = normalizeToolRequest(request);
+  return normalized?.name === 'write_file' ? normalized : undefined;
+}
+
+/** Parses persisted request JSON once before it is used as provenance or receipt input. */
+export function normalizeToolRequest(request: unknown): NormalizedToolRequest | undefined {
+  if (!isRecord(request) || !isBasicRequest(request)) return undefined;
+  if (request.name === 'list_directory') {
+    return hasOnlyKeys(request, basicRequestKeys) && isSafeWorkspaceRelativePath(request.relativePath, { allowEmpty: true })
+      ? { id: request.id, runId: request.runId, userId: request.userId, projectId: request.projectId, name: 'list_directory', relativePath: request.relativePath }
+      : undefined;
+  }
+  if (request.name === 'read_file') {
+    return hasOnlyKeys(request, basicRequestKeys) && isSafeWorkspaceRelativePath(request.relativePath)
+      ? { id: request.id, runId: request.runId, userId: request.userId, projectId: request.projectId, name: 'read_file', relativePath: request.relativePath }
+      : undefined;
+  }
+  if (request.name !== 'write_file' || !hasOnlyKeys(request, writeRequestKeys) || !isSafeWorkspaceRelativePath(request.relativePath) ||
       !isNonBlankString(request.deviceId) || !isNonNegativeInteger(request.payloadSize) || request.payloadSize > MAX_WRITE_PAYLOAD_BYTES || !isSha256(request.payloadSha256) ||
       (request.effect !== 'CREATE' && request.effect !== 'REPLACE')) return undefined;
   const hasExpected = Object.prototype.hasOwnProperty.call(request, 'expectedCurrentSha256');
@@ -28,12 +53,13 @@ export function normalizeWriteToolRequest(request: unknown): NormalizedWriteTool
 }
 
 export function normalizeToolCompletion(request: unknown, receipt: unknown): NormalizedToolCompletion {
-  if (!isRecord(request) || !isRecord(receipt)) return invalid();
-  const writeRequest = request.name === 'write_file' ? normalizeWriteToolRequest(request) : undefined;
-  if (!(hasOnlyKeys(request, basicRequestKeys) || writeRequest) || !isNonBlankString(request.id) ||
-      !isNonBlankString(request.runId) || !isNonBlankString(request.userId) || !isNonBlankString(request.projectId) ||
-      (request.name !== 'list_directory' && request.name !== 'read_file' && request.name !== 'write_file') ||
-      typeof request.relativePath !== 'string' || !isNonBlankString(receipt.toolCallId) || receipt.toolCallId !== request.id) return invalid();
+  const normalizedRequest = normalizeToolRequest(request);
+  return normalizedRequest ? normalizeToolCompletionForRequest(normalizedRequest, receipt) : invalid();
+}
+
+/** Validates a receipt against a request that has already passed the untrusted JSON boundary. */
+export function normalizeToolCompletionForRequest(request: NormalizedToolRequest, receipt: unknown): NormalizedToolCompletion {
+  if (!isRecord(receipt) || !isNonBlankString(receipt.toolCallId) || receipt.toolCallId !== request.id) return invalid();
   if (receipt.status === 'FAILED') {
     const error = receipt.error;
     return hasOnlyKeys(receipt, failedReceiptKeys) && isRecord(error) && hasOnlyKeys(error, failedErrorKeys) &&
@@ -45,12 +71,12 @@ export function normalizeToolCompletion(request: unknown, receipt: unknown): Nor
   if (metadata.relativePath !== request.relativePath) return invalid();
   if (request.name === 'list_directory' && hasOnlyKeys(metadata, directoryMetadataKeys) && isNonNegativeInteger(metadata.entryCount))
     return { kind: 'LIST_DIRECTORY_SUCCESS', relativePath: request.relativePath, entryCount: metadata.entryCount };
-  if (request.name === 'read_file' && isNonBlankString(request.relativePath) && hasOnlyKeys(metadata, fileMetadataKeys) &&
+  if (request.name === 'read_file' && hasOnlyKeys(metadata, fileMetadataKeys) &&
       isNonNegativeInteger(metadata.size) && metadata.encoding === 'utf-8' && isSha256(metadata.sha256))
     return { kind: 'READ_FILE_SUCCESS', relativePath: request.relativePath, size: metadata.size, encoding: 'utf-8', sha256: metadata.sha256 };
-  if (writeRequest && hasOnlyKeys(metadata, writeMetadataKeys) && isNonNegativeInteger(metadata.size) &&
-      metadata.size === writeRequest.payloadSize && metadata.encoding === 'utf-8' && metadata.sha256 === writeRequest.payloadSha256 && isEffect(metadata.effect) && metadata.effect === writeRequest.effect)
-    return { kind: 'WRITE_FILE_SUCCESS', relativePath: writeRequest.relativePath, size: metadata.size, encoding: 'utf-8', sha256: metadata.sha256, effect: metadata.effect };
+  if (request.name === 'write_file' && hasOnlyKeys(metadata, writeMetadataKeys) && isNonNegativeInteger(metadata.size) &&
+      metadata.size === request.payloadSize && metadata.encoding === 'utf-8' && metadata.sha256 === request.payloadSha256 && isEffect(metadata.effect) && metadata.effect === request.effect)
+    return { kind: 'WRITE_FILE_SUCCESS', relativePath: request.relativePath, size: metadata.size, encoding: 'utf-8', sha256: metadata.sha256, effect: metadata.effect };
   return invalid();
 }
 
@@ -63,6 +89,13 @@ const directoryMetadataKeys = ['relativePath', 'entryCount'];
 const fileMetadataKeys = ['relativePath', 'size', 'encoding', 'sha256'];
 const writeMetadataKeys = ['relativePath', 'size', 'encoding', 'sha256', 'effect'];
 const failedErrorKeys = ['code', 'message', 'details'];
+/** Portable lexical guard: backend never resolves or normalizes filesystem paths. */
+export function isSafeWorkspaceRelativePath(value: unknown, options?: { allowEmpty?: boolean }): value is string {
+  if (typeof value !== 'string' || value.includes('\0')) return false;
+  if (value === '') return options?.allowEmpty === true;
+  if (value.trim().length === 0 || /^[\\/]/.test(value) || /^[A-Za-z]:/.test(value)) return false;
+  return !value.split(/[\\/]+/).some((segment) => segment === '..');
+}
 function invalid(): NormalizedToolCompletion { return { kind: 'INVALID' }; }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
 function isEmptyRecord(value: unknown): boolean { return isRecord(value) && Object.keys(value).length === 0; }
@@ -71,3 +104,7 @@ function isSha256(value: unknown): value is string { return typeof value === 'st
 function isNonNegativeInteger(value: unknown): value is number { return typeof value === 'number' && Number.isInteger(value) && value >= 0; }
 function isEffect(value: unknown): value is 'CREATE' | 'REPLACE' { return value === 'CREATE' || value === 'REPLACE'; }
 function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]) { return Object.keys(value).every(key => allowed.includes(key)); }
+function isBasicRequest(value: Record<string, unknown>): value is Record<string, string> & { name: string } {
+  return isNonBlankString(value.id) && isNonBlankString(value.runId) && isNonBlankString(value.userId) &&
+    isNonBlankString(value.projectId) && typeof value.name === 'string' && typeof value.relativePath === 'string';
+}

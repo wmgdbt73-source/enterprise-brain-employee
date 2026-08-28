@@ -28,9 +28,13 @@ export type {
 } from './artifact.js';
 export {
   normalizeToolCompletion,
+  normalizeToolCompletionForRequest,
+  normalizeToolRequest,
   normalizeWriteToolRequest,
+  isSafeWorkspaceRelativePath,
   MAX_WRITE_PAYLOAD_BYTES,
   type NormalizedToolCompletion,
+  type NormalizedToolRequest,
   type NormalizedWriteToolRequest
 } from './runtime-validation.js';
 export type { ProjectContract, ProjectStatus } from './project.js';
