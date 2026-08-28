@@ -445,8 +445,8 @@ describe('PostgreSQL persistence constraints', () => {
       await boundary.waitUntilReached();
       // A separate committed connection changes the composition after the first
       // repository query. RepeatableRead must keep the later link query on the
-      // original snapshot, so artifact-2 cannot appear in this response.
-      await db.resultArtifact.create({ data: { resultId: 'snapshot-result', artifactId: 'artifact-2', taskId: 'task-1', projectId: 'project-1' } });
+      // original snapshot, so artifact-4 cannot appear in this response.
+      await db.resultArtifact.create({ data: { resultId: 'snapshot-result', artifactId: 'artifact-4', taskId: 'task-1', projectId: 'project-1' } });
       boundary.release();
       await expect(read).resolves.toMatchObject({ artifactIds: ['artifact-1'] });
     } finally {
@@ -458,12 +458,17 @@ describe('PostgreSQL persistence constraints', () => {
     const { db, now } = await createProjectFixture();
     await createResultPersistenceFixture(db, now);
     const sameGate = boundedGate(2);
-    const sameRepository = new ResultRepository(wrapPrismaForResultTests(db, {
+    const leftClient = createPrismaClient(connectionString!);
+    const rightClient = createPrismaClient(connectionString!);
+    const sameRepository = new ResultRepository(wrapPrismaForResultTests(leftClient, {
+      beforeResultCreate: () => sameGate.arriveAndWait()
+    }));
+    const sameRightRepository = new ResultRepository(wrapPrismaForResultTests(rightClient, {
       beforeResultCreate: () => sameGate.arriveAndWait()
     }));
     const sameInput = (resultId: string) => ({ resultId, taskId: 'task-1', userId: 'user-owner', artifactIds: ['artifact-1'], idempotencyKey: 'same-key', now });
     const sameLeft = sameRepository.createForTaskForUser(sameInput('same-left'));
-    const sameRight = sameRepository.createForTaskForUser(sameInput('same-right'));
+    const sameRight = sameRightRepository.createForTaskForUser(sameInput('same-right'));
     let sameResults: Exclude<Awaited<typeof sameLeft>, string>[];
     try {
       await sameGate.waitUntilReached();
@@ -480,11 +485,14 @@ describe('PostgreSQL persistence constraints', () => {
     }
 
     const conflictGate = boundedGate(2);
-    const conflictRepository = new ResultRepository(wrapPrismaForResultTests(db, {
+    const conflictRepository = new ResultRepository(wrapPrismaForResultTests(leftClient, {
+      beforeResultCreate: () => conflictGate.arriveAndWait()
+    }));
+    const conflictRightRepository = new ResultRepository(wrapPrismaForResultTests(rightClient, {
       beforeResultCreate: () => conflictGate.arriveAndWait()
     }));
     const conflictLeft = conflictRepository.createForTaskForUser({ resultId: 'conflict-left', taskId: 'task-1', userId: 'user-owner', artifactIds: ['artifact-1'], idempotencyKey: 'conflict-key', now });
-    const conflictRight = conflictRepository.createForTaskForUser({ resultId: 'conflict-right', taskId: 'task-1', userId: 'user-owner', artifactIds: ['artifact-2'], idempotencyKey: 'conflict-key', now });
+    const conflictRight = conflictRightRepository.createForTaskForUser({ resultId: 'conflict-right', taskId: 'task-1', userId: 'user-owner', artifactIds: ['artifact-4'], idempotencyKey: 'conflict-key', now });
     try {
       await conflictGate.waitUntilReached();
       expect(conflictGate.arrivals).toBe(2);
@@ -498,6 +506,8 @@ describe('PostgreSQL persistence constraints', () => {
       expect(await db.result.count({ where: { idempotencyKey: 'conflict-key' } })).toBe(1);
     } finally {
       conflictGate.cleanup();
+      await leftClient.$disconnect();
+      await rightClient.$disconnect();
     }
   });
 
@@ -588,6 +598,9 @@ async function createResultPersistenceFixture(db: ReturnType<typeof requireDatab
     await db.agentToolCall.create({ data: { id: `result-call-${suffix}`, agentRunId: `result-run-${suffix}`, sequence: 1, name: 'read_file', request: { id: `result-call-${suffix}`, runId: `result-run-${suffix}`, userId: 'user-owner', projectId: 'project-1', name: 'read_file', relativePath: `${suffix}.md` }, status: 'SUCCEEDED', receipt: { toolCallId: `result-call-${suffix}`, status: 'SUCCEEDED', metadata: { relativePath: `${suffix}.md`, size: 1, encoding: 'utf-8', sha256: suffix.repeat(64) } }, createdAt: now, completedAt: now } });
     await db.artifact.create({ data: { id: `artifact-${suffix}`, projectId: 'project-1', taskId, agentRunId: `result-run-${suffix}`, sourceToolCallId: `result-call-${suffix}`, type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath: `${suffix}.md`, size: 1, encoding: 'utf-8', sha256: suffix.repeat(64), version: 1, createdByUserId: 'user-owner', createdAt: now } });
   }
+  await db.agentRun.create({ data: { id: 'result-run-4', userId: 'user-owner', projectId: 'project-1', taskId: 'task-1', agentDefinitionKey: 'read-only-work-agent-v1', intent: { name: 'read_file', relativePath: '4.md' }, status: 'SUCCEEDED', createdAt: now, startedAt: now, finishedAt: now, updatedAt: now } });
+  await db.agentToolCall.create({ data: { id: 'result-call-4', agentRunId: 'result-run-4', sequence: 1, name: 'read_file', request: { id: 'result-call-4', runId: 'result-run-4', userId: 'user-owner', projectId: 'project-1', name: 'read_file', relativePath: '4.md' }, status: 'SUCCEEDED', receipt: { toolCallId: 'result-call-4', status: 'SUCCEEDED', metadata: { relativePath: '4.md', size: 1, encoding: 'utf-8', sha256: '4'.repeat(64) } }, createdAt: now, completedAt: now } });
+  await db.artifact.create({ data: { id: 'artifact-4', projectId: 'project-1', taskId: 'task-1', agentRunId: 'result-run-4', sourceToolCallId: 'result-call-4', type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath: '4.md', size: 1, encoding: 'utf-8', sha256: '4'.repeat(64), version: 1, createdByUserId: 'user-owner', createdAt: now } });
 }
 function resultRow(id: string, taskId: string, projectId: string, now: Date) {
   return { id, taskId, projectId, createdByUserId: 'user-owner', status: 'CANDIDATE' as const, idempotencyKey: `${id}-key`, requestFingerprint: 'a'.repeat(64), createdAt: now, updatedAt: now };

@@ -90,7 +90,9 @@ describe('Result Candidate API', () => {
 
   it('makes overlapping Result creation atomic for same and conflicting idempotency requests', async () => {
     const sameGate = boundedGate(2);
-    const app = await createApp({ prisma: wrapPrismaForResultApiTest(db(), {
+    const primaryClient = createPrismaClient(process.env.DATABASE_URL!);
+    const secondaryClient = createPrismaClient(process.env.DATABASE_URL!);
+    const app = await createApp({ prisma: wrapPrismaForResultApiTest(primaryClient, {
       beforeResultCreate: () => sameGate.arriveAndWait()
     }) });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
@@ -98,7 +100,10 @@ describe('Result Candidate API', () => {
     const a = await artifact(app, task.id, 'a.md');
     const b = await artifact(app, task.id, 'b.md', 'b'.repeat(64));
     const sameARequest = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
-    const sameBRequest = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
+    const sameApp = await createApp({ prisma: wrapPrismaForResultApiTest(secondaryClient, {
+      beforeResultCreate: () => sameGate.arriveAndWait()
+    }) });
+    const sameBRequest = sameApp.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
     await sameGate.waitUntilReached();
     expect(sameGate.arrivals).toBe(2);
     sameGate.release();
@@ -110,7 +115,7 @@ describe('Result Candidate API', () => {
 
     sameGate.cleanup();
     const conflictGate = boundedGate(2);
-    const conflictApp = await createApp({ prisma: wrapPrismaForResultApiTest(db(), {
+    const conflictApp = await createApp({ prisma: wrapPrismaForResultApiTest(secondaryClient, {
       beforeResultCreate: () => conflictGate.arriveAndWait()
     }) });
     const left = conflictApp.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [a.id] } });
@@ -127,7 +132,8 @@ describe('Result Candidate API', () => {
     expect(links.map((link) => link.artifactId)).toEqual(winner.artifactIds);
     expect(await db().result.count({ where: { idempotencyKey: key('11') } })).toBe(1);
     conflictGate.cleanup();
-    await conflictApp.close(); await app.close();
+    await conflictApp.close(); await sameApp.close(); await app.close();
+    await primaryClient.$disconnect(); await secondaryClient.$disconnect();
   });
 });
 
