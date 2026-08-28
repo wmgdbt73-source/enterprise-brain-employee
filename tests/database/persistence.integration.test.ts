@@ -398,6 +398,52 @@ describe('PostgreSQL persistence constraints', () => {
     expect(isSourceToolCallUniqueConflict({ code: 'P2003' })).toBe(false);
   });
 
+  it('enforces ResultArtifact composite provenance and rolls back incomplete composition', async () => {
+    const { db, now } = await createProjectFixture();
+    await createResultPersistenceFixture(db, now);
+    const result = resultRow('result-1', 'task-1', 'project-1', now);
+    await db.result.create({ data: result });
+    await db.resultArtifact.create({ data: { resultId: result.id, artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } });
+    await expect(db.resultArtifact.create({ data: { resultId: result.id, artifactId: 'artifact-2', taskId: 'task-2', projectId: 'project-1' } })).rejects.toMatchObject({ code: 'P2003' });
+    await db.project.create({ data: { id: 'project-2', name: 'Other', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+    await db.projectMember.create({ data: { id: 'member-project-2', projectId: 'project-2', userId: 'user-owner', role: 'OWNER', createdAt: now, updatedAt: now } });
+    await db.task.create({ data: { id: 'task-3', projectId: 'project-2', title: 'Three', priority: 'P2', status: 'TODO', acceptanceCriteria: [], createdAt: now, updatedAt: now } });
+    await db.agentRun.create({ data: { id: 'result-run-3', userId: 'user-owner', projectId: 'project-2', taskId: 'task-3', agentDefinitionKey: 'read-only-work-agent-v1', intent: { name: 'read_file', relativePath: '3.md' }, status: 'SUCCEEDED', createdAt: now, startedAt: now, finishedAt: now, updatedAt: now } });
+    await db.agentToolCall.create({ data: { id: 'result-call-3', agentRunId: 'result-run-3', sequence: 1, name: 'read_file', request: { id: 'result-call-3', runId: 'result-run-3', userId: 'user-owner', projectId: 'project-2', name: 'read_file', relativePath: '3.md' }, status: 'SUCCEEDED', receipt: { toolCallId: 'result-call-3', status: 'SUCCEEDED', metadata: { relativePath: '3.md', size: 1, encoding: 'utf-8', sha256: '3'.repeat(64) } }, createdAt: now, completedAt: now } });
+    await db.artifact.create({ data: { id: 'artifact-3', projectId: 'project-2', taskId: 'task-3', agentRunId: 'result-run-3', sourceToolCallId: 'result-call-3', type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath: '3.md', size: 1, encoding: 'utf-8', sha256: '3'.repeat(64), version: 1, createdByUserId: 'user-owner', createdAt: now } });
+    await expect(db.resultArtifact.create({ data: { resultId: result.id, artifactId: 'artifact-3', taskId: 'task-3', projectId: 'project-2' } })).rejects.toMatchObject({ code: 'P2003' });
+    await expect(db.result.create({ data: resultRow('forged-result', 'task-2', 'project-1', now) })).rejects.toMatchObject({ code: 'P2003' });
+    await expect(db.resultArtifact.create({ data: { resultId: result.id, artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } })).rejects.toMatchObject({ code: 'P2002' });
+
+    await expect(db.$transaction(async tx => {
+      await tx.result.create({ data: resultRow('rolled-back-result', 'task-1', 'project-1', now) });
+      throw new Error('inject link creation failure');
+    })).rejects.toThrow('inject link creation failure');
+    expect(await db.result.findUnique({ where: { id: 'rolled-back-result' } })).toBeNull();
+    expect(await db.resultArtifact.count({ where: { resultId: 'rolled-back-result' } })).toBe(0);
+  });
+
+  it('keeps membership-scoped Result reads on one RepeatableRead snapshot', async () => {
+    const { db, now } = await createProjectFixture();
+    await createResultPersistenceFixture(db, now);
+    await db.result.create({ data: resultRow('snapshot-result', 'task-1', 'project-1', now) });
+    let snapshotStarted!: () => void;
+    let continueSnapshot!: () => void;
+    const started = new Promise<void>((resolve) => { snapshotStarted = resolve; });
+    const resume = new Promise<void>((resolve) => { continueSnapshot = resolve; });
+    const read = db.$transaction(async tx => {
+      const first = await tx.result.findFirst({ where: { id: 'snapshot-result', project: { members: { some: { userId: 'user-owner' } } } } });
+      snapshotStarted();
+      await resume;
+      const second = await tx.result.findFirst({ where: { id: 'snapshot-result', project: { members: { some: { userId: 'user-owner' } } } } });
+      return { first, second };
+    }, { isolationLevel: 'RepeatableRead' });
+    await started;
+    await db.projectMember.delete({ where: { projectId_userId: { projectId: 'project-1', userId: 'user-owner' } } });
+    continueSnapshot();
+    await expect(read).resolves.toMatchObject({ first: { id: 'snapshot-result' }, second: { id: 'snapshot-result' } });
+  });
+
   it('rejects a deferred write ToolCall creation without its pending confirmation', async () => {
     const { db, now } = await createProjectFixture();
     await createWriteTask(db, now);
@@ -449,6 +495,22 @@ describe('PostgreSQL persistence constraints', () => {
     await expect(db.agentToolCall.create({ data: { ...writeCall(now), id: 'blank-device-call', deviceId: '' } })).rejects.toThrow();
   });
 });
+
+async function createResultPersistenceFixture(db: ReturnType<typeof requireDatabase>, now: Date) {
+  await db.task.createMany({ data: [
+    { id: 'task-1', projectId: 'project-1', title: 'One', priority: 'P2', status: 'TODO', acceptanceCriteria: [], createdAt: now, updatedAt: now },
+    { id: 'task-2', projectId: 'project-1', title: 'Two', priority: 'P2', status: 'TODO', acceptanceCriteria: [], createdAt: now, updatedAt: now }
+  ] });
+  for (const suffix of ['1', '2']) {
+    const taskId = `task-${suffix}`;
+    await db.agentRun.create({ data: { id: `result-run-${suffix}`, userId: 'user-owner', projectId: 'project-1', taskId, agentDefinitionKey: 'read-only-work-agent-v1', intent: { name: 'read_file', relativePath: `${suffix}.md` }, status: 'SUCCEEDED', createdAt: now, startedAt: now, finishedAt: now, updatedAt: now } });
+    await db.agentToolCall.create({ data: { id: `result-call-${suffix}`, agentRunId: `result-run-${suffix}`, sequence: 1, name: 'read_file', request: { id: `result-call-${suffix}`, runId: `result-run-${suffix}`, userId: 'user-owner', projectId: 'project-1', name: 'read_file', relativePath: `${suffix}.md` }, status: 'SUCCEEDED', receipt: { toolCallId: `result-call-${suffix}`, status: 'SUCCEEDED', metadata: { relativePath: `${suffix}.md`, size: 1, encoding: 'utf-8', sha256: suffix.repeat(64) } }, createdAt: now, completedAt: now } });
+    await db.artifact.create({ data: { id: `artifact-${suffix}`, projectId: 'project-1', taskId, agentRunId: `result-run-${suffix}`, sourceToolCallId: `result-call-${suffix}`, type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath: `${suffix}.md`, size: 1, encoding: 'utf-8', sha256: suffix.repeat(64), version: 1, createdByUserId: 'user-owner', createdAt: now } });
+  }
+}
+function resultRow(id: string, taskId: string, projectId: string, now: Date) {
+  return { id, taskId, projectId, createdByUserId: 'user-owner', status: 'CANDIDATE' as const, idempotencyKey: `${id}-key`, requestFingerprint: 'a'.repeat(64), createdAt: now, updatedAt: now };
+}
 
 async function createWriteTask(db: ReturnType<typeof requireDatabase>, now: Date) {
   await db.task.create({ data: { id: 'write-task', projectId: 'project-1', title: 'Write', priority: 'P2', status: 'TODO', acceptanceCriteria: [], createdAt: now, updatedAt: now } });

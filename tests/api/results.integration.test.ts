@@ -83,7 +83,31 @@ describe('Result Candidate API', () => {
     expect((await outsider.inject({ method: 'GET', url: `/results/${created.json().id}` })).statusCode).toBe(404);
     await db().projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: 'dev-user' } } });
     expect((await app.inject({ method: 'GET', url: `/results/${created.json().id}` })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('9') }, payload: { artifactIds: [registered.id] } })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('7') }, payload: { artifactIds: [registered.id] } })).statusCode).toBe(404);
     await outsider.close(); await app.close();
+  });
+
+  it('makes overlapping Result creation atomic for same and conflicting idempotency requests', async () => {
+    const app = await createApp({ prisma: db() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const a = await artifact(app, task.id, 'a.md');
+    const b = await artifact(app, task.id, 'b.md', 'b'.repeat(64));
+    const sameRequest = () => app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
+    const [sameA, sameB] = await Promise.all([sameRequest(), sameRequest()]);
+    expect([sameA.statusCode, sameB.statusCode].sort()).toEqual([200, 201]);
+    expect(sameA.json().id).toBe(sameB.json().id);
+    expect(await db().result.count({ where: { taskId: task.id } })).toBe(1);
+    expect(await db().resultArtifact.count({ where: { resultId: sameA.json().id } })).toBe(2);
+
+    const left = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [a.id] } });
+    const right = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [b.id] } });
+    const responses = await Promise.all([left, right]);
+    expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(1);
+    expect(responses.filter((response) => response.statusCode === 409)).toHaveLength(1);
+    expect(await db().result.count({ where: { taskId: task.id } })).toBe(2);
+    const links = await db().resultArtifact.findMany({ where: { result: { taskId: task.id } } });
+    expect(links).toHaveLength(3);
+    await app.close();
   });
 });
