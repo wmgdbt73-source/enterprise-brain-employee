@@ -51,12 +51,19 @@ export class ArtifactRepository {
     taskId: string,
     userId: string
   ): Promise<ArtifactContract[] | undefined> {
-    const task = await this.prisma.task.findFirst({
-      where: { id: taskId, project: { members: { some: { userId } } } },
-      include: { artifacts: { orderBy: { createdAt: 'desc' } } }
-    });
-    if (!task) return undefined;
-    return task.artifacts.map(toContract);
+    return this.prisma.$transaction(async (tx) => {
+      // RepeatableRead gives both statements one PostgreSQL snapshot even when
+      // Prisma executes relation reads as separate queries.
+      const task = await tx.task.findFirst({
+        where: { id: taskId, project: { members: { some: { userId } } } }
+      });
+      if (!task) return undefined;
+      const artifacts = await tx.artifact.findMany({
+        where: { taskId: task.id },
+        orderBy: { createdAt: 'desc' }
+      });
+      return artifacts.map(toContract);
+    }, { isolationLevel: 'RepeatableRead' });
   }
 
   private async registerInTransaction(
