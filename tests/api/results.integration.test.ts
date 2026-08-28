@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
 import { DevIdentityProvider } from '../../apps/api/src/identity/dev-identity-provider.js';
 import { createPrismaClient } from '../../packages/database/src/index.js';
+import type { PrismaClient } from '../../packages/database/src/generated/prisma/client.js';
 
 const database = process.env.DATABASE_URL ? createPrismaClient(process.env.DATABASE_URL) : undefined;
 const key = (suffix: string) => `00000000-0000-4000-8000-${suffix.padStart(12, '0')}`;
@@ -88,44 +89,89 @@ describe('Result Candidate API', () => {
   });
 
   it('makes overlapping Result creation atomic for same and conflicting idempotency requests', async () => {
-    const app = await createApp({ prisma: db() });
+    const sameGate = boundedGate(2);
+    const app = await createApp({ prisma: wrapPrismaForResultApiTest(db(), {
+      beforeResultCreate: () => sameGate.arriveAndWait()
+    }) });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const a = await artifact(app, task.id, 'a.md');
     const b = await artifact(app, task.id, 'b.md', 'b'.repeat(64));
-    const sameGate = barrier(2);
-    const sameRequest = async () => {
-      await sameGate.wait();
-      return app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
-    };
-    const [sameA, sameB] = await Promise.all([sameRequest(), sameRequest()]);
+    const sameARequest = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
+    const sameBRequest = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
+    await sameGate.waitUntilReached();
+    expect(sameGate.arrivals).toBe(2);
+    sameGate.release();
+    const [sameA, sameB] = await Promise.all([sameARequest, sameBRequest]);
     expect([sameA.statusCode, sameB.statusCode].sort()).toEqual([200, 201]);
     expect(sameA.json().id).toBe(sameB.json().id);
     expect(await db().result.count({ where: { taskId: task.id } })).toBe(1);
     expect(await db().resultArtifact.count({ where: { resultId: sameA.json().id } })).toBe(2);
 
-    const conflictGate = barrier(2);
-    const left = (async () => { await conflictGate.wait(); return app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [a.id] } }); })();
-    const right = (async () => { await conflictGate.wait(); return app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [b.id] } }); })();
+    sameGate.cleanup();
+    const conflictGate = boundedGate(2);
+    const conflictApp = await createApp({ prisma: wrapPrismaForResultApiTest(db(), {
+      beforeResultCreate: () => conflictGate.arriveAndWait()
+    }) });
+    const left = conflictApp.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [a.id] } });
+    const right = conflictApp.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [b.id] } });
+    await conflictGate.waitUntilReached();
+    expect(conflictGate.arrivals).toBe(2);
+    conflictGate.release();
     const responses = await Promise.all([left, right]);
     expect(responses.filter((response) => response.statusCode === 201)).toHaveLength(1);
     expect(responses.filter((response) => response.statusCode === 409)).toHaveLength(1);
     expect(await db().result.count({ where: { taskId: task.id } })).toBe(2);
-    const links = await db().resultArtifact.findMany({ where: { result: { taskId: task.id } } });
-    expect(links).toHaveLength(3);
-    await app.close();
+    const winner = responses.find((response) => response.statusCode === 201)!.json();
+    const links = await db().resultArtifact.findMany({ where: { resultId: winner.id }, orderBy: { artifactId: 'asc' } });
+    expect(links.map((link) => link.artifactId)).toEqual(winner.artifactIds);
+    expect(await db().result.count({ where: { idempotencyKey: key('11') } })).toBe(1);
+    conflictGate.cleanup();
+    await conflictApp.close(); await app.close();
   });
 });
 
-function barrier(parties: number) {
+function wrapPrismaForResultApiTest(prisma: PrismaClient, hooks: { beforeResultCreate: () => Promise<void> | void }): PrismaClient {
+  return new Proxy(prisma, {
+    get(target, property, receiver) {
+      if (property !== '$transaction') return Reflect.get(target, property, receiver);
+      return async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => prisma.$transaction(async (transaction) => callback(new Proxy(transaction, {
+        get(transactionTarget, transactionProperty, transactionReceiver) {
+          const model = Reflect.get(transactionTarget, transactionProperty, transactionReceiver);
+          if (transactionProperty !== 'result' || typeof model !== 'object' || model === null) return model;
+          return new Proxy(model, {
+            get(resultTarget, resultProperty, resultReceiver) {
+              const method = Reflect.get(resultTarget, resultProperty, resultReceiver);
+              if (resultProperty !== 'create') return method;
+              return async (...argumentsList: unknown[]) => {
+                await hooks.beforeResultCreate();
+                return Reflect.apply(method, resultTarget, argumentsList);
+              };
+            }
+          });
+        }
+      }) as unknown), options as never);
+    }
+  }) as PrismaClient;
+}
+
+function boundedGate(parties: number, timeoutMs = 5_000) {
   let arrived = 0;
   let release!: () => void;
-  const opened = new Promise<void>((resolve) => { release = resolve; });
+  let fail!: (error: Error) => void;
+  let reached!: () => void;
+  const opened = new Promise<void>((resolve, reject) => { release = resolve; fail = reject; });
+  const reachedPromise = new Promise<void>((resolve) => { reached = resolve; });
+  const timeout = setTimeout(() => fail(new Error(`timed out waiting for ${parties} Result transaction boundaries`)), timeoutMs);
   return {
-    async wait() {
+    get arrivals() { return arrived; },
+    async arriveAndWait() {
       arrived += 1;
-      if (arrived === parties) release();
+      if (arrived === parties) reached();
       await opened;
-    }
+    },
+    waitUntilReached() { return reachedPromise; },
+    release() { release(); },
+    cleanup() { clearTimeout(timeout); release(); }
   };
 }
