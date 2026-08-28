@@ -70,6 +70,14 @@ enum ArtifactStorageKind {
   LOCAL_WORKSPACE
 }
 
+enum ResultStatus {
+  DRAFT
+  CANDIDATE
+  HUMAN_REVIEW
+  ACCEPTED
+  REWORK
+}
+
 model User {
   id             String          @id @map("user_id")
   name           String
@@ -79,6 +87,7 @@ model User {
   updatedAt      DateTime        @map("updated_at") @db.Timestamptz(3)
   projectMembers ProjectMember[]
   agentRuns      AgentRun[]
+  createdResults Result[] @relation("ResultCreator")
 
   @@map("users")
 }
@@ -94,6 +103,7 @@ model Project {
   tasks     Task[]
   agentRuns AgentRun[]
   artifacts Artifact[]
+  results   Result[]
 
   @@map("projects")
 }
@@ -130,6 +140,7 @@ model Task {
   dependents         TaskDependency[] @relation("TaskDependents")
   agentRuns          AgentRun[]
   artifacts          Artifact[]
+  results            Result[]
 
   @@unique([id, projectId], map: "tasks_task_id_project_id_key")
   @@map("tasks")
@@ -216,8 +227,42 @@ model Artifact {
   task             Task                @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Restrict)
   agentRun         AgentRun            @relation("ArtifactRun", fields: [agentRunId, createdByUserId, projectId, taskId], references: [id, userId, projectId, taskId], onDelete: Restrict)
   sourceToolCall   AgentToolCall       @relation("ArtifactSourceToolCall", fields: [sourceToolCallId, agentRunId], references: [id, agentRunId], onDelete: Restrict)
+  resultArtifacts  ResultArtifact[]
 
+  @@unique([id, taskId, projectId], map: "artifacts_artifact_id_task_id_project_id_key")
   @@map("artifacts")
+}
+
+model Result {
+  id                 String       @id @map("result_id")
+  projectId          String       @map("project_id")
+  taskId             String       @map("task_id")
+  createdByUserId    String       @map("created_by_user_id")
+  status             ResultStatus
+  idempotencyKey     String       @db.VarChar(64) @map("idempotency_key")
+  requestFingerprint String       @db.Char(64) @map("request_fingerprint")
+  createdAt          DateTime     @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime     @map("updated_at") @db.Timestamptz(3)
+  project            Project      @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  task               Task         @relation(fields: [taskId, projectId], references: [id, projectId], onDelete: Restrict)
+  createdBy          User         @relation("ResultCreator", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  artifacts          ResultArtifact[]
+
+  @@unique([id, taskId, projectId], map: "results_result_id_task_id_project_id_key")
+  @@unique([createdByUserId, taskId, idempotencyKey], map: "results_creator_task_idempotency_key_key")
+  @@map("results")
+}
+
+model ResultArtifact {
+  resultId   String   @map("result_id")
+  artifactId String   @map("artifact_id")
+  taskId     String   @map("task_id")
+  projectId  String   @map("project_id")
+  result     Result   @relation(fields: [resultId, taskId, projectId], references: [id, taskId, projectId], onDelete: Restrict)
+  artifact   Artifact @relation(fields: [artifactId, taskId, projectId], references: [id, taskId, projectId], onDelete: Restrict)
+
+  @@id([resultId, artifactId])
+  @@map("result_artifacts")
 }
 
 model TaskAssignment {

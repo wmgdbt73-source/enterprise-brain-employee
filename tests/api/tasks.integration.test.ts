@@ -22,6 +22,8 @@ describe('Task API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
     await db.humanConfirmation.deleteMany();
+    await db.resultArtifact.deleteMany();
+    await db.result.deleteMany();
     await db.artifact.deleteMany();
     await db.agentToolCall.deleteMany();
     await db.agentRun.deleteMany();

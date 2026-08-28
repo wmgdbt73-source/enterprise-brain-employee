@@ -206,13 +206,19 @@ List Task Artifacts（任务工作产物列表）.
 ### POST /tasks/:taskId/results
 Create Result Candidate（创建正式候选结果）.
 
-This action requires explicit Employee Confirmation（员工确认） in the UI.
+This action requires explicit Employee Confirmation（员工确认） in the UI and an
+`Idempotency-Key` UUID header. It accepts exactly `{ "artifactIds": ["..."] }`;
+the set must be non-empty and duplicate-free. The server derives candidate status,
+creator, Project/Task scope and timestamps. First creation returns `201`; the same
+key and Artifact set returns `200`; a different set for the same key returns `409
+IDEMPOTENCY_KEY_CONFLICT`. Missing/non-member Task and unavailable selected
+Artifacts return hidden `404 NOT_FOUND`.
 
 ### GET /results/:id
 Get Result（结果详情）.
 
-### POST /results/:id/submit-review
-Submit for Human Review（提交人工评审）.
+Human Review submission is deferred; EB-011 creates only `CANDIDATE` and does not
+change Task state or create a Review.
 
 ## 9. Review APIs（评审接口）
 

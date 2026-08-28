@@ -3,7 +3,7 @@ import type {
   ArtifactContract,
   TaskContract
 } from '@enterprise-brain/contracts';
-import type { TaskInput } from '../../../../shared/enterprise-brain.js';
+import type { DesktopResult, TaskInput } from '../../../../shared/enterprise-brain.js';
 import { State } from '../../components/State.js';
 import { TaskDetail } from '../tasks/TaskDetail.js';
 import { TaskForm } from '../tasks/TaskForm.js';
@@ -28,6 +28,7 @@ export function ProjectWorkspace({
   ,onPrepareWrite,
   onApproveWrite,
   onRejectWrite
+  ,onCreateResult
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -48,6 +49,7 @@ export function ProjectWorkspace({
   onPrepareWrite: (task: TaskContract, input: { relativePath: string; content: string }) => Promise<import('@enterprise-brain/contracts').HumanConfirmationDetailContract | undefined>;
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
+  onCreateResult: (task: TaskContract, artifactIds: string[], idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
 }) {
   return (
     <section className="page">
@@ -88,6 +90,7 @@ export function ProjectWorkspace({
             onPrepareWrite={onPrepareWrite}
             onApproveWrite={onApproveWrite}
             onRejectWrite={onRejectWrite}
+            onCreateResult={onCreateResult}
           />
         </div>
       )}

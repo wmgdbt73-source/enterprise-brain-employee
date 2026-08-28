@@ -11,4 +11,5 @@ export {
   ArtifactRepository,
   type ArtifactRegistration
 } from './repositories/artifact-repository.js';
+export { ResultRepository, isResultIdempotencyConflict, requestFingerprint, type ResultCreation } from './repositories/result-repository.js';
 export type { PrismaClient } from './generated/prisma/client.js';

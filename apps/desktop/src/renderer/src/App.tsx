@@ -3,10 +3,12 @@ import type {
   ProjectContract,
   TaskContract,
   ArtifactContract,
-  AgentRunContract
+  AgentRunContract,
+  ResultContract
 } from '@enterprise-brain/contracts';
 import type {
   DesktopApiError,
+  DesktopResult,
   ProjectInput,
   TaskInput
 } from '../../shared/enterprise-brain.js';
@@ -156,6 +158,15 @@ export function App() {
     if (operation.error) return setError(operation.error);
     setError(undefined);
   }
+  async function createResult(
+    value: TaskContract,
+    artifactIds: string[],
+    idempotencyKey: string
+  ): Promise<DesktopResult<ResultContract>> {
+    // Candidate creation owns a recoverable, attempt-scoped error in TaskDetail.
+    // Do not replace the workspace and discard its idempotency identity.
+    return window.enterpriseBrain.results.create(value.id, artifactIds, idempotencyKey);
+  }
 
   return (
     <div className="app-shell">
@@ -195,6 +206,7 @@ export function App() {
             onPrepareWrite={prepareWrite}
             onApproveWrite={approveWrite}
             onRejectWrite={rejectWrite}
+            onCreateResult={createResult}
           />
         )}
       </main>

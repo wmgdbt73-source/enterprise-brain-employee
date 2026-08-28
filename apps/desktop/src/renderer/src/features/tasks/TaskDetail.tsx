@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type {
   AgentRunContract,
   ArtifactContract,
   TaskContract
 } from '@enterprise-brain/contracts';
-import type { DesktopApiError } from '../../../../shared/enterprise-brain.js';
+import type { DesktopApiError, DesktopResult } from '../../../../shared/enterprise-brain.js';
+import { resultConfirmationAttempt, type ResultConfirmationAttempt } from './result-confirmation.js';
 
 export function TaskDetail({
   task,
@@ -15,6 +16,7 @@ export function TaskDetail({
   ,onPrepareWrite,
   onApproveWrite,
   onRejectWrite
+  ,onCreateResult
 }: {
   task?: TaskContract;
   onStart: (task: TaskContract) => Promise<void>;
@@ -27,6 +29,7 @@ export function TaskDetail({
   onPrepareWrite: (task: TaskContract, input: { relativePath: string; content: string }) => Promise<import('@enterprise-brain/contracts').HumanConfirmationDetailContract | undefined>;
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
+  onCreateResult: (task: TaskContract, artifactIds: string[], idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
 }) {
   const [relativePath, setRelativePath] = useState('');
   const [eligibleRun, setEligibleRun] = useState<AgentRunContract>();
@@ -34,10 +37,51 @@ export function TaskDetail({
   const [writePath, setWritePath] = useState('');
   const [writeContent, setWriteContent] = useState('');
   const [confirmation, setConfirmation] = useState<import('@enterprise-brain/contracts').HumanConfirmationDetailContract>();
+  const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
+  const [candidate, setCandidate] = useState<import('@enterprise-brain/contracts').ResultContract>();
+  const [pendingAttempt, setPendingAttempt] = useState<ResultConfirmationAttempt>();
+  const [resultSubmitting, setResultSubmitting] = useState(false);
+  const [resultError, setResultError] = useState<DesktopApiError>();
+  const taskIdRef = useRef(task?.id);
+  const pendingAttemptRef = useRef<ResultConfirmationAttempt | undefined>(undefined);
+  taskIdRef.current = task?.id;
+  function setAttempt(value: ResultConfirmationAttempt | undefined) {
+    pendingAttemptRef.current = value;
+    setPendingAttempt(value);
+  }
   useEffect(() => {
     setEligibleRun(undefined);
     setError(undefined);
+    setSelectedArtifactIds([]);
+    setCandidate(undefined);
+    setAttempt(undefined);
+    setResultSubmitting(false);
+    setResultError(undefined);
   }, [task?.id]);
+  async function submitResult(attempt: ResultConfirmationAttempt) {
+    if (!task || resultSubmitting) return;
+    const submittedTask = task;
+    setResultSubmitting(true);
+    const result = await onCreateResult(
+      submittedTask,
+      [...attempt.artifactIds],
+      attempt.idempotencyKey
+    );
+    // A Task switch or later attempt makes this response stale. It must not
+    // update another detail view or consume that newer attempt's retry key.
+    if (
+      taskIdRef.current !== submittedTask.id ||
+      pendingAttemptRef.current !== attempt
+    ) return;
+    setResultSubmitting(false);
+    if (!result.ok) {
+      setResultError(result.error);
+      return;
+    }
+    setResultError(undefined);
+    setCandidate(result.data);
+    setAttempt(undefined);
+  }
   async function readFile() {
     if (!task || relativePath.trim().length === 0) return;
     const run = await onReadFile(task, relativePath.trim());
@@ -104,6 +148,19 @@ export function TaskDetail({
                 </li>
               ))}
             </ul>
+          </section>
+          <section className="artifact-panel">
+            <p className="eyebrow">RESULT CANDIDATE · EMPLOYEE CONFIRMATION</p>
+            <p>选择已登记的 Artifact 后明确创建候选结果。不会提交人工评审、不会验收，也不会改变任务状态。</p>
+            {artifacts.map((artifact) => <label key={`result-${artifact.id}`}><input type="checkbox" disabled={resultSubmitting} checked={selectedArtifactIds.includes(artifact.id)} onChange={() => { setSelectedArtifactIds((ids) => ids.includes(artifact.id) ? ids.filter((id) => id !== artifact.id) : [...ids, artifact.id]); }} /> {artifact.relativePath}</label>)}
+            <button className="primary" disabled={!selectedArtifactIds.length || resultSubmitting} onClick={() => {
+              if (!task) return;
+              const attempt = resultConfirmationAttempt(selectedArtifactIds, pendingAttempt, () => crypto.randomUUID());
+              setAttempt(attempt);
+              void submitResult(attempt);
+            }}>Create Result Candidate</button>
+            {resultError && <div className="result-error"><p>{resultError.message}</p><button onClick={() => pendingAttempt && void submitResult(pendingAttempt)} disabled={!pendingAttempt || resultSubmitting}>Retry Result Candidate</button></div>}
+            {candidate && <p>Result Candidate: {candidate.status} · {candidate.id}</p>}
           </section>
           <section className="artifact-panel">
             <p className="eyebrow">CONFIRMED LOCAL WRITE · EMPLOYEE-SUPPLIED CONTENT</p>
