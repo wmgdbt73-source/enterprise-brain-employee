@@ -23,9 +23,10 @@ describe('Result Candidate API', () => {
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const a = await artifact(app, task.id, 'a.md'); const b = await artifact(app, task.id, 'b.md', 'b'.repeat(64));
+    const canonicalIds = [a.id, b.id].sort((left: string, right: string) => left.localeCompare(right));
     const first = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('1') }, payload: { artifactIds: [b.id, a.id] } });
-    expect(first.statusCode).toBe(201); expect(first.json()).toMatchObject({ status: 'CANDIDATE', createdByUserId: 'dev-user', artifactIds: [a.id, b.id] });
-    const retry = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('1') }, payload: { artifactIds: [a.id, b.id] } });
+    expect(first.statusCode).toBe(201); expect(first.json()).toMatchObject({ status: 'CANDIDATE', createdByUserId: 'dev-user', artifactIds: canonicalIds });
+    const retry = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('1') }, payload: { artifactIds: canonicalIds } });
     expect(retry.statusCode).toBe(200); expect(retry.json()).toEqual(first.json());
     expect((await app.inject({ method: 'GET', url: `/results/${first.json().id}` })).json()).toEqual(first.json());
     expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('TODO');
