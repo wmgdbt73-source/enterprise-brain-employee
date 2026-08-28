@@ -50,4 +50,15 @@ describe('Artifact domain', () => {
     });
     expect(artifact.relativePath).toBe(relativePath);
   });
+  it.each(['/etc/passwd', '\\Windows\\system32', 'C:escape', 'docs/../secret', 'docs\\..\\secret', 'safe\0file'])(
+    'rejects unsafe workspace-relative path %j',
+    (relativePath) => {
+      expect(() => createArtifact({
+        id: asArtifactId('artifact-unsafe'), projectId: asProjectId('project'), taskId: asTaskId('task'),
+        agentRunId: asAgentRunId('run'), sourceToolCallId: asAgentToolCallId('call-unsafe'),
+        type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath, size: 1, encoding: 'utf-8',
+        sha256: 'a'.repeat(64), version: 1, createdByUserId: asUserId('user'), createdAt: new Date()
+      })).toThrow('safe workspace-relative path');
+    }
+  );
 });

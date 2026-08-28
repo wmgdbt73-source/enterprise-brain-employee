@@ -1,5 +1,6 @@
 import {
-  normalizeToolCompletion,
+  normalizeToolCompletionForRequest,
+  normalizeToolRequest,
   type ArtifactContract
 } from '@enterprise-brain/contracts';
 import {
@@ -41,7 +42,7 @@ export class ArtifactRepository {
         input.agentRunId,
         input.userId
       );
-      if (!artifact) throw error;
+      if (!artifact) return 'NOT_FOUND';
       return { artifact, created: false };
     }
   }
@@ -51,14 +52,11 @@ export class ArtifactRepository {
     userId: string
   ): Promise<ArtifactContract[] | undefined> {
     const task = await this.prisma.task.findFirst({
-      where: { id: taskId, project: { members: { some: { userId } } } }
+      where: { id: taskId, project: { members: { some: { userId } } } },
+      include: { artifacts: { orderBy: { createdAt: 'desc' } } }
     });
     if (!task) return undefined;
-    const artifacts = await this.prisma.artifact.findMany({
-      where: { taskId },
-      orderBy: { createdAt: 'desc' }
-    });
-    return artifacts.map(toContract);
+    return task.artifacts.map(toContract);
   }
 
   private async registerInTransaction(
@@ -87,7 +85,9 @@ export class ArtifactRepository {
       call.name !== 'read_file'
     )
       return 'SOURCE_INVALID';
-    const completion = normalizeToolCompletion(call.request, call.receipt);
+    const request = normalizeToolRequest(call.request);
+    if (!request || !hasMatchingFormalProvenance(request, call, run)) return 'SOURCE_INVALID';
+    const completion = normalizeToolCompletionForRequest(request, call.receipt);
     if (completion.kind !== 'READ_FILE_SUCCESS') return 'SOURCE_INVALID';
     const existing = await tx.artifact.findUnique({
       where: { sourceToolCallId: call.id }
@@ -204,4 +204,12 @@ export function isSourceToolCallUniqueConflict(error: unknown): boolean {
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+function hasMatchingFormalProvenance(
+  request: { id: string; runId: string; userId: string; projectId: string; name: string },
+  call: { id: string; agentRunId: string; name: string },
+  run: { id: string; userId: string; projectId: string }
+): boolean {
+  return request.id === call.id && request.runId === run.id && request.runId === call.agentRunId &&
+    request.userId === run.userId && request.projectId === run.projectId && request.name === call.name;
 }
