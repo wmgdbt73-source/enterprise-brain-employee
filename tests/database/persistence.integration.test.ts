@@ -412,7 +412,7 @@ describe('PostgreSQL persistence constraints', () => {
     await db.agentToolCall.create({ data: { id: 'result-call-3', agentRunId: 'result-run-3', sequence: 1, name: 'read_file', request: { id: 'result-call-3', runId: 'result-run-3', userId: 'user-owner', projectId: 'project-2', name: 'read_file', relativePath: '3.md' }, status: 'SUCCEEDED', receipt: { toolCallId: 'result-call-3', status: 'SUCCEEDED', metadata: { relativePath: '3.md', size: 1, encoding: 'utf-8', sha256: '3'.repeat(64) } }, createdAt: now, completedAt: now } });
     await db.artifact.create({ data: { id: 'artifact-3', projectId: 'project-2', taskId: 'task-3', agentRunId: 'result-run-3', sourceToolCallId: 'result-call-3', type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath: '3.md', size: 1, encoding: 'utf-8', sha256: '3'.repeat(64), version: 1, createdByUserId: 'user-owner', createdAt: now } });
     await expect(db.resultArtifact.create({ data: { resultId: result.id, artifactId: 'artifact-3', taskId: 'task-3', projectId: 'project-2' } })).rejects.toMatchObject({ code: 'P2003' });
-    await expect(db.result.create({ data: resultRow('forged-result', 'task-2', 'project-1', now) })).rejects.toMatchObject({ code: 'P2003' });
+    await expect(db.result.create({ data: resultRow('forged-result', 'task-3', 'project-1', now) })).rejects.toMatchObject({ code: 'P2003' });
     await expect(db.resultArtifact.create({ data: { resultId: result.id, artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } })).rejects.toMatchObject({ code: 'P2002' });
 
     await expect(db.$transaction(async tx => {
