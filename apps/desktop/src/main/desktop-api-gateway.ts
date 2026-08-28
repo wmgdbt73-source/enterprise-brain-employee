@@ -4,6 +4,7 @@ import type {
   AgentToolIntent,
   AgentToolRequest,
   ArtifactContract,
+  ResultContract,
   CurrentUserContract,
   HumanConfirmationContract,
   HumanConfirmationDetailContract,
@@ -140,18 +141,22 @@ export class DesktopApiGateway {
           : result
     );
   }
+  createResult(taskId: string, artifactIds: string[], idempotencyKey: string): Promise<DesktopResult<ResultContract>> {
+    return this.request(`/tasks/${encodeURIComponent(taskId)}/results`, { method: 'POST', body: { artifactIds }, headers: { 'idempotency-key': idempotencyKey } }) as Promise<DesktopResult<ResultContract>>;
+  }
+  getResult(id: string): Promise<DesktopResult<ResultContract>> {
+    return this.request(`/results/${encodeURIComponent(id)}`) as Promise<DesktopResult<ResultContract>>;
+  }
   private async request(
     path: string,
-    options: { method?: 'POST'; body?: unknown } = {}
+    options: { method?: 'POST'; body?: unknown; headers?: Record<string, string> } = {}
   ): Promise<DesktopResult<unknown>> {
     try {
       const response = await (this.options.fetchImplementation ?? fetch)(
         new URL(path, this.options.baseUrl).toString(),
         {
           method: options.method ?? 'GET',
-          headers: options.body
-            ? { 'content-type': 'application/json' }
-            : undefined,
+          headers: options.body ? { 'content-type': 'application/json', ...options.headers } : options.headers,
           body: options.body ? JSON.stringify(options.body) : undefined
         }
       );

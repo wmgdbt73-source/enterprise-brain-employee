@@ -15,6 +15,7 @@ export function TaskDetail({
   ,onPrepareWrite,
   onApproveWrite,
   onRejectWrite
+  ,onCreateResult
 }: {
   task?: TaskContract;
   onStart: (task: TaskContract) => Promise<void>;
@@ -27,6 +28,7 @@ export function TaskDetail({
   onPrepareWrite: (task: TaskContract, input: { relativePath: string; content: string }) => Promise<import('@enterprise-brain/contracts').HumanConfirmationDetailContract | undefined>;
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
+  onCreateResult: (task: TaskContract, artifactIds: string[], idempotencyKey: string) => Promise<import('@enterprise-brain/contracts').ResultContract | undefined>;
 }) {
   const [relativePath, setRelativePath] = useState('');
   const [eligibleRun, setEligibleRun] = useState<AgentRunContract>();
@@ -34,9 +36,15 @@ export function TaskDetail({
   const [writePath, setWritePath] = useState('');
   const [writeContent, setWriteContent] = useState('');
   const [confirmation, setConfirmation] = useState<import('@enterprise-brain/contracts').HumanConfirmationDetailContract>();
+  const [selectedArtifactIds, setSelectedArtifactIds] = useState<string[]>([]);
+  const [candidate, setCandidate] = useState<import('@enterprise-brain/contracts').ResultContract>();
+  const [pendingKey, setPendingKey] = useState<string>();
   useEffect(() => {
     setEligibleRun(undefined);
     setError(undefined);
+    setSelectedArtifactIds([]);
+    setCandidate(undefined);
+    setPendingKey(undefined);
   }, [task?.id]);
   async function readFile() {
     if (!task || relativePath.trim().length === 0) return;
@@ -104,6 +112,18 @@ export function TaskDetail({
                 </li>
               ))}
             </ul>
+          </section>
+          <section className="artifact-panel">
+            <p className="eyebrow">RESULT CANDIDATE · EMPLOYEE CONFIRMATION</p>
+            <p>选择已登记的 Artifact 后明确创建候选结果。不会提交人工评审、不会验收，也不会改变任务状态。</p>
+            {artifacts.map((artifact) => <label key={`result-${artifact.id}`}><input type="checkbox" checked={selectedArtifactIds.includes(artifact.id)} onChange={() => { setPendingKey(undefined); setSelectedArtifactIds((ids) => ids.includes(artifact.id) ? ids.filter((id) => id !== artifact.id) : [...ids, artifact.id]); }} /> {artifact.relativePath}</label>)}
+            <button className="primary" disabled={!selectedArtifactIds.length} onClick={() => {
+              if (!task) return;
+              const key = pendingKey ?? crypto.randomUUID();
+              if (!pendingKey) setPendingKey(key);
+              void onCreateResult(task, selectedArtifactIds, key).then((result) => { if (result) { setCandidate(result); setPendingKey(undefined); } });
+            }}>Create Result Candidate</button>
+            {candidate && <p>Result Candidate: {candidate.status} · {candidate.id}</p>}
           </section>
           <section className="artifact-panel">
             <p className="eyebrow">CONFIRMED LOCAL WRITE · EMPLOYEE-SUPPLIED CONTENT</p>

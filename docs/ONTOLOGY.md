@@ -80,18 +80,19 @@ It must define:
 - task_id?
 - agent_run_id?
 - type
-- path_or_uri
+- relative_path
 - version
 - created_by
 - created_at
 
 ### Result（正式候选结果 / 正式结果）
 - id
+- project_id
 - task_id
-- artifact_ids[]
+- artifact_ids[] (normalized ResultArtifact relation)
 - status
-- submitted_by
-- submitted_at?
+- created_by_user_id
+- created_at
 
 ### Review（人工评审）
 - id

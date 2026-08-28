@@ -297,6 +297,21 @@ neither Task state nor creates Artifact or Result automatically.
 
 ---
 
+## ADR-022 — Result Candidate Authority and Provenance Boundary
+
+Artifact is not Result. EB-011 creates a Result Candidate only through explicit
+employee confirmation and references persisted Artifact provenance without a local
+file reread. `createdByUserId` identifies Candidate creation; Human Review
+submission fields and actions are deferred. Result identity, creator, Task/Project
+provenance and Artifact composition are immutable; future status transitions require
+structured Human Review services.
+
+An explicit Idempotency-Key protects retries but does not semantically deduplicate
+Results: a new key may create another Candidate for the same Artifact set. Candidate
+creation does not mutate Task or AgentRun state and creates no Review.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

@@ -3,7 +3,8 @@ import type {
   ProjectContract,
   TaskContract,
   ArtifactContract,
-  AgentRunContract
+  AgentRunContract,
+  ResultContract
 } from '@enterprise-brain/contracts';
 import type {
   DesktopApiError,
@@ -156,6 +157,12 @@ export function App() {
     if (operation.error) return setError(operation.error);
     setError(undefined);
   }
+  async function createResult(value: TaskContract, artifactIds: string[], idempotencyKey: string): Promise<ResultContract | undefined> {
+    const operation = resolveOperation(await window.enterpriseBrain.results.create(value.id, artifactIds, idempotencyKey));
+    if (operation.error) { setError(operation.error); return undefined; }
+    setError(undefined);
+    return operation.data;
+  }
 
   return (
     <div className="app-shell">
@@ -195,6 +202,7 @@ export function App() {
             onPrepareWrite={prepareWrite}
             onApproveWrite={approveWrite}
             onRejectWrite={rejectWrite}
+            onCreateResult={createResult}
           />
         )}
       </main>

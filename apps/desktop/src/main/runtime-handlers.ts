@@ -83,6 +83,10 @@ export function registerRuntimeHandlers(
   ipc.handle('artifacts:list-for-task', (_event, payload: { taskId: string }) =>
     gateway.listArtifactsForTask(payload.taskId)
   );
+  ipc.handle('results:create', (_event, payload: { taskId: string; artifactIds: string[]; idempotencyKey: string }) =>
+    gateway.createResult(payload.taskId, payload.artifactIds, payload.idempotencyKey)
+  );
+  ipc.handle('results:get', (_event, payload: { id: string }) => gateway.getResult(payload.id));
 }
 
 async function handleWorkspace<T>(operation: () => Promise<T>) {

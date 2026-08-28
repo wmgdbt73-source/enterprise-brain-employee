@@ -80,6 +80,7 @@ describe('Desktop Work Runtime gateway', () => {
       'artifacts',
       'confirmedWrites',
       'projects',
+      'results',
       'runtime',
       'tasks',
       'workspace'
@@ -90,6 +91,7 @@ describe('Desktop Work Runtime gateway', () => {
       'listForTask',
       'register'
     ]);
+    expect(Object.keys(bridge.results).sort()).toEqual(['create', 'get']);
     expect(Object.keys(bridge.projects).sort()).toEqual([
       'create',
       'get',
@@ -226,6 +228,12 @@ describe('Desktop Work Runtime gateway', () => {
         body: JSON.stringify({ agentRunId: 'run-1' })
       })
     );
+  });
+  it('uses a fixed Result candidate API path and forwards only the typed idempotency key', async () => {
+    const fetchImplementation = vi.fn().mockResolvedValue({ ok: true, status: 201, json: async () => ({ id: 'result-1' }) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await gateway.createResult('task-1', ['artifact-1'], '00000000-0000-4000-8000-000000000001');
+    expect(fetchImplementation).toHaveBeenCalledWith('http://api.test/tasks/task-1/results', expect.objectContaining({ method: 'POST', headers: expect.objectContaining({ 'idempotency-key': '00000000-0000-4000-8000-000000000001' }), body: JSON.stringify({ artifactIds: ['artifact-1'] }) }));
   });
   it('rejects generic write_file execution before any backend create call', async () => {
     const createAgentRun = vi.fn();

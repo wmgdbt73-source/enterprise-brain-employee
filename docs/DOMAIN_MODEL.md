@@ -219,15 +219,21 @@ type ResultStatus =
 
 interface Result {
   id: string
+  projectId: string
   taskId: string
   artifactIds: string[]
   status: ResultStatus
-  submittedBy: string
+  createdByUserId: string
   createdAt: string
-  submittedAt?: string
   updatedAt: string
 }
 ```
+
+EB-011 creates only `CANDIDATE` through explicit employee confirmation. Result
+Artifact composition, identity, creator and Task/Project provenance are immutable.
+`submittedBy` and `submittedAt` are reserved for a future Human Review submission
+action. `rehydrateResult` is a trusted persistence boundary and never accepts HTTP
+or LLM-controlled status input.
 
 ## 11. Review（人工评审）
 

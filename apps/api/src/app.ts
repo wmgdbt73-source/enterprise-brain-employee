@@ -6,6 +6,7 @@ import {
   TaskRepository,
   AgentRunRepository,
   ArtifactRepository,
+  ResultRepository,
   HumanConfirmationRepository,
   createPrismaClient,
   ensureUser,
@@ -40,6 +41,8 @@ import {
 } from './modules/artifacts/artifact-service.js';
 import { registerHumanConfirmationRoutes } from './modules/human-confirmations/human-confirmation-routes.js';
 import { HumanConfirmationConflictError, HumanConfirmationNotFoundError, HumanConfirmationService } from './modules/human-confirmations/human-confirmation-service.js';
+import { registerResultRoutes } from './modules/results/result-routes.js';
+import { ResultIdempotencyConflictError, ResultNotFoundError, ResultService } from './modules/results/result-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -91,6 +94,7 @@ export async function createApp(
     new ArtifactService(new ArtifactRepository(prisma))
   );
   registerHumanConfirmationRoutes(app, new HumanConfirmationService(new HumanConfirmationRepository(prisma)));
+  registerResultRoutes(app, new ResultService(new ResultRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
     if (isDomainError(error) && error.code === 'INVALID_STATE_TRANSITION') {
@@ -117,6 +121,7 @@ export async function createApp(
       error instanceof TaskNotFoundError ||
       error instanceof AgentRunNotFoundError ||
       error instanceof ArtifactNotFoundError
+      || error instanceof ResultNotFoundError
       || error instanceof HumanConfirmationNotFoundError
     ) {
       return reply.code(404).send({
@@ -153,6 +158,7 @@ export async function createApp(
         }
       });
     if (error instanceof HumanConfirmationConflictError) return reply.code(409).send({ error: { code: 'HUMAN_CONFIRMATION_CONFLICT', message: 'Conflicting confirmation decision', details: {} } });
+    if (error instanceof ResultIdempotencyConflictError) return reply.code(409).send({ error: { code: 'IDEMPOTENCY_KEY_CONFLICT', message: 'Idempotency key was previously used for a different Result Candidate request', details: {} } });
 
     app.log.error(error);
     return reply.code(500).send({

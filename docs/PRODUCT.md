@@ -111,6 +111,10 @@ Project（项目）
 → Accepted（正式验收）
 ```
 
+Creating a Result Candidate is an explicit employee confirmation of persisted
+Artifact references. It is neither Human Review nor Accepted and does not change
+Task state.
+
 ## 8. Formal State Principle（正式状态原则）
 
 - Conversation text is not a formal business fact.
