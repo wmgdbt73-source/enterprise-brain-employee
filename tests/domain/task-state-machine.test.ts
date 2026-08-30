@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applyTaskAction,
   asTaskId,
+  blockingDependencyIds,
   createTask
 } from '../../packages/domain/src/index.js';
 import { createProjectFixture, now, projectId } from './fixtures.js';
@@ -107,5 +108,14 @@ describe('Task state machine', () => {
 
     expect(accepted.status).toBe('ACCEPTED');
     expect(applyTaskAction(accepted, 'CLOSE', now).status).toBe('CLOSED');
+  });
+
+  it('treats only ACCEPTED and CLOSED dependencies as satisfied', () => {
+    expect(blockingDependencyIds([
+      { id: asTaskId('todo'), status: 'TODO' },
+      { id: asTaskId('accepted'), status: 'ACCEPTED' },
+      { id: asTaskId('closed'), status: 'CLOSED' },
+      { id: asTaskId('review'), status: 'READY_FOR_REVIEW' }
+    ])).toEqual([asTaskId('todo'), asTaskId('review')]);
   });
 });

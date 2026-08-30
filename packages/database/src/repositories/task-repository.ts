@@ -5,6 +5,9 @@ import {
   asTaskId,
   asUserId,
   createProjectMember,
+  applyTaskAction,
+  blockingDependencyIds,
+  DomainError,
   rehydrateTask,
   type ProjectMember,
   type Task,
@@ -37,8 +40,29 @@ export class TaskRepository {
     );
   }
 
-  async create(task: Task): Promise<TaskContract> {
-    const record = await this.prisma.$transaction(async (transaction) => {
+  async createForMember(
+    projectId: string,
+    userId: UserId,
+    create: (members: ProjectMember[]) => Task
+  ): Promise<TaskContract | 'NOT_FOUND'> {
+    return this.prisma.$transaction(async (transaction) => {
+      const membership = await transaction.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId } }
+      });
+      if (!membership) return 'NOT_FOUND';
+      const members = await transaction.projectMember.findMany({
+        where: { projectId }
+      });
+      const domainMembers = members.map((member) => createProjectMember({
+        id: asProjectMemberId(member.id), projectId: asProjectId(member.projectId),
+        userId: asUserId(member.userId), role: member.role
+      }, member.createdAt));
+      const task = create(domainMembers);
+      const dependencies = await transaction.task.findMany({
+        where: { id: { in: [...task.dependencyIds] }, projectId: task.projectId },
+        select: { id: true }
+      });
+      if (dependencies.length !== task.dependencyIds.length) return 'NOT_FOUND';
       const created = await transaction.task.create({
         data: {
           id: task.id,
@@ -62,9 +86,17 @@ export class TaskRepository {
           }
         });
       }
-      return created;
-    });
-    return toTaskContract(record, task.assigneeId);
+      if (task.dependencyIds.length) {
+        await transaction.taskDependency.createMany({
+          data: task.dependencyIds.map((dependsOnTaskId) => ({
+            taskId: task.id,
+            dependsOnTaskId,
+            projectId: task.projectId
+          }))
+        });
+      }
+      return toTaskContract(created, task.assigneeId, task.dependencyIds);
+    }, { isolationLevel: 'RepeatableRead' });
   }
 
   async listByProjectForMember(
@@ -77,10 +109,10 @@ export class TaskRepository {
     if (!access) return undefined;
     const tasks = await this.prisma.task.findMany({
       where: { projectId },
-      include: { assignment: true },
+      include: { assignment: true, dependencies: true },
       orderBy: { createdAt: 'desc' }
     });
-    return tasks.map((task) => toTaskContract(task, task.assignment?.userId));
+    return tasks.map((task) => toTaskContract(task, task.assignment?.userId, task.dependencies.map((dependency) => dependency.dependsOnTaskId)));
   }
 
   async findByIdForMember(
@@ -89,9 +121,9 @@ export class TaskRepository {
   ): Promise<TaskContract | undefined> {
     const task = await this.prisma.task.findFirst({
       where: { id: taskId, project: { members: { some: { userId } } } },
-      include: { assignment: true }
+      include: { assignment: true, dependencies: true }
     });
-    return task ? toTaskContract(task, task.assignment?.userId) : undefined;
+    return task ? toTaskContract(task, task.assignment?.userId, task.dependencies.map((dependency) => dependency.dependsOnTaskId)) : undefined;
   }
 
   async loadDomainTaskForMember(
@@ -128,7 +160,36 @@ export class TaskRepository {
       where: { id: task.id },
       data: { status: task.status, updatedAt: task.updatedAt }
     });
-    return toTaskContract(record, task.assigneeId);
+    return toTaskContract(record, task.assigneeId, task.dependencyIds);
+  }
+
+  async startForMember(taskId: string, userId: UserId, now: Date): Promise<TaskContract | 'NOT_FOUND' | 'INVALID_STATE' | { blockingDependencyIds: string[] }> {
+    return this.prisma.$transaction(async (tx) => {
+      const task = await tx.task.findFirst({
+        where: { id: taskId, project: { members: { some: { userId } } } },
+        include: { assignment: true, dependencies: { include: { dependsOnTask: true } } }
+      });
+      if (!task) return 'NOT_FOUND';
+      if (task.status !== 'TODO') return 'INVALID_STATE';
+      const blocked = blockingDependencyIds(task.dependencies.map((dependency) => ({ id: asTaskId(dependency.dependsOnTaskId), status: dependency.dependsOnTask.status })));
+      if (blocked.length) return { blockingDependencyIds: [...blocked] };
+      let transitioned: Task;
+      try {
+        transitioned = applyTaskAction(rehydrateTask({
+          id: asTaskId(task.id), projectId: asProjectId(task.projectId), title: task.title,
+          description: task.description ?? undefined, assigneeId: task.assignment ? asUserId(task.assignment.userId) : undefined,
+          priority: task.priority, status: task.status, acceptanceCriteria: task.acceptanceCriteria,
+          dependencyIds: task.dependencies.map((dependency) => asTaskId(dependency.dependsOnTaskId)),
+          deadline: task.deadline ?? undefined, createdAt: task.createdAt, updatedAt: task.updatedAt
+        }), 'START', now);
+      } catch (error) {
+        if (error instanceof DomainError && error.code === 'INVALID_STATE_TRANSITION') return 'INVALID_STATE';
+        throw error;
+      }
+      const updated = await tx.task.updateMany({ where: { id: task.id, status: 'TODO' }, data: { status: transitioned.status, updatedAt: transitioned.updatedAt } });
+      if (updated.count !== 1) return 'INVALID_STATE';
+      return toTaskContract({ ...task, status: transitioned.status, updatedAt: transitioned.updatedAt }, task.assignment?.userId, task.dependencies.map((dependency) => dependency.dependsOnTaskId));
+    }, { isolationLevel: 'RepeatableRead' });
   }
 }
 
@@ -145,7 +206,8 @@ function toTaskContract(
     createdAt: Date;
     updatedAt: Date;
   },
-  assigneeId?: string
+  assigneeId?: string,
+  dependencyIds: readonly string[] = []
 ): TaskContract {
   return {
     id: task.id,
@@ -156,7 +218,7 @@ function toTaskContract(
     priority: task.priority,
     status: task.status,
     acceptanceCriteria: task.acceptanceCriteria,
-    dependencyIds: [],
+    dependencyIds: [...dependencyIds],
     ...(task.deadline ? { deadline: task.deadline.toISOString() } : {}),
     createdAt: task.createdAt.toISOString(),
     updatedAt: task.updatedAt.toISOString()

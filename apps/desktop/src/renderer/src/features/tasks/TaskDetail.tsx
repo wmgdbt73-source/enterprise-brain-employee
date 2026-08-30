@@ -23,7 +23,7 @@ export function TaskDetail({
   ,onDecideReview
 }: {
   task?: TaskContract;
-  onStart: (task: TaskContract) => Promise<void>;
+  onStart: (task: TaskContract) => Promise<DesktopResult<TaskContract> | void>;
   artifacts: ArtifactContract[];
   onReadFile: (
     task: TaskContract,
@@ -156,9 +156,14 @@ export function TaskDetail({
                 ? task.acceptanceCriteria.join('；')
                 : '未设置'}
             </dd>
+            <dt>依赖任务</dt>
+            <dd>{task.dependencyIds.length ? task.dependencyIds.join('；') : '无'}</dd>
           </dl>
           {task.status === 'TODO' && (
-            <button className="primary" onClick={() => void onStart(task)}>
+            <button className="primary" onClick={() => void onStart(task).then((result) => {
+              if (result && !result.ok) setError(result.error);
+              if (result?.ok) setError(undefined);
+            })}>
               Start Task
             </button>
           )}

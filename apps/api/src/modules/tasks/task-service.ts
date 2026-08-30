@@ -1,7 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { TaskContract } from '@enterprise-brain/contracts';
 import {
-  applyTaskAction,
   asProjectId,
   asTaskId,
   asUserId,
@@ -12,6 +11,9 @@ import type { TaskRepository } from '@enterprise-brain/database';
 import type { RequestContext } from '../../context/request-context.js';
 
 export class TaskNotFoundError extends Error {}
+export class TaskDependencyBlockedError extends Error {
+  constructor(readonly blockingDependencyIds: string[]) { super('Task dependencies are not accepted'); }
+}
 
 export class TaskService {
   constructor(private readonly tasks: TaskRepository) {}
@@ -25,22 +27,20 @@ export class TaskService {
       assigneeId?: string;
       priority?: 'P0' | 'P1' | 'P2' | 'P3';
       acceptanceCriteria?: string[];
+      dependencyIds?: string[];
       deadline?: string;
     }
   ): Promise<TaskContract> {
-    const members = await this.tasks.projectMembersForMember(
-      projectId,
-      context.currentUser.id
-    );
-    if (!members) throw new TaskNotFoundError();
+    const dependencyIds = input.dependencyIds ?? [];
+    if (new Set(dependencyIds).size !== dependencyIds.length || dependencyIds.some((id) => id.trim().length === 0))
+      throw new DomainError('INVALID_ARGUMENT', 'dependencyIds must be unique non-blank identifiers');
     const deadline = input.deadline ? new Date(input.deadline) : undefined;
     if (deadline && Number.isNaN(deadline.valueOf()))
       throw new DomainError(
         'INVALID_ARGUMENT',
         'deadline must be a valid ISO-8601 date-time'
       );
-    const task = createTask(
-      {
+    const created = await this.tasks.createForMember(projectId, context.currentUser.id, (members) => createTask({
         id: asTaskId(randomUUID()),
         projectId: asProjectId(projectId),
         title: input.title,
@@ -48,13 +48,11 @@ export class TaskService {
         assigneeId: input.assigneeId ? asUserId(input.assigneeId) : undefined,
         priority: input.priority,
         acceptanceCriteria: input.acceptanceCriteria,
-        dependencyIds: [],
+        dependencyIds: dependencyIds.map(asTaskId),
         deadline
-      },
-      members,
-      new Date()
-    );
-    return this.tasks.create(task);
+      }, members, new Date()));
+    if (created === 'NOT_FOUND') throw new TaskNotFoundError();
+    return created;
   }
 
   async list(
@@ -79,13 +77,10 @@ export class TaskService {
   }
 
   async start(context: RequestContext, taskId: string): Promise<TaskContract> {
-    const task = await this.tasks.loadDomainTaskForMember(
-      taskId,
-      context.currentUser.id
-    );
-    if (!task) throw new TaskNotFoundError();
-    return this.tasks.persistTransition(
-      applyTaskAction(task, 'START', new Date())
-    );
+    const result = await this.tasks.startForMember(taskId, context.currentUser.id, new Date());
+    if (result === 'NOT_FOUND') throw new TaskNotFoundError();
+    if (result === 'INVALID_STATE') throw new DomainError('INVALID_STATE_TRANSITION', 'Task cannot be started in its current state');
+    if ('blockingDependencyIds' in result) throw new TaskDependencyBlockedError(result.blockingDependencyIds);
+    return result;
   }
 }

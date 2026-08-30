@@ -136,24 +136,52 @@ describe('Result Candidate API', () => {
     await primaryClient.$disconnect(); await secondaryClient.$disconnect();
   });
 
-  it('submits only by its creator and records one owner/reviewer human decision without changing the Task', async () => {
+  it('coordinates submission and human ACCEPT with the owning Task', async () => {
     const app = await createApp({ prisma: db() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const dependent = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Dependent', dependencyIds: [task.id] } })).json();
     const registered = await artifact(app, task.id, 'a.md');
     const created = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('12') }, payload: { artifactIds: [registered.id] } });
     const result = created.json();
-    expect((await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} })).json()).toMatchObject({ status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user' });
+    await app.inject({ method: 'POST', url: `/tasks/${task.id}/start` });
+    const submitted = await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} });
+    expect(submitted.json()).toMatchObject({ status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user' });
+    const firstSubmittedAt = submitted.json().submittedAt;
+    const firstTaskUpdatedAt = (await db().task.findUniqueOrThrow({ where: { id: task.id } })).updatedAt;
+    expect((await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} })).json().submittedAt).toBe(firstSubmittedAt);
+    expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).updatedAt).toEqual(firstTaskUpdatedAt);
+    expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('READY_FOR_REVIEW');
     expect((await app.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
     await db().user.create({ data: { id: 'reviewer-1', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
     await db().projectMember.create({ data: { id: 'member-reviewer-1', projectId: project.id, userId: 'reviewer-1', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-1', name: 'Reviewer' }) });
     const accepted = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: ' looks good ' } });
     expect(accepted.statusCode).toBe(201); expect(accepted.json()).toMatchObject({ resultId: result.id, reviewerId: 'reviewer-1', decision: 'ACCEPT', comment: 'looks good' });
+    const acceptedTaskUpdatedAt = (await db().task.findUniqueOrThrow({ where: { id: task.id } })).updatedAt;
     expect((await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: 'looks good' } })).statusCode).toBe(200);
+    expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).updatedAt).toEqual(acceptedTaskUpdatedAt);
     expect((await app.inject({ method: 'GET', url: `/results/${result.id}/reviews` })).json().reviews).toHaveLength(1);
     expect((await db().result.findUniqueOrThrow({ where: { id: result.id } })).status).toBe('ACCEPTED');
-    expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('TODO');
+    expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('ACCEPTED');
+    expect((await reviewer.inject({ method: 'POST', url: `/tasks/${dependent.id}/start` })).statusCode).toBe(200);
+    await reviewer.close(); await app.close();
+  });
+
+  it('returns REWORK Result and Task IN_PROGRESS atomically', async () => {
+    const app = await createApp({ prisma: db() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Rework' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const registered = await artifact(app, task.id, 'a.md');
+    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('15') }, payload: { artifactIds: [registered.id] } })).json();
+    await app.inject({ method: 'POST', url: `/tasks/${task.id}/start` });
+    await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} });
+    await db().user.create({ data: { id: 'reviewer-rework', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
+    await db().projectMember.create({ data: { id: 'member-reviewer-rework', projectId: project.id, userId: 'reviewer-rework', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-rework' }) });
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'REWORK' } })).statusCode).toBe(201);
+    expect(await db().result.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: 'REWORK' });
+    expect(await db().task.findUniqueOrThrow({ where: { id: task.id } })).toMatchObject({ status: 'IN_PROGRESS' });
     await reviewer.close(); await app.close();
   });
 
@@ -163,6 +191,7 @@ describe('Result Candidate API', () => {
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const registered = await artifact(app, task.id, 'a.md');
     const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('13') }, payload: { artifactIds: [registered.id] } })).json();
+    await app.inject({ method: 'POST', url: `/tasks/${task.id}/start` });
     for (const [id, role, systemRole] of [['member-1', 'MEMBER', 'EMPLOYEE'], ['admin-1', 'MEMBER', 'ADMIN'], ['reviewer-2', 'REVIEWER', 'EMPLOYEE']] as const) {
       await db().user.create({ data: { id, name: id, systemRole, createdAt: new Date(), updatedAt: new Date() } });
       await db().projectMember.create({ data: { id: `membership-${id}`, projectId: project.id, userId: id, role, createdAt: new Date(), updatedAt: new Date() } });
@@ -190,6 +219,7 @@ describe('Result Candidate API', () => {
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const registered = await artifact(app, task.id, 'a.md');
     const result = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('14') }, payload: { artifactIds: [registered.id] } })).json();
+    await app.inject({ method: 'POST', url: `/tasks/${task.id}/start` });
     await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} });
     await db().user.create({ data: { id: 'reviewer-empty', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
     await db().projectMember.create({ data: { id: 'member-reviewer-empty', projectId: project.id, userId: 'reviewer-empty', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });

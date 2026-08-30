@@ -87,6 +87,90 @@ describe('Result confirmation component lifecycle', () => {
     expect(text()).not.toContain('API unavailable');
   });
 
+  it('keeps a dependency block local and clears it after a successful retry', async () => {
+    let calls = 0;
+    mount();
+    await act(async () => root?.render(createElement(TaskDetail, {
+      task: taskA, onStart: async () => {
+        calls += 1;
+        return calls === 1 ? failure('TASK_DEPENDENCY_BLOCKED') : { ok: true as const, data: { ...taskA, status: 'IN_PROGRESS' as const } };
+      }, artifacts: [], onReadFile: async () => undefined, onRegisterArtifact: async () => {}, onPrepareWrite: async () => undefined, onApproveWrite: async () => {}, onRejectWrite: async () => {}, onCreateResult: async () => failure('UNUSED')
+    })));
+    await clickText('Start Task');
+    expect(text()).toContain('API unavailable');
+    await clickText('Start Task');
+    expect(text()).not.toContain('API unavailable');
+  });
+
+  it('refreshes the selected Task through the typed App bridge after submit and review decisions', async () => {
+    let currentTask: TaskContract = { ...taskA, status: 'IN_PROGRESS' };
+    let currentResult: ResultContract = result('result-status', taskA.id, [artifact.id]);
+    const refreshes: string[] = [];
+    mount();
+    window.enterpriseBrain = bridge({
+      tasks: {
+        list: async () => ({ ok: true as const, data: [currentTask] }),
+        get: async (taskId) => {
+          refreshes.push(taskId);
+          return { ok: true as const, data: currentTask };
+        },
+        create: async () => ({ ok: true as const, data: currentTask }),
+        start: async () => ({ ok: true as const, data: currentTask })
+      },
+      results: {
+        create: async () => ({ ok: true as const, data: currentResult }),
+        submitReview: async () => {
+          currentResult = { ...currentResult, status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user', submittedAt: '2026-01-02T00:00:00.000Z' };
+          currentTask = { ...currentTask, status: 'READY_FOR_REVIEW' };
+          return { ok: true as const, data: currentResult };
+        },
+        get: async () => ({ ok: true as const, data: currentResult }),
+        listReviews: async () => ({ ok: true as const, data: [] }),
+        decide: async (_resultId, decision) => {
+          currentResult = { ...currentResult, status: decision === 'ACCEPT' ? 'ACCEPTED' : 'REWORK' };
+          currentTask = { ...currentTask, status: decision === 'ACCEPT' ? 'ACCEPTED' : 'IN_PROGRESS' };
+          return { ok: true as const, data: { id: `review-${decision}`, resultId: currentResult.id, reviewerId: 'reviewer', decision, reviewedAt: '2026-01-03T00:00:00.000Z' } as ReviewContract };
+        }
+      }
+    });
+    await renderApp();
+    await clickText('Project');
+    await clickText('Task A');
+    await clickCheckbox('brief.md');
+    await clickText('Create Result Candidate');
+    await clickText('Submit for Human Review');
+    expect(text()).toContain('READY_FOR_REVIEW');
+    await setInput([...document.querySelectorAll('input')].find((element) => (element as HTMLInputElement).placeholder === 'Result ID') as HTMLInputElement, 'result-status');
+    await clickText('Open Result');
+    await clickText('Accept Result');
+    expect(text()).toContain('ACCEPTED');
+    expect(refreshes).toEqual([taskA.id, taskA.id]);
+  });
+
+  it('refreshes the selected Task as IN_PROGRESS after a REWORK decision', async () => {
+    let currentTask: TaskContract = { ...taskA, status: 'READY_FOR_REVIEW' };
+    let currentResult: ResultContract = { ...result('result-rework', taskA.id, [artifact.id]), status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user', submittedAt: '2026-01-02T00:00:00.000Z' };
+    mount();
+    window.enterpriseBrain = bridge({
+      tasks: { list: async () => ({ ok: true as const, data: [currentTask] }), get: async () => ({ ok: true as const, data: currentTask }), create: async () => ({ ok: true as const, data: currentTask }), start: async () => ({ ok: true as const, data: currentTask }) },
+      results: {
+        create: async () => failure('UNUSED'), submitReview: async () => failure('UNUSED'),
+        get: async () => ({ ok: true as const, data: currentResult }), listReviews: async () => ({ ok: true as const, data: [] }),
+        decide: async () => {
+          currentResult = { ...currentResult, status: 'REWORK' };
+          currentTask = { ...currentTask, status: 'IN_PROGRESS' };
+          return { ok: true as const, data: { id: 'review-rework', resultId: currentResult.id, reviewerId: 'reviewer', decision: 'REWORK', reviewedAt: '2026-01-03T00:00:00.000Z' } as ReviewContract };
+        }
+      }
+    });
+    await renderApp();
+    await clickText('Project'); await clickText('Task A');
+    await setInput([...document.querySelectorAll('input')].find((element) => (element as HTMLInputElement).placeholder === 'Result ID') as HTMLInputElement, 'result-rework');
+    await clickText('Open Result'); await clickText('Request Rework');
+    expect(text()).toContain('IN_PROGRESS');
+    expect(text()).toContain('REWORK');
+  });
+
   it('opens a Human Review Result by ID and sends an explicit reviewer decision without altering the Task', async () => {
     const humanReview: ResultContract = { ...result('result-review', taskA.id, [artifact.id]), status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user', submittedAt: '2026-01-02T00:00:00.000Z' };
     const decisions: Array<{ id: string; decision: string; comment?: string }> = [];

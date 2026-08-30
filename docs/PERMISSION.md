@@ -92,6 +92,7 @@ Server-side authorization is required for:
 - assigning Task;
 - submitting Result;
 - reviewing Result;
+- starting a Task only when all persisted same-Project dependencies are accepted or closed;
 - accepting Result;
 - permission changes;
 - destructive Project actions.

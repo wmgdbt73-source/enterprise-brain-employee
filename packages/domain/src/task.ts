@@ -103,6 +103,17 @@ export function applyTaskAction(
   });
 }
 
+/** ACCEPTED and CLOSED dependencies no longer block a TODO Task from starting. */
+export function blockingDependencyIds(
+  dependencies: readonly Pick<Task, 'id' | 'status'>[]
+): readonly TaskId[] {
+  return Object.freeze(
+    dependencies
+      .filter((dependency) => dependency.status !== 'ACCEPTED' && dependency.status !== 'CLOSED')
+      .map((dependency) => dependency.id)
+  );
+}
+
 /** Restores a trusted persistence record; it is not a creation or transition API. */
 export function rehydrateTask(task: Task): Task {
   if (!taskPriorities.has(task.priority) || !taskStatuses.has(task.status)) {

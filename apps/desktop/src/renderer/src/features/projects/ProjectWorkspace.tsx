@@ -41,7 +41,7 @@ export function ProjectWorkspace({
   task?: TaskContract;
   onCreateTask: (input: TaskInput) => Promise<void>;
   onSelectTask: (task: TaskContract) => void;
-  onStartTask: (task: TaskContract) => Promise<void>;
+  onStartTask: (task: TaskContract) => Promise<DesktopResult<TaskContract> | void>;
   artifacts: ArtifactContract[];
   onReadFile: (
     task: TaskContract,

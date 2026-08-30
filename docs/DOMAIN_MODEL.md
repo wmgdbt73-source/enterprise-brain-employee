@@ -273,3 +273,7 @@ interface ActivityEvent {
 - UI display labels may differ from stored enum values;
 - changes to core enums require an Architecture Decision Record（架构决策记录） in `DECISIONS.md`;
 - Alpha fields may evolve, but identity and ownership boundaries should remain stable.
+
+EB-013 persists `Task.dependencyIds` as same-Project TaskDependency rows. A
+dependency is satisfied only when its Task is `ACCEPTED` or `CLOSED`; it gates
+the formal `START` action without creating a new Task status.

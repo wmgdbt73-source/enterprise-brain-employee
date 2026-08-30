@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { ResultContract, ReviewContract, ReviewDecision } from '@enterprise-brain/contracts';
-import { asArtifactId, asProjectId, asResultId, asTaskId, asUserId, createResultCandidate, decideResultReview, rehydrateResult, submitResultForHumanReview } from '@enterprise-brain/domain';
+import { applyTaskAction, asArtifactId, asProjectId, asResultId, asTaskId, asUserId, createResultCandidate, decideResultReview, rehydrateResult, rehydrateTask, submitResultForHumanReview } from '@enterprise-brain/domain';
 import type { PrismaClient } from '../generated/prisma/client.js';
 
 type TransactionClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$use' | '$extends'>;
@@ -59,11 +59,16 @@ export class ResultRepository {
       if (!result) return 'NOT_FOUND';
       if (result.createdByUserId !== userId) return 'FORBIDDEN';
       const links = await tx.resultArtifact.findMany({ where: { resultId }, orderBy: { artifactId: 'asc' } });
-      if (result.status === 'HUMAN_REVIEW') return toContract(result, links.map((link) => link.artifactId));
+      const task = await tx.task.findUnique({ where: { id: result.taskId } });
+      if (!task || task.projectId !== result.projectId) return 'INVALID_STATE';
+      if (result.status === 'HUMAN_REVIEW') return task.status === 'READY_FOR_REVIEW' ? toContract(result, links.map((link) => link.artifactId)) : 'INVALID_STATE';
       if (result.status !== 'CANDIDATE') return 'INVALID_STATE';
+      if (task.status !== 'IN_PROGRESS') return 'INVALID_STATE';
       const transitioned = submitResultForHumanReview(toDomain(result, links.map((link) => link.artifactId)), asUserId(userId), now);
+      const transitionedTask = applyTaskAction(toTaskDomain(task), 'SUBMIT_FOR_REVIEW', now);
       const updated = await tx.result.updateMany({ where: { id: resultId, status: 'CANDIDATE' }, data: { status: transitioned.status, submittedByUserId: userId, submittedAt: transitioned.submittedAt, updatedAt: transitioned.updatedAt } });
       if (updated.count !== 1) throw new SubmissionCasConflict();
+      if ((await tx.task.updateMany({ where: { id: task.id, status: 'IN_PROGRESS' }, data: { status: transitionedTask.status, updatedAt: transitionedTask.updatedAt } })).count !== 1) throw new SubmissionCasConflict();
       return toContract({ ...result, status: transitioned.status, submittedByUserId: userId, submittedAt: transitioned.submittedAt!, updatedAt: transitioned.updatedAt }, links.map((link) => link.artifactId));
       }, { isolationLevel: 'RepeatableRead' });
     } catch (error) {
@@ -84,10 +89,14 @@ export class ResultRepository {
       const existing = await tx.review.findUnique({ where: { resultId: result.id } });
       if (existing) return sameReviewRequest(existing, input) ? { review: toReviewContract(existing), created: false } : 'CONFLICT';
       if (result.status !== 'HUMAN_REVIEW') return 'INVALID_STATE';
+      const task = await tx.task.findUnique({ where: { id: result.taskId } });
+      if (!task || task.projectId !== result.projectId || task.status !== 'READY_FOR_REVIEW') return 'INVALID_STATE';
       const links = await tx.resultArtifact.findMany({ where: { resultId: result.id }, orderBy: { artifactId: 'asc' } });
       const transitioned = decideResultReview(toDomain(result, links.map((link) => link.artifactId)), input.decision, input.now);
+      const transitionedTask = applyTaskAction(toTaskDomain(task), input.decision === 'ACCEPT' ? 'ACCEPT_AFTER_HUMAN_REVIEW' : 'REQUEST_REWORK', input.now);
       const updated = await tx.result.updateMany({ where: { id: result.id, status: 'HUMAN_REVIEW' }, data: { status: transitioned.status, updatedAt: transitioned.updatedAt } });
       if (updated.count !== 1) throw new ReviewCasConflict();
+      if ((await tx.task.updateMany({ where: { id: task.id, status: 'READY_FOR_REVIEW' }, data: { status: transitionedTask.status, updatedAt: transitionedTask.updatedAt } })).count !== 1) throw new ReviewCasConflict();
       const review = await tx.review.create({ data: { id: input.reviewId, resultId: result.id, projectId: result.projectId, reviewerId: input.reviewerId, decision: input.decision, ...(input.comment ? { comment: input.comment } : {}), reviewedAt: input.now } });
       return { review: toReviewContract(review), created: true };
       }, { isolationLevel: 'RepeatableRead' });
@@ -172,6 +181,9 @@ function toContract(result: { id: string; projectId: string; taskId: string; cre
 }
 function toDomain(result: { id: string; projectId: string; taskId: string; createdByUserId: string; submittedByUserId?: string | null; submittedAt?: Date | null; status: ResultContract['status']; createdAt: Date; updatedAt: Date }, artifactIds: string[]) {
   return rehydrateResult({ id: asResultId(result.id), projectId: asProjectId(result.projectId), taskId: asTaskId(result.taskId), artifactIds: artifactIds.map(asArtifactId), status: result.status, createdByUserId: asUserId(result.createdByUserId), ...(result.submittedByUserId ? { submittedByUserId: asUserId(result.submittedByUserId) } : {}), ...(result.submittedAt ? { submittedAt: result.submittedAt } : {}), createdAt: result.createdAt, updatedAt: result.updatedAt });
+}
+function toTaskDomain(task: { id: string; projectId: string; title: string; description: string | null; priority: 'P0' | 'P1' | 'P2' | 'P3'; status: 'TODO' | 'IN_PROGRESS' | 'READY_FOR_REVIEW' | 'ACCEPTED' | 'CLOSED'; acceptanceCriteria: string[]; deadline: Date | null; createdAt: Date; updatedAt: Date }) {
+  return rehydrateTask({ id: asTaskId(task.id), projectId: asProjectId(task.projectId), title: task.title, description: task.description ?? undefined, priority: task.priority, status: task.status, acceptanceCriteria: task.acceptanceCriteria, dependencyIds: [], deadline: task.deadline ?? undefined, createdAt: task.createdAt, updatedAt: task.updatedAt });
 }
 function toReviewContract(review: { id: string; resultId: string; reviewerId: string; decision: ReviewDecision; comment: string | null; reviewedAt: Date }): ReviewContract {
   return { id: review.id, resultId: review.resultId, reviewerId: review.reviewerId, decision: review.decision, ...(review.comment ? { comment: review.comment } : {}), reviewedAt: review.reviewedAt.toISOString() };

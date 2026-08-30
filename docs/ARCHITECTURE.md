@@ -181,6 +181,10 @@ EB-009 adds explicit employee Artifact registration: successful `read_file`
 AgentRun → persisted safe receipt → `POST /artifacts` → immutable backend
 Artifact metadata. No local file content or absolute path crosses this boundary.
 
+EB-013 coordinates Result submission/review with its Task in backend PostgreSQL
+transactions. Renderer requests named operations only; it cannot set Task or
+Result formal statuses, reviewers, timestamps, or dependency completion.
+
 ## 13. Confirmed Local Write Boundary（已确认本地写入边界）
 
 ```text
