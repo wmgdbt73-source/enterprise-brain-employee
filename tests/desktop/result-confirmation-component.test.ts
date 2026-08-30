@@ -7,7 +7,7 @@ import { App } from '../../apps/desktop/src/renderer/src/App.js';
 import { TaskDetail } from '../../apps/desktop/src/renderer/src/features/tasks/TaskDetail.js';
 import type { EnterpriseBrainBridge } from '../../apps/desktop/src/shared/enterprise-brain.js';
 import type { DesktopResult } from '../../apps/desktop/src/shared/enterprise-brain.js';
-import type { ArtifactContract, ProjectContract, ResultContract, TaskContract } from '../../packages/contracts/src/index.js';
+import type { ArtifactContract, ProjectContract, ResultContract, ReviewContract, TaskContract } from '../../packages/contracts/src/index.js';
 
 const project: ProjectContract = { id: 'project-a', name: 'Project', status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
 const taskA = task('task-a', 'Task A');
@@ -85,6 +85,16 @@ describe('Result confirmation component lifecycle', () => {
     await act(async () => resolveA?.(failure('API_UNAVAILABLE')));
     expect(text()).toContain('Task B');
     expect(text()).not.toContain('API unavailable');
+  });
+
+  it('renders a Human Review Result and sends an explicit reviewer decision without altering the Task', async () => {
+    const humanReview: ResultContract = { ...result('result-review', taskA.id, [artifact.id]), status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user', submittedAt: '2026-01-02T00:00:00.000Z' };
+    const decisions: Array<{ id: string; decision: string; comment?: string }> = [];
+    mount();
+    await act(async () => root?.render(createElement(TaskDetail, { task: taskA, onStart: async () => {}, artifacts: [artifact], onReadFile: async () => undefined, onRegisterArtifact: async () => {}, onPrepareWrite: async () => undefined, onApproveWrite: async () => {}, onRejectWrite: async () => {}, onCreateResult: async () => success(humanReview), onGetResult: async () => success(humanReview), onListReviews: async () => ({ ok: true as const, data: [] }), onDecideReview: async (id, decision, comment) => { decisions.push({ id, decision, comment }); return { ok: true as const, data: { id: 'review-1', resultId: id, reviewerId: 'reviewer', decision, ...(comment ? { comment } : {}), reviewedAt: '2026-01-03T00:00:00.000Z' } as ReviewContract }; } })));
+    await clickCheckbox('brief.md'); await clickText('Create Result Candidate'); await clickText('Accept Result');
+    expect(decisions).toEqual([{ id: 'result-review', decision: 'ACCEPT', comment: '' }]);
+    expect(text()).toContain('Task status is not changed by Human Review.');
   });
 });
 

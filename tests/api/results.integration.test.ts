@@ -156,6 +156,33 @@ describe('Result Candidate API', () => {
     expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('TODO');
     await reviewer.close(); await app.close();
   });
+
+  it('enforces review role, ownership, hidden scope and terminal conflict boundaries', async () => {
+    const app = await createApp({ prisma: db() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const registered = await artifact(app, task.id, 'a.md');
+    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('13') }, payload: { artifactIds: [registered.id] } })).json();
+    for (const [id, role, systemRole] of [['member-1', 'MEMBER', 'EMPLOYEE'], ['admin-1', 'MEMBER', 'ADMIN'], ['reviewer-2', 'REVIEWER', 'EMPLOYEE']] as const) {
+      await db().user.create({ data: { id, name: id, systemRole, createdAt: new Date(), updatedAt: new Date() } });
+      await db().projectMember.create({ data: { id: `membership-${id}`, projectId: project.id, userId: id, role, createdAt: new Date(), updatedAt: new Date() } });
+    }
+    const member = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'member-1', name: 'Member' }) });
+    const admin = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'admin-1', name: 'Admin', systemRole: 'ADMIN' }) });
+    const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-2', name: 'Reviewer' }) });
+    expect((await member.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: { submittedByUserId: 'forged' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(200);
+    expect((await member.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
+    expect((await admin.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'REWORK', reviewerId: 'forged' } })).statusCode).toBe(400);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'REWORK', comment: 'needs work' } })).statusCode).toBe(201);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(409);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(403);
+    await db().projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: 'reviewer-2' } } });
+    expect((await reviewer.inject({ method: 'GET', url: `/results/${created.id}/reviews` })).statusCode).toBe(404);
+    await Promise.all([member.close(), admin.close(), reviewer.close(), app.close()]);
+  });
 });
 
 function wrapPrismaForResultApiTest(prisma: PrismaClient, hooks: { beforeResultCreate: () => Promise<void> | void }): PrismaClient {
