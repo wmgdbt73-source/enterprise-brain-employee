@@ -229,8 +229,8 @@ describe('PostgreSQL persistence constraints', () => {
     ).rejects.toMatchObject({ code: 'P2002' });
     await db.project.create({ data: { id: 'project-2', name: 'Other', status: 'ACTIVE', createdAt: now, updatedAt: now } });
     await db.task.create({ data: { id: 'task-3', projectId: 'project-2', title: 'Other', priority: 'P2', status: 'TODO', acceptanceCriteria: [], createdAt: now, updatedAt: now } });
-    await expect(db.taskDependency.create({ data: { taskId: 'task-1', dependsOnTaskId: 'task-2', projectId: 'project-2' } })).rejects.toMatchObject({ code: 'P2003' });
-    await expect(db.taskDependency.create({ data: { taskId: 'task-1', dependsOnTaskId: 'task-3', projectId: 'project-1' } })).rejects.toMatchObject({ code: 'P2003' });
+    await expect(db.taskDependency.create({ data: { taskId: 'task-2', dependsOnTaskId: 'task-1', projectId: 'project-2' } })).rejects.toMatchObject({ code: 'P2003' });
+    await expect(db.taskDependency.create({ data: { taskId: 'task-2', dependsOnTaskId: 'task-3', projectId: 'project-1' } })).rejects.toMatchObject({ code: 'P2003' });
   });
 
   it('enforces Artifact provenance composite foreign keys and source uniqueness', async () => {
