@@ -560,6 +560,63 @@ describe('PostgreSQL persistence constraints', () => {
     await expect(repository.submitForReviewForCreator('submit-recovery', 'user-owner', now)).resolves.toBe('NOT_FOUND');
   });
 
+  it('coordinates concurrent Candidate submissions at the production Task CAS boundary', async () => {
+    const { db, now } = await createProjectFixture();
+    await createResultPersistenceFixture(db, now);
+    await db.task.update({ where: { id: 'task-1' }, data: { status: 'IN_PROGRESS', updatedAt: now } });
+    for (const [id, artifactId] of [['submit-left', 'artifact-1'], ['submit-right', 'artifact-4']] as const) {
+      await db.result.create({ data: resultRow(id, 'task-1', 'project-1', now) });
+      await db.resultArtifact.create({ data: { resultId: id, artifactId, taskId: 'task-1', projectId: 'project-1' } });
+    }
+
+    const leftClient = createPrismaClient(connectionString!);
+    const rightClient = createPrismaClient(connectionString!);
+    const gate = boundedGate(2);
+    const left = new ResultRepository(wrapPrismaForResultTests(leftClient, { beforeTaskUpdate: () => gate.arriveAndWait() }));
+    const right = new ResultRepository(wrapPrismaForResultTests(rightClient, { beforeTaskUpdate: () => gate.arriveAndWait() }));
+    const leftSubmit = left.submitForReviewForCreator('submit-left', 'user-owner', now);
+    const rightSubmit = right.submitForReviewForCreator('submit-right', 'user-owner', now);
+
+    try {
+      await gate.waitUntilReached();
+      expect(gate.arrivals).toBe(2);
+      gate.release();
+      const outcomes = await Promise.all([leftSubmit, rightSubmit]);
+      expect(outcomes.filter((value) => value === 'INVALID_STATE')).toHaveLength(1);
+      expect(outcomes.filter((value) => typeof value !== 'string')).toHaveLength(1);
+      expect(await db.task.findUniqueOrThrow({ where: { id: 'task-1' } })).toMatchObject({ status: 'READY_FOR_REVIEW' });
+      const submitted = await db.result.findMany({ where: { id: { in: ['submit-left', 'submit-right'] } }, orderBy: { id: 'asc' } });
+      expect(submitted.map((result) => result.status).sort()).toEqual(['CANDIDATE', 'HUMAN_REVIEW']);
+    } finally {
+      gate.cleanup();
+      await leftClient.$disconnect();
+      await rightClient.$disconnect();
+    }
+  });
+
+  it('rolls back submission and review when the production Task CAS write fails', async () => {
+    const { db, now } = await createProjectFixture();
+    await createResultPersistenceFixture(db, now);
+    await db.task.update({ where: { id: 'task-1' }, data: { status: 'IN_PROGRESS', updatedAt: now } });
+    await db.result.create({ data: resultRow('submit-task-rollback', 'task-1', 'project-1', now) });
+    await db.resultArtifact.create({ data: { resultId: 'submit-task-rollback', artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } });
+    const failingSubmit = new ResultRepository(wrapPrismaForResultTests(db, {
+      beforeTaskUpdate: () => { throw new Error('inject submission Task write failure'); }
+    }));
+    await expect(failingSubmit.submitForReviewForCreator('submit-task-rollback', 'user-owner', now)).rejects.toThrow('inject submission Task write failure');
+    expect(await db.result.findUniqueOrThrow({ where: { id: 'submit-task-rollback' } })).toMatchObject({ status: 'CANDIDATE', submittedByUserId: null, submittedAt: null });
+    expect(await db.task.findUniqueOrThrow({ where: { id: 'task-1' } })).toMatchObject({ status: 'IN_PROGRESS' });
+
+    await createHumanReviewFixture(db, now, 'review-task-rollback');
+    const failingReview = new ResultRepository(wrapPrismaForResultTests(db, {
+      beforeTaskUpdate: () => { throw new Error('inject review Task write failure'); }
+    }));
+    await expect(failingReview.decideForReviewer({ resultId: 'review-task-rollback', reviewerId: 'reviewer-1', decision: 'ACCEPT', reviewId: 'review-task-failed', now })).rejects.toThrow('inject review Task write failure');
+    expect(await db.result.findUniqueOrThrow({ where: { id: 'review-task-rollback' } })).toMatchObject({ status: 'HUMAN_REVIEW' });
+    expect(await db.task.findUniqueOrThrow({ where: { id: 'task-1' } })).toMatchObject({ status: 'READY_FOR_REVIEW' });
+    expect(await db.review.count({ where: { resultId: 'review-task-rollback' } })).toBe(0);
+  });
+
   it('coordinates real reviewer transactions and rolls back a failed Review creation', async () => {
     const { db, now } = await createProjectFixture();
     await createResultPersistenceFixture(db, now);
@@ -737,6 +794,7 @@ function wrapPrismaForResultTests(
     beforeReviewResultUpdate?: () => Promise<void> | void;
     beforeReviewCreate?: () => Promise<void> | void;
     beforeSubmissionResultUpdate?: () => Promise<void> | void;
+    beforeTaskUpdate?: () => Promise<void> | void;
     afterResultFindFirst?: () => Promise<void> | void;
     beforeRecoveryResultFindFirst?: () => Promise<void> | void;
     onTransaction?: () => number;
@@ -748,7 +806,7 @@ function wrapPrismaForResultTests(
       return prisma.$transaction(async (transaction) => callback(new Proxy(transaction, {
         get(target, property, receiver) {
           const model = Reflect.get(target, property, receiver);
-          if ((property !== 'result' && property !== 'resultArtifact' && property !== 'review') || typeof model !== 'object' || model === null) return model;
+          if ((property !== 'result' && property !== 'resultArtifact' && property !== 'review' && property !== 'task') || typeof model !== 'object' || model === null) return model;
           return new Proxy(model, {
             get(resultTarget, resultProperty, resultReceiver) {
               const method = Reflect.get(resultTarget, resultProperty, resultReceiver);
@@ -782,6 +840,12 @@ function wrapPrismaForResultTests(
               if (property === 'review' && resultProperty === 'create') {
                 return async (...argumentsList: unknown[]) => {
                   await hooks.beforeReviewCreate?.();
+                  return Reflect.apply(method, resultTarget, argumentsList);
+                };
+              }
+              if (property === 'task' && resultProperty === 'updateMany') {
+                return async (...argumentsList: unknown[]) => {
+                  await hooks.beforeTaskUpdate?.();
                   return Reflect.apply(method, resultTarget, argumentsList);
                 };
               }
