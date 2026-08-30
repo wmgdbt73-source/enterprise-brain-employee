@@ -324,6 +324,17 @@ confer Review authority.
 
 ---
 
+## ADR-024 — Result Review Coordinates the Owning Task
+
+EB-013 makes formal Result submission and Human Review coordinate the owning
+Task in one PostgreSQL transaction. Submission requires `Task.IN_PROGRESS` and
+moves Result/Task to `HUMAN_REVIEW`/`READY_FOR_REVIEW`. ACCEPT moves them to
+`ACCEPTED`/`ACCEPTED`; REWORK moves them to `REWORK`/`IN_PROGRESS`. Tasks are
+never auto-closed. Dependencies are persisted only for newly-created Tasks in
+the same Project and block START until every upstream Task is ACCEPTED or CLOSED.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

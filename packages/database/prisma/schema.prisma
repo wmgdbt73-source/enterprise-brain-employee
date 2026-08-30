@@ -307,8 +307,9 @@ model TaskAssignment {
 model TaskDependency {
   taskId          String @map("task_id")
   dependsOnTaskId String @map("depends_on_task_id")
-  task            Task   @relation("TaskDependencies", fields: [taskId], references: [id], onDelete: Cascade)
-  dependsOnTask   Task   @relation("TaskDependents", fields: [dependsOnTaskId], references: [id], onDelete: Cascade)
+  projectId       String @map("project_id")
+  task            Task   @relation("TaskDependencies", fields: [taskId, projectId], references: [id, projectId], onDelete: Cascade)
+  dependsOnTask   Task   @relation("TaskDependents", fields: [dependsOnTaskId, projectId], references: [id, projectId], onDelete: Cascade)
 
   @@id([taskId, dependsOnTaskId])
   @@map("task_dependencies")

@@ -215,16 +215,16 @@ describe('PostgreSQL persistence constraints', () => {
 
     await expect(
       db.taskDependency.create({
-        data: { taskId: 'task-1', dependsOnTaskId: 'missing-task' }
+        data: { taskId: 'task-1', dependsOnTaskId: 'missing-task', projectId: 'project-1' }
       })
     ).rejects.toMatchObject({ code: 'P2003' });
 
     await db.taskDependency.create({
-      data: { taskId: 'task-1', dependsOnTaskId: 'task-2' }
+      data: { taskId: 'task-1', dependsOnTaskId: 'task-2', projectId: 'project-1' }
     });
     await expect(
       db.taskDependency.create({
-        data: { taskId: 'task-1', dependsOnTaskId: 'task-2' }
+        data: { taskId: 'task-1', dependsOnTaskId: 'task-2', projectId: 'project-1' }
       })
     ).rejects.toMatchObject({ code: 'P2002' });
   });

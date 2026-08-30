@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type {
   ProjectContract,
   TaskContract,
@@ -32,6 +32,8 @@ export function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DesktopApiError>();
   const [runtimeLabel, setRuntimeLabel] = useState('Work · Desktop Runtime');
+  const selectedTaskIdRef = useRef<string | undefined>(undefined);
+  selectedTaskIdRef.current = task?.id;
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -101,16 +103,19 @@ export function App() {
     await loadTasks(project.id);
     if (operation.data) setTask(operation.data);
   }
-  async function startTask(value: TaskContract) {
+  async function startTask(value: TaskContract): Promise<DesktopResult<TaskContract>> {
     const operation = resolveOperation(
       await window.enterpriseBrain.tasks.start(value.id)
     );
-    if (operation.error) return setError(operation.error);
+    if (operation.error) return { ok: false, error: operation.error };
     setError(undefined);
     if (operation.data) {
       setTask(operation.data);
       await loadTasks(operation.data.projectId);
     }
+    return operation.data
+      ? { ok: true, data: operation.data }
+      : { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Task start returned no data', details: {} } };
   }
   async function readFile(
     value: TaskContract,
@@ -168,11 +173,31 @@ export function App() {
     return window.enterpriseBrain.results.create(value.id, artifactIds, idempotencyKey);
   }
   async function submitResult(resultId: string): Promise<DesktopResult<ResultContract>> {
-    return window.enterpriseBrain.results.submitReview(resultId);
+    const selectedTask = task;
+    const response = await window.enterpriseBrain.results.submitReview(resultId);
+    if (response.ok && selectedTask && selectedTaskIdRef.current === selectedTask.id) {
+      const refreshed = resolveOperation(await window.enterpriseBrain.tasks.get(selectedTask.id));
+      if (refreshed.data && selectedTaskIdRef.current === selectedTask.id) {
+        setTask(refreshed.data);
+        await loadTasks(refreshed.data.projectId);
+      }
+    }
+    return response;
   }
   const getResult = (resultId: string) => window.enterpriseBrain.results.get(resultId);
   const listResultReviews = (resultId: string) => window.enterpriseBrain.results.listReviews(resultId);
-  const decideResult = (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => window.enterpriseBrain.results.decide(resultId, decision, comment);
+  const decideResult = async (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => {
+    const selectedTask = task;
+    const response = await window.enterpriseBrain.results.decide(resultId, decision, comment);
+    if (response.ok && selectedTask && selectedTaskIdRef.current === selectedTask.id) {
+      const refreshed = resolveOperation(await window.enterpriseBrain.tasks.get(selectedTask.id));
+      if (refreshed.data && selectedTaskIdRef.current === selectedTask.id) {
+        setTask(refreshed.data);
+        await loadTasks(refreshed.data.projectId);
+      }
+    }
+    return response;
+  };
 
   return (
     <div className="app-shell">

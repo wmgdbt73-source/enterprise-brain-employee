@@ -1231,6 +1231,21 @@ describe('Task API vertical slice', () => {
     await app.close();
   });
 
+  it('persists same-project dependencies and blocks Start until they are accepted', async () => {
+    const db = requireDatabase();
+    const app = await createApp({ prisma: db });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Dependencies' } })).json();
+    const upstream = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Upstream' } })).json();
+    const downstream = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Downstream', dependencyIds: [upstream.id] } })).json();
+    expect(downstream.dependencyIds).toEqual([upstream.id]);
+    expect((await app.inject({ method: 'GET', url: `/tasks/${downstream.id}` })).json().dependencyIds).toEqual([upstream.id]);
+    const blocked = await app.inject({ method: 'POST', url: `/tasks/${downstream.id}/start` });
+    expect(blocked.statusCode).toBe(409); expect(blocked.json()).toMatchObject({ error: { code: 'TASK_DEPENDENCY_BLOCKED', details: { blockingDependencyIds: [upstream.id] } } });
+    await db.task.update({ where: { id: upstream.id }, data: { status: 'ACCEPTED' } });
+    expect((await app.inject({ method: 'POST', url: `/tasks/${downstream.id}/start` })).json()).toMatchObject({ status: 'IN_PROGRESS' });
+    await app.close();
+  });
+
   it('hides confirmations from revoked owners and other current project members', async () => {
     const db = requireDatabase();
     const owner = await createApp({ prisma: db });

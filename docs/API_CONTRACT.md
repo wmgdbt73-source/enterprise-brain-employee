@@ -86,7 +86,10 @@ Formal status transition must be validated server-side.
 `POST /projects/:projectId/tasks` accepts only `title`, optional `description`,
 `assigneeId`, `priority`, `acceptanceCriteria`, and ISO-8601 `deadline`; it
 returns `201` with TaskContract. Unknown fields including `id`, `projectId`,
-`status`, timestamps and `dependencyIds` are rejected.
+`status` and timestamps are rejected. `dependencyIds` is optional and contains
+unique, non-blank IDs of existing Tasks in the same Project. `POST /tasks/:id/start`
+returns `409 TASK_DEPENDENCY_BLOCKED` with safe `blockingDependencyIds` until all
+dependencies are `ACCEPTED` or `CLOSED`.
 
 `GET /projects/:projectId/tasks` returns `{ "tasks": [] }` ordered by
 `createdAt DESC`. `GET /tasks/:id` returns TaskContract. `POST /tasks/:id/start`
@@ -277,6 +280,7 @@ Initial error codes:
 - HUMAN_CONFIRMATION_REQUIRED
 - AGENT_RUN_FAILED
 - ARTIFACT_SOURCE_INVALID
+- TASK_DEPENDENCY_BLOCKED
 
 ## 12. Contract Rule（契约规则）
 

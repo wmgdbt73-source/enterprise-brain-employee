@@ -11,6 +11,7 @@ const body = {
     assigneeId: { type: 'string' },
     priority: { type: 'string', enum: ['P0', 'P1', 'P2', 'P3'] },
     acceptanceCriteria: { type: 'array', items: { type: 'string' } },
+    dependencyIds: { type: 'array', uniqueItems: true, items: { type: 'string', minLength: 1 } },
     deadline: { type: 'string', format: 'date-time' }
   }
 } as const;
@@ -39,6 +40,7 @@ export function registerTaskRoutes(
       assigneeId?: string;
       priority?: 'P0' | 'P1' | 'P2' | 'P3';
       acceptanceCriteria?: string[];
+      dependencyIds?: string[];
       deadline?: string;
     };
   }>(

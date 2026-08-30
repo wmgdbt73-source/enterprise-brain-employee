@@ -23,6 +23,7 @@ import {
 import { registerTaskRoutes } from './modules/tasks/task-routes.js';
 import {
   TaskNotFoundError,
+  TaskDependencyBlockedError,
   TaskService
 } from './modules/tasks/task-service.js';
 import { registerAgentRunRoutes } from './modules/agent-runs/agent-run-routes.js';
@@ -140,6 +141,8 @@ export async function createApp(
           details: {}
         }
       });
+    if (error instanceof TaskDependencyBlockedError)
+      return reply.code(409).send({ error: { code: 'TASK_DEPENDENCY_BLOCKED', message: 'Task dependencies are not accepted', details: { blockingDependencyIds: error.blockingDependencyIds } } });
     if (error instanceof AgentRunInvalidResultError)
       return reply.code(400).send({
         error: {

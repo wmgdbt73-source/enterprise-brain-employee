@@ -36,6 +36,7 @@ export {
 } from './project-member.js';
 export {
   applyTaskAction,
+  blockingDependencyIds,
   assignTask,
   createTask,
   rehydrateTask,
