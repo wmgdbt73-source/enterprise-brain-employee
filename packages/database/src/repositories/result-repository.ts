@@ -53,7 +53,8 @@ export class ResultRepository {
   }
 
   async submitForReviewForCreator(resultId: string, userId: string, now: Date): Promise<ResultContract | 'NOT_FOUND' | 'FORBIDDEN' | 'INVALID_STATE'> {
-    return this.prisma.$transaction(async (tx) => {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
       const result = await tx.result.findFirst({ where: { id: resultId, project: { members: { some: { userId } } } } });
       if (!result) return 'NOT_FOUND';
       if (result.createdByUserId !== userId) return 'FORBIDDEN';
@@ -62,13 +63,19 @@ export class ResultRepository {
       if (result.status !== 'CANDIDATE') return 'INVALID_STATE';
       const transitioned = submitResultForHumanReview(toDomain(result, links.map((link) => link.artifactId)), asUserId(userId), now);
       const updated = await tx.result.updateMany({ where: { id: resultId, status: 'CANDIDATE' }, data: { status: transitioned.status, submittedByUserId: userId, submittedAt: transitioned.submittedAt, updatedAt: transitioned.updatedAt } });
-      if (updated.count !== 1) return 'INVALID_STATE';
+      if (updated.count !== 1) throw new SubmissionCasConflict();
       return toContract({ ...result, status: transitioned.status, submittedByUserId: userId, submittedAt: transitioned.submittedAt!, updatedAt: transitioned.updatedAt }, links.map((link) => link.artifactId));
-    }, { isolationLevel: 'RepeatableRead' });
+      }, { isolationLevel: 'RepeatableRead' });
+    } catch (error) {
+      if (!(error instanceof SubmissionCasConflict) && !isSerializationConflict(error)) throw error;
+      const result = await this.findForUser(resultId, userId);
+      return result?.status === 'HUMAN_REVIEW' && result.createdByUserId === userId ? result : 'INVALID_STATE';
+    }
   }
 
   async decideForReviewer(input: { resultId: string; reviewerId: string; decision: ReviewDecision; comment?: string; reviewId: string; now: Date }): Promise<ResultReviewAction> {
-    return this.prisma.$transaction(async (tx) => {
+    try {
+      return await this.prisma.$transaction(async (tx) => {
       const result = await tx.result.findFirst({ where: { id: input.resultId, project: { members: { some: { userId: input.reviewerId } } } } });
       if (!result) return 'NOT_FOUND';
       const membership = await tx.projectMember.findUnique({ where: { projectId_userId: { projectId: result.projectId, userId: input.reviewerId } } });
@@ -79,9 +86,27 @@ export class ResultRepository {
       const links = await tx.resultArtifact.findMany({ where: { resultId: result.id }, orderBy: { artifactId: 'asc' } });
       const transitioned = decideResultReview(toDomain(result, links.map((link) => link.artifactId)), input.decision, input.now);
       const updated = await tx.result.updateMany({ where: { id: result.id, status: 'HUMAN_REVIEW' }, data: { status: transitioned.status, updatedAt: transitioned.updatedAt } });
-      if (updated.count !== 1) return 'CONFLICT';
+      if (updated.count !== 1) throw new ReviewCasConflict();
       const review = await tx.review.create({ data: { id: input.reviewId, resultId: result.id, projectId: result.projectId, reviewerId: input.reviewerId, decision: input.decision, ...(input.comment ? { comment: input.comment } : {}), reviewedAt: input.now } });
       return { review: toReviewContract(review), created: true };
+      }, { isolationLevel: 'RepeatableRead' });
+    } catch (error) {
+      if (!(error instanceof ReviewCasConflict) && !isReviewCompetition(error)) throw error;
+      return this.recoverReviewDecision(input);
+    }
+  }
+
+  private async recoverReviewDecision(input: { resultId: string; reviewerId: string; decision: ReviewDecision; comment?: string }): Promise<ResultReviewAction> {
+    return this.prisma.$transaction(async (tx) => {
+      const result = await tx.result.findFirst({ where: { id: input.resultId, project: { members: { some: { userId: input.reviewerId } } } } });
+      if (!result) return 'NOT_FOUND';
+      const membership = await tx.projectMember.findUnique({ where: { projectId_userId: { projectId: result.projectId, userId: input.reviewerId } } });
+      if (!membership || result.createdByUserId === input.reviewerId || (membership.role !== 'OWNER' && membership.role !== 'REVIEWER')) return 'FORBIDDEN';
+      const review = await tx.review.findUnique({ where: { resultId: result.id } });
+      if (!review) return 'CONFLICT';
+      return review.reviewerId === input.reviewerId && review.decision === input.decision && review.comment === input.comment
+        ? { review: toReviewContract(review), created: false }
+        : 'CONFLICT';
     }, { isolationLevel: 'RepeatableRead' });
   }
 
@@ -157,3 +182,13 @@ export function isResultIdempotencyConflict(error: unknown): boolean {
   return cause.kind === 'UniqueConstraintViolation' && Array.isArray(fields) && fields.length === 3 && fields[0] === 'created_by_user_id' && fields[1] === 'task_id' && fields[2] === 'idempotency_key';
 }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
+class SubmissionCasConflict extends Error {}
+class ReviewCasConflict extends Error {}
+function isSerializationConflict(error: unknown): boolean { return isRecord(error) && error.code === 'P2034'; }
+function isReviewCompetition(error: unknown): boolean {
+  if (isSerializationConflict(error)) return true;
+  if (!isRecord(error) || error.code !== 'P2002' || !isRecord(error.meta) || !isRecord(error.meta.driverAdapterError) || !isRecord(error.meta.driverAdapterError.cause)) return false;
+  const cause = error.meta.driverAdapterError.cause;
+  const fields = isRecord(cause.constraint) ? cause.constraint.fields : undefined;
+  return cause.kind === 'UniqueConstraintViolation' && Array.isArray(fields) && fields.length === 1 && fields[0] === 'result_id';
+}

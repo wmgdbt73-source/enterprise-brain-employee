@@ -170,6 +170,9 @@ export function App() {
   async function submitResult(resultId: string): Promise<DesktopResult<ResultContract>> {
     return window.enterpriseBrain.results.submitReview(resultId);
   }
+  const getResult = (resultId: string) => window.enterpriseBrain.results.get(resultId);
+  const listResultReviews = (resultId: string) => window.enterpriseBrain.results.listReviews(resultId);
+  const decideResult = (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => window.enterpriseBrain.results.decide(resultId, decision, comment);
 
   return (
     <div className="app-shell">
@@ -211,6 +214,9 @@ export function App() {
             onRejectWrite={rejectWrite}
             onCreateResult={createResult}
             onSubmitResult={submitResult}
+            onGetResult={getResult}
+            onListReviews={listResultReviews}
+            onDecideReview={decideResult}
           />
         )}
       </main>

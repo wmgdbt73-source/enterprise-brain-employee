@@ -586,6 +586,17 @@ describe('PostgreSQL persistence constraints', () => {
     await db.agentToolCall.delete({ where: { id: 'write-call' } });
     await expect(db.agentToolCall.create({ data: { ...writeCall(now), id: 'blank-device-call', deviceId: '' } })).rejects.toThrow();
   });
+
+  it('enforces immutable one-per-Result Human Review provenance', async () => {
+    const { db, now } = await createProjectFixture();
+    await createResultPersistenceFixture(db, now);
+    await db.result.create({ data: { ...resultRow('review-result', 'task-1', 'project-1', now), status: 'HUMAN_REVIEW', submittedByUserId: 'user-owner', submittedAt: now } });
+    await db.user.create({ data: { id: 'reviewer-1', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now } });
+    await db.review.create({ data: { id: 'review-1', resultId: 'review-result', projectId: 'project-1', reviewerId: 'reviewer-1', decision: 'ACCEPT', reviewedAt: now } });
+    await expect(db.review.create({ data: { id: 'review-duplicate', resultId: 'review-result', projectId: 'project-1', reviewerId: 'reviewer-1', decision: 'REWORK', reviewedAt: now } })).rejects.toMatchObject({ code: 'P2002' });
+    await expect(db.review.create({ data: { id: 'review-project-mismatch', resultId: 'review-result', projectId: 'missing-project', reviewerId: 'reviewer-1', decision: 'ACCEPT', reviewedAt: now } })).rejects.toMatchObject({ code: 'P2003' });
+    await expect(db.review.create({ data: { id: 'review-user-mismatch', resultId: 'result-unknown', projectId: 'project-1', reviewerId: 'missing-user', decision: 'ACCEPT', reviewedAt: now } })).rejects.toMatchObject({ code: 'P2003' });
+  });
 });
 
 async function createResultPersistenceFixture(db: ReturnType<typeof requireDatabase>, now: Date) {

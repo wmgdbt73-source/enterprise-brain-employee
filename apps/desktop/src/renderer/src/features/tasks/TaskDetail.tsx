@@ -18,6 +18,9 @@ export function TaskDetail({
   onRejectWrite
   ,onCreateResult
   ,onSubmitResult
+  ,onGetResult
+  ,onListReviews
+  ,onDecideReview
 }: {
   task?: TaskContract;
   onStart: (task: TaskContract) => Promise<void>;
@@ -32,6 +35,9 @@ export function TaskDetail({
   onRejectWrite: (confirmationId: string) => Promise<void>;
   onCreateResult: (task: TaskContract, artifactIds: string[], idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
   onSubmitResult?: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
+  onGetResult?: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
+  onListReviews?: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract[]>>;
+  onDecideReview?: (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract>>;
 }) {
   const [relativePath, setRelativePath] = useState('');
   const [eligibleRun, setEligibleRun] = useState<AgentRunContract>();
@@ -44,6 +50,11 @@ export function TaskDetail({
   const [pendingAttempt, setPendingAttempt] = useState<ResultConfirmationAttempt>();
   const [resultSubmitting, setResultSubmitting] = useState(false);
   const [resultError, setResultError] = useState<DesktopApiError>();
+  const [resultIdInput, setResultIdInput] = useState('');
+  const [reviews, setReviews] = useState<import('@enterprise-brain/contracts').ReviewContract[]>([]);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewBusy, setReviewBusy] = useState(false);
+  const activeResultRef = useRef<string | undefined>(undefined);
   const taskIdRef = useRef(task?.id);
   const pendingAttemptRef = useRef<ResultConfirmationAttempt | undefined>(undefined);
   taskIdRef.current = task?.id;
@@ -59,6 +70,7 @@ export function TaskDetail({
     setAttempt(undefined);
     setResultSubmitting(false);
     setResultError(undefined);
+    setReviews([]); setReviewComment(''); setResultIdInput(''); activeResultRef.current = undefined;
   }, [task?.id]);
   async function submitResult(attempt: ResultConfirmationAttempt) {
     if (!task || resultSubmitting) return;
@@ -83,6 +95,35 @@ export function TaskDetail({
     setResultError(undefined);
     setCandidate(result.data);
     setAttempt(undefined);
+  }
+  async function openResult(id: string) {
+    if (!onGetResult || !onListReviews || !id.trim()) return;
+    const requested = id.trim(); activeResultRef.current = requested; setReviewBusy(true);
+    const [loaded, listed] = await Promise.all([onGetResult(requested), onListReviews(requested)]);
+    if (activeResultRef.current !== requested) return;
+    setReviewBusy(false);
+    if (!loaded.ok) { setResultError(loaded.error); return; }
+    if (!listed.ok) { setResultError(listed.error); return; }
+    setCandidate(loaded.data); setReviews(listed.data); setResultError(undefined);
+  }
+  async function decide(decision: 'ACCEPT' | 'REWORK') {
+    if (!candidate || !onDecideReview || reviewBusy) return;
+    const id = candidate.id; activeResultRef.current = id; setReviewBusy(true);
+    const response = await onDecideReview(id, decision, reviewComment);
+    if (activeResultRef.current !== id) return;
+    setReviewBusy(false);
+    if (!response.ok) { setResultError(response.error); return; }
+    setReviews((value) => [...value, response.data]);
+    if (onGetResult) { const current = await onGetResult(id); if (activeResultRef.current === id && current.ok) setCandidate(current.data); }
+  }
+  async function submitCandidateForReview() {
+    if (!candidate || !onSubmitResult || resultSubmitting) return;
+    const id = candidate.id; activeResultRef.current = id; setResultSubmitting(true);
+    const response = await onSubmitResult(id);
+    if (activeResultRef.current !== id) return;
+    setResultSubmitting(false);
+    if (!response.ok) { setResultError(response.error); return; }
+    setCandidate(response.data); setResultError(undefined);
   }
   async function readFile() {
     if (!task || relativePath.trim().length === 0) return;
@@ -163,8 +204,11 @@ export function TaskDetail({
             }}>Create Result Candidate</button>
             {resultError && <div className="result-error"><p>{resultError.message}</p><button onClick={() => pendingAttempt && void submitResult(pendingAttempt)} disabled={!pendingAttempt || resultSubmitting}>Retry Result Candidate</button></div>}
             {candidate && <p>Result Candidate: {candidate.status} · {candidate.id}</p>}
-            {candidate?.status === 'CANDIDATE' && onSubmitResult && <button onClick={() => void onSubmitResult(candidate.id).then((result) => { if (result.ok) setCandidate(result.data); else setResultError(result.error); })}>Submit for Human Review</button>}
+            {candidate?.status === 'CANDIDATE' && onSubmitResult && <button disabled={resultSubmitting} onClick={() => void submitCandidateForReview()}>Submit for Human Review</button>}
             {candidate?.status === 'HUMAN_REVIEW' && <p>Waiting for Human Review. This does not complete the Task.</p>}
+            <label>Open Result ID<input value={resultIdInput} onChange={(event) => setResultIdInput(event.target.value)} placeholder="Result ID" /></label>
+            <button disabled={reviewBusy} onClick={() => void openResult(resultIdInput)}>Open Result</button>
+            {candidate && <section><p>Result {candidate.status} · Creator {candidate.createdByUserId} · Submitted {candidate.submittedByUserId || '—'} {candidate.submittedAt || ''}</p><p>Artifacts: {candidate.artifactIds.join(', ')}</p><p>Task status is not changed by Human Review.</p>{reviews.map((review) => <p key={review.id}>{review.decision} · {review.reviewerId} · {review.comment || 'No comment'}</p>)}{candidate.status === 'HUMAN_REVIEW' && onDecideReview && <><label>Review comment<textarea value={reviewComment} onChange={(event) => setReviewComment(event.target.value)} /></label><button disabled={reviewBusy} onClick={() => void decide('ACCEPT')}>Accept Result</button><button disabled={reviewBusy} onClick={() => void decide('REWORK')}>Request Rework</button></>}</section>}
           </section>
           <section className="artifact-panel">
             <p className="eyebrow">CONFIRMED LOCAL WRITE · EMPLOYEE-SUPPLIED CONTENT</p>
