@@ -17,6 +17,7 @@ export function TaskDetail({
   onApproveWrite,
   onRejectWrite
   ,onCreateResult
+  ,onSubmitResult
 }: {
   task?: TaskContract;
   onStart: (task: TaskContract) => Promise<void>;
@@ -30,6 +31,7 @@ export function TaskDetail({
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
   onCreateResult: (task: TaskContract, artifactIds: string[], idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
+  onSubmitResult?: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
 }) {
   const [relativePath, setRelativePath] = useState('');
   const [eligibleRun, setEligibleRun] = useState<AgentRunContract>();
@@ -161,6 +163,8 @@ export function TaskDetail({
             }}>Create Result Candidate</button>
             {resultError && <div className="result-error"><p>{resultError.message}</p><button onClick={() => pendingAttempt && void submitResult(pendingAttempt)} disabled={!pendingAttempt || resultSubmitting}>Retry Result Candidate</button></div>}
             {candidate && <p>Result Candidate: {candidate.status} · {candidate.id}</p>}
+            {candidate?.status === 'CANDIDATE' && onSubmitResult && <button onClick={() => void onSubmitResult(candidate.id).then((result) => { if (result.ok) setCandidate(result.data); else setResultError(result.error); })}>Submit for Human Review</button>}
+            {candidate?.status === 'HUMAN_REVIEW' && <p>Waiting for Human Review. This does not complete the Task.</p>}
           </section>
           <section className="artifact-panel">
             <p className="eyebrow">CONFIRMED LOCAL WRITE · EMPLOYEE-SUPPLIED CONTENT</p>

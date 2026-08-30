@@ -2,7 +2,7 @@ import type {
   AgentRunContract,
   ReadOnlyAgentToolIntent,
   ArtifactContract,
-  ResultContract,
+  ResultContract, ReviewContract, ReviewDecision,
   HumanConfirmationContract,
   HumanConfirmationDetailContract,
   LocalPermission,
@@ -109,6 +109,9 @@ export interface EnterpriseBrainBridge {
   results: {
     create(taskId: string, artifactIds: string[], idempotencyKey: string): Promise<DesktopResult<ResultContract>>;
     get(id: string): Promise<DesktopResult<ResultContract>>;
+    submitReview(id: string): Promise<DesktopResult<ResultContract>>;
+    decide(id: string, decision: ReviewDecision, comment?: string): Promise<DesktopResult<ReviewContract>>;
+    listReviews(id: string): Promise<DesktopResult<ReviewContract[]>>;
   };
   confirmedWrites: {
     prepare(taskId: string, input: { relativePath: string; content: string }): Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>;
@@ -194,7 +197,10 @@ export function createEnterpriseBrainBridge(
     }
     ,results: {
       create: (taskId, artifactIds, idempotencyKey) => invoke('results:create', { taskId, artifactIds, idempotencyKey }) as Promise<DesktopResult<ResultContract>>,
-      get: (id) => invoke('results:get', { id }) as Promise<DesktopResult<ResultContract>>
+      get: (id) => invoke('results:get', { id }) as Promise<DesktopResult<ResultContract>>,
+      submitReview: (id) => invoke('results:submit-review', { id }) as Promise<DesktopResult<ResultContract>>,
+      decide: (id, decision, comment) => invoke('results:decide', { id, decision, comment }) as Promise<DesktopResult<ReviewContract>>,
+      listReviews: (id) => invoke('results:list-reviews', { id }) as Promise<DesktopResult<ReviewContract[]>>
     }
     ,confirmedWrites: {
       prepare: (taskId, input) => invoke('confirmed-writes:prepare', { taskId, input }) as Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>,

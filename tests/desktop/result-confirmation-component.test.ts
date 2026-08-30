@@ -37,7 +37,10 @@ describe('Result confirmation component lifecycle', () => {
             ? failure('API_UNAVAILABLE')
             : success(result('result-a', taskId, artifactIds));
         },
-        get: async () => failure('UNUSED')
+        get: async () => failure('UNUSED'),
+        submitReview: async () => failure('UNUSED'),
+        decide: async () => failure('UNUSED'),
+        listReviews: async () => ({ ok: true as const, data: [] })
       }
     });
     await renderApp();
@@ -120,7 +123,7 @@ function bridge(overrides: Partial<EnterpriseBrainBridge>): EnterpriseBrainBridg
     projects: { list: async () => ({ ok: true, data: [project] }), get: async () => ({ ok: true, data: project }), create: async () => ({ ok: true, data: project }) },
     tasks: { list: async () => ({ ok: true, data: [taskA] }), get: async () => ({ ok: true, data: taskA }), create: async () => ({ ok: true, data: taskA }), start: async () => ({ ok: true, data: taskA }) },
     workspace: { get: async () => ({ ok: true, data: null }), select: async () => ({ ok: true, data: { cancelled: true } }), unbind: async () => ({ ok: true, data: undefined }), listDirectory: ok, readFile: async () => failure('UNUSED') },
-    agents: { run: async () => failure('UNUSED') }, artifacts: { register: async () => failure('UNUSED'), listForTask: async () => ({ ok: true, data: [artifact] }) }, results: { create: async () => failure('UNCONFIGURED'), get: async () => failure('UNUSED') }, confirmedWrites: { prepare: async () => failure('UNUSED'), approve: async () => failure('UNUSED'), reject: async () => failure('UNUSED') },
+    agents: { run: async () => failure('UNUSED') }, artifacts: { register: async () => failure('UNUSED'), listForTask: async () => ({ ok: true, data: [artifact] }) }, results: { create: async () => failure('UNCONFIGURED'), get: async () => failure('UNUSED'), submitReview: async () => failure('UNUSED'), decide: async () => failure('UNUSED'), listReviews: async () => ({ ok: true, data: [] }) }, confirmedWrites: { prepare: async () => failure('UNUSED'), approve: async () => failure('UNUSED'), reject: async () => failure('UNUSED') },
     ...overrides
   } as EnterpriseBrainBridge;
 }

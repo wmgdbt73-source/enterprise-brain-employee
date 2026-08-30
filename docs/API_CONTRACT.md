@@ -217,8 +217,10 @@ Artifacts return hidden `404 NOT_FOUND`.
 ### GET /results/:id
 Get Result（结果详情）.
 
-Human Review submission is deferred; EB-011 creates only `CANDIDATE` and does not
-change Task state or create a Review.
+### POST /results/:id/submit-review
+Only the Result creator, while still a ProjectMember, may submit `CANDIDATE` to
+`HUMAN_REVIEW`. It returns `200`; repeat returns the same Result. Terminal states
+return `409`; this action does not change Task state.
 
 ## 9. Review APIs（评审接口）
 
@@ -234,6 +236,10 @@ Request:
 ```
 
 Server validates reviewer authority before Result becomes ACCEPTED.
+Only current Project `OWNER` or `REVIEWER`, excluding the Result creator, may
+decide a `HUMAN_REVIEW` Result. `GET /results/:id/reviews` is membership-scoped.
+First decision returns `201`; identical retry returns `200`; a different final
+decision returns `409`. EB-012 does not change Task state.
 
 ## 10. Activity / Notification APIs（动态 / 通知接口）
 

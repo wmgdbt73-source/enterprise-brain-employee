@@ -167,6 +167,9 @@ export function App() {
     // Do not replace the workspace and discard its idempotency identity.
     return window.enterpriseBrain.results.create(value.id, artifactIds, idempotencyKey);
   }
+  async function submitResult(resultId: string): Promise<DesktopResult<ResultContract>> {
+    return window.enterpriseBrain.results.submitReview(resultId);
+  }
 
   return (
     <div className="app-shell">
@@ -207,6 +210,7 @@ export function App() {
             onApproveWrite={approveWrite}
             onRejectWrite={rejectWrite}
             onCreateResult={createResult}
+            onSubmitResult={submitResult}
           />
         )}
       </main>

@@ -29,6 +29,7 @@ export function ProjectWorkspace({
   onApproveWrite,
   onRejectWrite
   ,onCreateResult
+  ,onSubmitResult
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -50,6 +51,7 @@ export function ProjectWorkspace({
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
   onCreateResult: (task: TaskContract, artifactIds: string[], idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
+  onSubmitResult: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
 }) {
   return (
     <section className="page">
@@ -91,6 +93,7 @@ export function ProjectWorkspace({
             onApproveWrite={onApproveWrite}
             onRejectWrite={onRejectWrite}
             onCreateResult={onCreateResult}
+            onSubmitResult={onSubmitResult}
           />
         </div>
       )}

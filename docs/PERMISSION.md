@@ -32,8 +32,9 @@ Initial permissions:
 - ADMIN（管理）
 
 Example:
-- Employee can read assigned Project / Task scope and submit Result Candidate when authorized.
-- Project Owner may assign work and review Result when authorized.
+- Result creator may submit their Candidate only while still a ProjectMember.
+- Current Project OWNER or REVIEWER may review a Result, but never their own Result.
+- System ADMIN alone grants no Review authority.
 - Admin manages broader configuration.
 
 ## 4. Local Desktop Permissions（本地电脑权限）

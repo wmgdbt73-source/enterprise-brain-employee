@@ -4,7 +4,7 @@ import type {
   AgentToolIntent,
   AgentToolRequest,
   ArtifactContract,
-  ResultContract,
+  ResultContract, ReviewContract, ReviewDecision,
   CurrentUserContract,
   HumanConfirmationContract,
   HumanConfirmationDetailContract,
@@ -146,6 +146,15 @@ export class DesktopApiGateway {
   }
   getResult(id: string): Promise<DesktopResult<ResultContract>> {
     return this.request(`/results/${encodeURIComponent(id)}`) as Promise<DesktopResult<ResultContract>>;
+  }
+  submitResultForReview(id: string): Promise<DesktopResult<ResultContract>> {
+    return this.request(`/results/${encodeURIComponent(id)}/submit-review`, { method: 'POST', body: {} }) as Promise<DesktopResult<ResultContract>>;
+  }
+  createReview(id: string, decision: ReviewDecision, comment?: string): Promise<DesktopResult<ReviewContract>> {
+    return this.request(`/results/${encodeURIComponent(id)}/reviews`, { method: 'POST', body: { decision, ...(comment ? { comment } : {}) } }) as Promise<DesktopResult<ReviewContract>>;
+  }
+  listReviews(id: string): Promise<DesktopResult<ReviewContract[]>> {
+    return this.request(`/results/${encodeURIComponent(id)}/reviews`).then((result) => result.ok ? { ok: true, data: (result.data as { reviews: ReviewContract[] }).reviews } : result);
   }
   private async request(
     path: string,

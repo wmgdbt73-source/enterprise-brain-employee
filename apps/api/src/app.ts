@@ -42,7 +42,7 @@ import {
 import { registerHumanConfirmationRoutes } from './modules/human-confirmations/human-confirmation-routes.js';
 import { HumanConfirmationConflictError, HumanConfirmationNotFoundError, HumanConfirmationService } from './modules/human-confirmations/human-confirmation-service.js';
 import { registerResultRoutes } from './modules/results/result-routes.js';
-import { ResultIdempotencyConflictError, ResultNotFoundError, ResultService } from './modules/results/result-service.js';
+import { ResultIdempotencyConflictError, ResultNotFoundError, ResultReviewConflictError, ResultReviewForbiddenError, ResultService, ResultStateConflictError } from './modules/results/result-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -159,6 +159,9 @@ export async function createApp(
       });
     if (error instanceof HumanConfirmationConflictError) return reply.code(409).send({ error: { code: 'HUMAN_CONFIRMATION_CONFLICT', message: 'Conflicting confirmation decision', details: {} } });
     if (error instanceof ResultIdempotencyConflictError) return reply.code(409).send({ error: { code: 'IDEMPOTENCY_KEY_CONFLICT', message: 'Idempotency key was previously used for a different Result Candidate request', details: {} } });
+    if (error instanceof ResultReviewForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot perform this human review action', details: {} } });
+    if (error instanceof ResultStateConflictError) return reply.code(409).send({ error: { code: 'INVALID_STATE_TRANSITION', message: 'Result is not in the required state', details: {} } });
+    if (error instanceof ResultReviewConflictError) return reply.code(409).send({ error: { code: 'REVIEW_CONFLICT', message: 'A different human review decision already exists', details: {} } });
 
     app.log.error(error);
     return reply.code(500).send({

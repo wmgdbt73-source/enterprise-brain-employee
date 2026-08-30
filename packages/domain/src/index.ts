@@ -56,7 +56,7 @@ export {
   type AgentRun
 } from './agent-run.js';
 export { createArtifact, type Artifact } from './artifact.js';
-export { createResultCandidate, rehydrateResult, type Result } from './result.js';
+export { createResultCandidate, rehydrateResult, submitResultForHumanReview, decideResultReview, type Result } from './result.js';
 export {
   createWorkspaceBinding,
   rehydrateWorkspaceBinding,

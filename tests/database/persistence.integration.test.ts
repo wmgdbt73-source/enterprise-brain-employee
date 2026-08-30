@@ -57,6 +57,7 @@ describe('PostgreSQL persistence constraints', () => {
   beforeEach(async () => {
     const db = requireDatabase();
     await db.humanConfirmation.deleteMany();
+    await db.review.deleteMany();
     await db.resultArtifact.deleteMany();
     await db.result.deleteMany();
     await db.artifact.deleteMany();
