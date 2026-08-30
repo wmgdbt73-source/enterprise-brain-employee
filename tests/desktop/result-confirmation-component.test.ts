@@ -87,6 +87,21 @@ describe('Result confirmation component lifecycle', () => {
     expect(text()).not.toContain('API unavailable');
   });
 
+  it('keeps a dependency block local and clears it after a successful retry', async () => {
+    let calls = 0;
+    mount();
+    await act(async () => root?.render(createElement(TaskDetail, {
+      task: taskA, onStart: async () => {
+        calls += 1;
+        return calls === 1 ? failure('TASK_DEPENDENCY_BLOCKED') : { ok: true as const, data: { ...taskA, status: 'IN_PROGRESS' as const } };
+      }, artifacts: [], onReadFile: async () => undefined, onRegisterArtifact: async () => {}, onPrepareWrite: async () => undefined, onApproveWrite: async () => {}, onRejectWrite: async () => {}, onCreateResult: async () => failure('UNUSED')
+    })));
+    await clickText('Start Task');
+    expect(text()).toContain('API unavailable');
+    await clickText('Start Task');
+    expect(text()).not.toContain('API unavailable');
+  });
+
   it('opens a Human Review Result by ID and sends an explicit reviewer decision without altering the Task', async () => {
     const humanReview: ResultContract = { ...result('result-review', taskA.id, [artifact.id]), status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user', submittedAt: '2026-01-02T00:00:00.000Z' };
     const decisions: Array<{ id: string; decision: string; comment?: string }> = [];

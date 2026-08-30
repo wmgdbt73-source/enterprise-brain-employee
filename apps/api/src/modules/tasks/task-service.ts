@@ -34,20 +34,13 @@ export class TaskService {
     const dependencyIds = input.dependencyIds ?? [];
     if (new Set(dependencyIds).size !== dependencyIds.length || dependencyIds.some((id) => id.trim().length === 0))
       throw new DomainError('INVALID_ARGUMENT', 'dependencyIds must be unique non-blank identifiers');
-    const members = await this.tasks.projectMembersForMember(
-      projectId,
-      context.currentUser.id
-    );
-    if (!members) throw new TaskNotFoundError();
-    if (!(await this.tasks.dependenciesExistForMember(projectId, context.currentUser.id, dependencyIds))) throw new TaskNotFoundError();
     const deadline = input.deadline ? new Date(input.deadline) : undefined;
     if (deadline && Number.isNaN(deadline.valueOf()))
       throw new DomainError(
         'INVALID_ARGUMENT',
         'deadline must be a valid ISO-8601 date-time'
       );
-    const task = createTask(
-      {
+    const created = await this.tasks.createForMember(projectId, context.currentUser.id, (members) => createTask({
         id: asTaskId(randomUUID()),
         projectId: asProjectId(projectId),
         title: input.title,
@@ -57,11 +50,9 @@ export class TaskService {
         acceptanceCriteria: input.acceptanceCriteria,
         dependencyIds: dependencyIds.map(asTaskId),
         deadline
-      },
-      members,
-      new Date()
-    );
-    return this.tasks.create(task);
+      }, members, new Date()));
+    if (created === 'NOT_FOUND') throw new TaskNotFoundError();
+    return created;
   }
 
   async list(

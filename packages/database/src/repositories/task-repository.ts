@@ -7,6 +7,7 @@ import {
   createProjectMember,
   applyTaskAction,
   blockingDependencyIds,
+  DomainError,
   rehydrateTask,
   type ProjectMember,
   type Task,
@@ -39,8 +40,29 @@ export class TaskRepository {
     );
   }
 
-  async create(task: Task): Promise<TaskContract> {
-    const record = await this.prisma.$transaction(async (transaction) => {
+  async createForMember(
+    projectId: string,
+    userId: UserId,
+    create: (members: ProjectMember[]) => Task
+  ): Promise<TaskContract | 'NOT_FOUND'> {
+    return this.prisma.$transaction(async (transaction) => {
+      const membership = await transaction.projectMember.findUnique({
+        where: { projectId_userId: { projectId, userId } }
+      });
+      if (!membership) return 'NOT_FOUND';
+      const members = await transaction.projectMember.findMany({
+        where: { projectId }
+      });
+      const domainMembers = members.map((member) => createProjectMember({
+        id: asProjectMemberId(member.id), projectId: asProjectId(member.projectId),
+        userId: asUserId(member.userId), role: member.role
+      }, member.createdAt));
+      const task = create(domainMembers);
+      const dependencies = await transaction.task.findMany({
+        where: { id: { in: [...task.dependencyIds] }, projectId: task.projectId },
+        select: { id: true }
+      });
+      if (dependencies.length !== task.dependencyIds.length) return 'NOT_FOUND';
       const created = await transaction.task.create({
         data: {
           id: task.id,
@@ -73,18 +95,8 @@ export class TaskRepository {
           }))
         });
       }
-      return created;
-    });
-    return toTaskContract(record, task.assigneeId, task.dependencyIds);
-  }
-
-  async dependenciesExistForMember(projectId: string, userId: UserId, dependencyIds: readonly string[]): Promise<boolean> {
-    if (dependencyIds.length === 0) return Boolean(await this.prisma.projectMember.findUnique({ where: { projectId_userId: { projectId, userId } } }));
-    const [membership, dependencies] = await this.prisma.$transaction([
-      this.prisma.projectMember.findUnique({ where: { projectId_userId: { projectId, userId } } }),
-      this.prisma.task.findMany({ where: { id: { in: [...dependencyIds] }, projectId }, select: { id: true } })
-    ]);
-    return Boolean(membership) && dependencies.length === dependencyIds.length;
+      return toTaskContract(created, task.assigneeId, task.dependencyIds);
+    }, { isolationLevel: 'RepeatableRead' });
   }
 
   async listByProjectForMember(
@@ -170,8 +182,9 @@ export class TaskRepository {
           dependencyIds: task.dependencies.map((dependency) => asTaskId(dependency.dependsOnTaskId)),
           deadline: task.deadline ?? undefined, createdAt: task.createdAt, updatedAt: task.updatedAt
         }), 'START', now);
-      } catch {
-        return 'INVALID_STATE';
+      } catch (error) {
+        if (error instanceof DomainError && error.code === 'INVALID_STATE_TRANSITION') return 'INVALID_STATE';
+        throw error;
       }
       const updated = await tx.task.updateMany({ where: { id: task.id, status: 'TODO' }, data: { status: transitioned.status, updatedAt: transitioned.updatedAt } });
       if (updated.count !== 1) return 'INVALID_STATE';

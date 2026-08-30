@@ -33,7 +33,9 @@ export function App() {
   const [error, setError] = useState<DesktopApiError>();
   const [runtimeLabel, setRuntimeLabel] = useState('Work · Desktop Runtime');
   const selectedTaskIdRef = useRef<string | undefined>(undefined);
+  const selectedProjectIdRef = useRef<string | undefined>(undefined);
   selectedTaskIdRef.current = task?.id;
+  selectedProjectIdRef.current = project?.id;
 
   const loadProjects = useCallback(async () => {
     setLoading(true);
@@ -187,13 +189,17 @@ export function App() {
   const getResult = (resultId: string) => window.enterpriseBrain.results.get(resultId);
   const listResultReviews = (resultId: string) => window.enterpriseBrain.results.listReviews(resultId);
   const decideResult = async (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => {
-    const selectedTask = task;
     const response = await window.enterpriseBrain.results.decide(resultId, decision, comment);
-    if (response.ok && selectedTask && selectedTaskIdRef.current === selectedTask.id) {
-      const refreshed = resolveOperation(await window.enterpriseBrain.tasks.get(selectedTask.id));
-      if (refreshed.data && selectedTaskIdRef.current === selectedTask.id) {
+    if (response.ok) {
+      const decided = resolveOperation(await window.enterpriseBrain.results.get(resultId));
+      const taskId = decided.data?.taskId;
+      const projectId = decided.data?.projectId;
+      if (taskId && selectedTaskIdRef.current === taskId) {
+        const refreshed = resolveOperation(await window.enterpriseBrain.tasks.get(taskId));
+        if (refreshed.data && selectedTaskIdRef.current === taskId) {
         setTask(refreshed.data);
-        await loadTasks(refreshed.data.projectId);
+        if (selectedProjectIdRef.current === projectId) await loadTasks(refreshed.data.projectId);
+        }
       }
     }
     return response;

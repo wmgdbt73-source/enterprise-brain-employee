@@ -227,6 +227,10 @@ describe('PostgreSQL persistence constraints', () => {
         data: { taskId: 'task-1', dependsOnTaskId: 'task-2', projectId: 'project-1' }
       })
     ).rejects.toMatchObject({ code: 'P2002' });
+    await db.project.create({ data: { id: 'project-2', name: 'Other', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+    await db.task.create({ data: { id: 'task-3', projectId: 'project-2', title: 'Other', priority: 'P2', status: 'TODO', acceptanceCriteria: [], createdAt: now, updatedAt: now } });
+    await expect(db.taskDependency.create({ data: { taskId: 'task-1', dependsOnTaskId: 'task-2', projectId: 'project-2' } })).rejects.toMatchObject({ code: 'P2003' });
+    await expect(db.taskDependency.create({ data: { taskId: 'task-1', dependsOnTaskId: 'task-3', projectId: 'project-1' } })).rejects.toMatchObject({ code: 'P2003' });
   });
 
   it('enforces Artifact provenance composite foreign keys and source uniqueness', async () => {
@@ -579,6 +583,7 @@ describe('PostgreSQL persistence constraints', () => {
       const reviews = await db.review.findMany({ where: { resultId: 'review-race' } });
       expect(reviews).toHaveLength(1);
       expect(persisted.status).toBe(reviews[0].decision === 'ACCEPT' ? 'ACCEPTED' : 'REWORK');
+      expect((await db.task.findUniqueOrThrow({ where: { id: 'task-1' } })).status).toBe(reviews[0].decision === 'ACCEPT' ? 'ACCEPTED' : 'IN_PROGRESS');
     } finally {
       gate.cleanup();
       await leftClient.$disconnect();
@@ -612,6 +617,7 @@ describe('PostgreSQL persistence constraints', () => {
     const failing = new ResultRepository(wrapPrismaForResultTests(db, { beforeReviewCreate: () => { throw new Error('inject Review creation failure'); } }));
     await expect(failing.decideForReviewer({ resultId: 'review-rollback', reviewerId: 'reviewer-1', decision: 'ACCEPT', reviewId: 'review-failed', now })).rejects.toThrow('inject Review creation failure');
     expect(await db.result.findUniqueOrThrow({ where: { id: 'review-rollback' } })).toMatchObject({ status: 'HUMAN_REVIEW' });
+    expect(await db.task.findUniqueOrThrow({ where: { id: 'task-1' } })).toMatchObject({ status: 'READY_FOR_REVIEW' });
     expect(await db.review.count({ where: { resultId: 'review-rollback' } })).toBe(0);
   });
 

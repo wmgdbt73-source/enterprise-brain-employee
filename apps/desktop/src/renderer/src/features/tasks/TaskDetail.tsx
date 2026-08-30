@@ -162,6 +162,7 @@ export function TaskDetail({
           {task.status === 'TODO' && (
             <button className="primary" onClick={() => void onStart(task).then((result) => {
               if (result && !result.ok) setError(result.error);
+              if (result?.ok) setError(undefined);
             })}>
               Start Task
             </button>
