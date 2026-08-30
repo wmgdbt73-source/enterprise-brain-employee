@@ -539,6 +539,7 @@ describe('PostgreSQL persistence constraints', () => {
   it('returns NOT_FOUND when membership is revoked before submit-for-review recovery', async () => {
     const { db, now } = await createProjectFixture();
     await createResultPersistenceFixture(db, now);
+    await db.task.update({ where: { id: 'task-1' }, data: { status: 'IN_PROGRESS', updatedAt: now } });
     await db.result.create({ data: resultRow('submit-recovery', 'task-1', 'project-1', now) });
     await db.resultArtifact.create({ data: { resultId: 'submit-recovery', artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } });
     let interleaved = false;
@@ -694,6 +695,10 @@ async function createResultPersistenceFixture(db: ReturnType<typeof requireDatab
   await db.artifact.create({ data: { id: 'artifact-4', projectId: 'project-1', taskId: 'task-1', agentRunId: 'result-run-4', sourceToolCallId: 'result-call-4', type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath: '4.md', size: 1, encoding: 'utf-8', sha256: '4'.repeat(64), version: 1, createdByUserId: 'user-owner', createdAt: now } });
 }
 async function createHumanReviewFixture(db: ReturnType<typeof requireDatabase>, now: Date, id: string) {
+  await db.task.update({
+    where: { id: 'task-1' },
+    data: { status: 'READY_FOR_REVIEW', updatedAt: now }
+  });
   for (const reviewerId of ['reviewer-1', 'reviewer-2']) {
     await db.user.upsert({ where: { id: reviewerId }, create: { id: reviewerId, name: reviewerId, systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, update: {} });
     await db.projectMember.upsert({ where: { projectId_userId: { projectId: 'project-1', userId: reviewerId } }, create: { id: `member-${reviewerId}`, projectId: 'project-1', userId: reviewerId, role: 'REVIEWER', createdAt: now, updatedAt: now }, update: {} });
