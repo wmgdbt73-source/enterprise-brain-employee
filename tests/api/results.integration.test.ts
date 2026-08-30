@@ -183,6 +183,23 @@ describe('Result Candidate API', () => {
     expect((await reviewer.inject({ method: 'GET', url: `/results/${created.id}/reviews` })).statusCode).toBe(404);
     await Promise.all([member.close(), admin.close(), reviewer.close(), app.close()]);
   });
+
+  it('makes omitted and blank review comments the same idempotent request', async () => {
+    const app = await createApp({ prisma: db() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const registered = await artifact(app, task.id, 'a.md');
+    const result = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('14') }, payload: { artifactIds: [registered.id] } })).json();
+    await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} });
+    await db().user.create({ data: { id: 'reviewer-empty', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
+    await db().projectMember.create({ data: { id: 'member-reviewer-empty', projectId: project.id, userId: 'reviewer-empty', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-empty', name: 'Reviewer' }) });
+    const first = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } });
+    const blank = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: '   ' } });
+    const changed = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: 'different' } });
+    expect(first.statusCode).toBe(201); expect(blank.statusCode).toBe(200); expect(blank.json().id).toBe(first.json().id); expect(changed.statusCode).toBe(409);
+    await Promise.all([reviewer.close(), app.close()]);
+  });
 });
 
 function wrapPrismaForResultApiTest(prisma: PrismaClient, hooks: { beforeResultCreate: () => Promise<void> | void }): PrismaClient {

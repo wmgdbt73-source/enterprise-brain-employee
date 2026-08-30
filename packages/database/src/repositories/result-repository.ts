@@ -69,7 +69,8 @@ export class ResultRepository {
     } catch (error) {
       if (!(error instanceof SubmissionCasConflict) && !isSerializationConflict(error)) throw error;
       const result = await this.findForUser(resultId, userId);
-      return result?.status === 'HUMAN_REVIEW' && result.createdByUserId === userId ? result : 'INVALID_STATE';
+      if (!result) return 'NOT_FOUND';
+      return result.status === 'HUMAN_REVIEW' && result.createdByUserId === userId ? result : 'INVALID_STATE';
     }
   }
 
@@ -81,7 +82,7 @@ export class ResultRepository {
       const membership = await tx.projectMember.findUnique({ where: { projectId_userId: { projectId: result.projectId, userId: input.reviewerId } } });
       if (!membership || result.createdByUserId === input.reviewerId || (membership.role !== 'OWNER' && membership.role !== 'REVIEWER')) return 'FORBIDDEN';
       const existing = await tx.review.findUnique({ where: { resultId: result.id } });
-      if (existing) return existing.reviewerId === input.reviewerId && existing.decision === input.decision && existing.comment === input.comment ? { review: toReviewContract(existing), created: false } : 'CONFLICT';
+      if (existing) return sameReviewRequest(existing, input) ? { review: toReviewContract(existing), created: false } : 'CONFLICT';
       if (result.status !== 'HUMAN_REVIEW') return 'INVALID_STATE';
       const links = await tx.resultArtifact.findMany({ where: { resultId: result.id }, orderBy: { artifactId: 'asc' } });
       const transitioned = decideResultReview(toDomain(result, links.map((link) => link.artifactId)), input.decision, input.now);
@@ -104,7 +105,7 @@ export class ResultRepository {
       if (!membership || result.createdByUserId === input.reviewerId || (membership.role !== 'OWNER' && membership.role !== 'REVIEWER')) return 'FORBIDDEN';
       const review = await tx.review.findUnique({ where: { resultId: result.id } });
       if (!review) return 'CONFLICT';
-      return review.reviewerId === input.reviewerId && review.decision === input.decision && review.comment === input.comment
+      return sameReviewRequest(review, input)
         ? { review: toReviewContract(review), created: false }
         : 'CONFLICT';
     }, { isolationLevel: 'RepeatableRead' });
@@ -174,6 +175,9 @@ function toDomain(result: { id: string; projectId: string; taskId: string; creat
 }
 function toReviewContract(review: { id: string; resultId: string; reviewerId: string; decision: ReviewDecision; comment: string | null; reviewedAt: Date }): ReviewContract {
   return { id: review.id, resultId: review.resultId, reviewerId: review.reviewerId, decision: review.decision, ...(review.comment ? { comment: review.comment } : {}), reviewedAt: review.reviewedAt.toISOString() };
+}
+function sameReviewRequest(review: { reviewerId: string; decision: ReviewDecision; comment: string | null }, input: { reviewerId: string; decision: ReviewDecision; comment?: string }): boolean {
+  return review.reviewerId === input.reviewerId && review.decision === input.decision && review.comment === (input.comment ?? null);
 }
 export function isResultIdempotencyConflict(error: unknown): boolean {
   if (!isRecord(error) || error.code !== 'P2002' || !isRecord(error.meta) || !isRecord(error.meta.driverAdapterError) || !isRecord(error.meta.driverAdapterError.cause)) return false;

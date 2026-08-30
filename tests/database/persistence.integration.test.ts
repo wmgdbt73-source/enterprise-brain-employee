@@ -536,6 +536,84 @@ describe('PostgreSQL persistence constraints', () => {
     }
   });
 
+  it('returns NOT_FOUND when membership is revoked before submit-for-review recovery', async () => {
+    const { db, now } = await createProjectFixture();
+    await createResultPersistenceFixture(db, now);
+    await db.result.create({ data: resultRow('submit-recovery', 'task-1', 'project-1', now) });
+    await db.resultArtifact.create({ data: { resultId: 'submit-recovery', artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } });
+    let interleaved = false;
+    const repository = new ResultRepository(wrapPrismaForResultTests(db, {
+      beforeSubmissionResultUpdate: async () => {
+        if (interleaved) return;
+        interleaved = true;
+        await db.$transaction(async (other) => {
+          await other.result.update({ where: { id: 'submit-recovery' }, data: { status: 'HUMAN_REVIEW', submittedByUserId: 'user-owner', submittedAt: now, updatedAt: now } });
+          await other.projectMember.delete({ where: { projectId_userId: { projectId: 'project-1', userId: 'user-owner' } } });
+        });
+      }
+    }));
+    await expect(repository.submitForReviewForCreator('submit-recovery', 'user-owner', now)).resolves.toBe('NOT_FOUND');
+  });
+
+  it('coordinates real reviewer transactions and rolls back a failed Review creation', async () => {
+    const { db, now } = await createProjectFixture();
+    await createResultPersistenceFixture(db, now);
+    await createHumanReviewFixture(db, now, 'review-race');
+    const leftClient = createPrismaClient(connectionString!);
+    const rightClient = createPrismaClient(connectionString!);
+    const gate = boundedGate(2);
+    const left = new ResultRepository(wrapPrismaForResultTests(leftClient, { beforeReviewResultUpdate: () => gate.arriveAndWait() }));
+    const right = new ResultRepository(wrapPrismaForResultTests(rightClient, { beforeReviewResultUpdate: () => gate.arriveAndWait() }));
+    const accepted = left.decideForReviewer({ resultId: 'review-race', reviewerId: 'reviewer-1', decision: 'ACCEPT', reviewId: 'review-accept', now });
+    const reworked = right.decideForReviewer({ resultId: 'review-race', reviewerId: 'reviewer-2', decision: 'REWORK', reviewId: 'review-rework', now });
+    try {
+      await gate.waitUntilReached();
+      expect(gate.arrivals).toBe(2);
+      gate.release();
+      const decisions = await Promise.all([accepted, reworked]);
+      expect(decisions.filter((decision) => decision === 'CONFLICT')).toHaveLength(1);
+      const winner = decisions.find((decision): decision is Exclude<typeof decision, string> => typeof decision !== 'string');
+      expect(winner?.created).toBe(true);
+      const persisted = await db.result.findUniqueOrThrow({ where: { id: 'review-race' } });
+      const reviews = await db.review.findMany({ where: { resultId: 'review-race' } });
+      expect(reviews).toHaveLength(1);
+      expect(persisted.status).toBe(reviews[0].decision === 'ACCEPT' ? 'ACCEPTED' : 'REWORK');
+    } finally {
+      gate.cleanup();
+      await leftClient.$disconnect();
+      await rightClient.$disconnect();
+    }
+
+    await createHumanReviewFixture(db, now, 'review-same');
+    const sameLeftClient = createPrismaClient(connectionString!);
+    const sameRightClient = createPrismaClient(connectionString!);
+    const sameGate = boundedGate(2);
+    const sameLeft = new ResultRepository(wrapPrismaForResultTests(sameLeftClient, { beforeReviewResultUpdate: () => sameGate.arriveAndWait() }));
+    const sameRight = new ResultRepository(wrapPrismaForResultTests(sameRightClient, { beforeReviewResultUpdate: () => sameGate.arriveAndWait() }));
+    const input = (reviewId: string) => ({ resultId: 'review-same', reviewerId: 'reviewer-1', decision: 'ACCEPT' as const, reviewId, now });
+    const first = sameLeft.decideForReviewer(input('review-same-1'));
+    const second = sameRight.decideForReviewer(input('review-same-2'));
+    try {
+      await sameGate.waitUntilReached();
+      sameGate.release();
+      const outcomes = await Promise.all([first, second]);
+      expect(outcomes.map((outcome) => typeof outcome === 'string' ? outcome : outcome.created).sort()).toEqual([false, true]);
+      const reviews = await db.review.findMany({ where: { resultId: 'review-same' } });
+      expect(reviews).toHaveLength(1);
+      expect(reviews[0]).toMatchObject({ reviewerId: 'reviewer-1', decision: 'ACCEPT', comment: null });
+    } finally {
+      sameGate.cleanup();
+      await sameLeftClient.$disconnect();
+      await sameRightClient.$disconnect();
+    }
+
+    await createHumanReviewFixture(db, now, 'review-rollback');
+    const failing = new ResultRepository(wrapPrismaForResultTests(db, { beforeReviewCreate: () => { throw new Error('inject Review creation failure'); } }));
+    await expect(failing.decideForReviewer({ resultId: 'review-rollback', reviewerId: 'reviewer-1', decision: 'ACCEPT', reviewId: 'review-failed', now })).rejects.toThrow('inject Review creation failure');
+    expect(await db.result.findUniqueOrThrow({ where: { id: 'review-rollback' } })).toMatchObject({ status: 'HUMAN_REVIEW' });
+    expect(await db.review.count({ where: { resultId: 'review-rollback' } })).toBe(0);
+  });
+
   it('rejects a deferred write ToolCall creation without its pending confirmation', async () => {
     const { db, now } = await createProjectFixture();
     await createWriteTask(db, now);
@@ -615,6 +693,14 @@ async function createResultPersistenceFixture(db: ReturnType<typeof requireDatab
   await db.agentToolCall.create({ data: { id: 'result-call-4', agentRunId: 'result-run-4', sequence: 1, name: 'read_file', request: { id: 'result-call-4', runId: 'result-run-4', userId: 'user-owner', projectId: 'project-1', name: 'read_file', relativePath: '4.md' }, status: 'SUCCEEDED', receipt: { toolCallId: 'result-call-4', status: 'SUCCEEDED', metadata: { relativePath: '4.md', size: 1, encoding: 'utf-8', sha256: '4'.repeat(64) } }, createdAt: now, completedAt: now } });
   await db.artifact.create({ data: { id: 'artifact-4', projectId: 'project-1', taskId: 'task-1', agentRunId: 'result-run-4', sourceToolCallId: 'result-call-4', type: 'FILE', storageKind: 'LOCAL_WORKSPACE', relativePath: '4.md', size: 1, encoding: 'utf-8', sha256: '4'.repeat(64), version: 1, createdByUserId: 'user-owner', createdAt: now } });
 }
+async function createHumanReviewFixture(db: ReturnType<typeof requireDatabase>, now: Date, id: string) {
+  for (const reviewerId of ['reviewer-1', 'reviewer-2']) {
+    await db.user.upsert({ where: { id: reviewerId }, create: { id: reviewerId, name: reviewerId, systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, update: {} });
+    await db.projectMember.upsert({ where: { projectId_userId: { projectId: 'project-1', userId: reviewerId } }, create: { id: `member-${reviewerId}`, projectId: 'project-1', userId: reviewerId, role: 'REVIEWER', createdAt: now, updatedAt: now }, update: {} });
+  }
+  await db.result.create({ data: { ...resultRow(id, 'task-1', 'project-1', now), status: 'HUMAN_REVIEW', submittedByUserId: 'user-owner', submittedAt: now } });
+  await db.resultArtifact.create({ data: { resultId: id, artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } });
+}
 function resultRow(id: string, taskId: string, projectId: string, now: Date) {
   return { id, taskId, projectId, createdByUserId: 'user-owner', status: 'CANDIDATE' as const, idempotencyKey: `${id}-key`, requestFingerprint: 'a'.repeat(64), createdAt: now, updatedAt: now };
 }
@@ -637,6 +723,9 @@ function wrapPrismaForResultTests(
   hooks: {
     beforeResultCreate?: () => Promise<void> | void;
     beforeResultArtifactCreateMany?: () => Promise<void> | void;
+    beforeReviewResultUpdate?: () => Promise<void> | void;
+    beforeReviewCreate?: () => Promise<void> | void;
+    beforeSubmissionResultUpdate?: () => Promise<void> | void;
     afterResultFindFirst?: () => Promise<void> | void;
     beforeRecoveryResultFindFirst?: () => Promise<void> | void;
     onTransaction?: () => number;
@@ -648,13 +737,20 @@ function wrapPrismaForResultTests(
       return prisma.$transaction(async (transaction) => callback(new Proxy(transaction, {
         get(target, property, receiver) {
           const model = Reflect.get(target, property, receiver);
-          if ((property !== 'result' && property !== 'resultArtifact') || typeof model !== 'object' || model === null) return model;
+          if ((property !== 'result' && property !== 'resultArtifact' && property !== 'review') || typeof model !== 'object' || model === null) return model;
           return new Proxy(model, {
             get(resultTarget, resultProperty, resultReceiver) {
               const method = Reflect.get(resultTarget, resultProperty, resultReceiver);
               if (property === 'result' && resultProperty === 'create') {
                 return async (...argumentsList: unknown[]) => {
                   await hooks.beforeResultCreate?.();
+                  return Reflect.apply(method, resultTarget, argumentsList);
+                };
+              }
+              if (property === 'result' && resultProperty === 'updateMany') {
+                return async (...argumentsList: unknown[]) => {
+                  await hooks.beforeSubmissionResultUpdate?.();
+                  await hooks.beforeReviewResultUpdate?.();
                   return Reflect.apply(method, resultTarget, argumentsList);
                 };
               }
@@ -669,6 +765,12 @@ function wrapPrismaForResultTests(
               if (property === 'resultArtifact' && resultProperty === 'createMany') {
                 return async (...argumentsList: unknown[]) => {
                   await hooks.beforeResultArtifactCreateMany?.();
+                  return Reflect.apply(method, resultTarget, argumentsList);
+                };
+              }
+              if (property === 'review' && resultProperty === 'create') {
+                return async (...argumentsList: unknown[]) => {
+                  await hooks.beforeReviewCreate?.();
                   return Reflect.apply(method, resultTarget, argumentsList);
                 };
               }
