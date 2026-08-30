@@ -27,7 +27,7 @@ export type {
   ArtifactType,
   RegisterArtifactRequest
 } from './artifact.js';
-export type { ResultContract, ResultStatus } from './result.js';
+export type { ResultContract, ResultStatus, ReviewContract, ReviewDecision } from './result.js';
 export {
   normalizeToolCompletion,
   normalizeToolCompletionForRequest,

@@ -16,7 +16,7 @@ async function artifact(app: Awaited<ReturnType<typeof createApp>>, taskId: stri
 
 describe('Result Candidate API', () => {
   beforeEach(async () => {
-    await db().humanConfirmation.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().user.deleteMany();
+    await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().user.deleteMany();
   });
   afterAll(async () => database?.$disconnect());
 
@@ -134,6 +134,71 @@ describe('Result Candidate API', () => {
     conflictGate.cleanup();
     await conflictApp.close(); await sameApp.close(); await app.close();
     await primaryClient.$disconnect(); await secondaryClient.$disconnect();
+  });
+
+  it('submits only by its creator and records one owner/reviewer human decision without changing the Task', async () => {
+    const app = await createApp({ prisma: db() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const registered = await artifact(app, task.id, 'a.md');
+    const created = await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('12') }, payload: { artifactIds: [registered.id] } });
+    const result = created.json();
+    expect((await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} })).json()).toMatchObject({ status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user' });
+    expect((await app.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
+    await db().user.create({ data: { id: 'reviewer-1', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
+    await db().projectMember.create({ data: { id: 'member-reviewer-1', projectId: project.id, userId: 'reviewer-1', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-1', name: 'Reviewer' }) });
+    const accepted = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: ' looks good ' } });
+    expect(accepted.statusCode).toBe(201); expect(accepted.json()).toMatchObject({ resultId: result.id, reviewerId: 'reviewer-1', decision: 'ACCEPT', comment: 'looks good' });
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: 'looks good' } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: `/results/${result.id}/reviews` })).json().reviews).toHaveLength(1);
+    expect((await db().result.findUniqueOrThrow({ where: { id: result.id } })).status).toBe('ACCEPTED');
+    expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('TODO');
+    await reviewer.close(); await app.close();
+  });
+
+  it('enforces review role, ownership, hidden scope and terminal conflict boundaries', async () => {
+    const app = await createApp({ prisma: db() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const registered = await artifact(app, task.id, 'a.md');
+    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('13') }, payload: { artifactIds: [registered.id] } })).json();
+    for (const [id, role, systemRole] of [['member-1', 'MEMBER', 'EMPLOYEE'], ['admin-1', 'MEMBER', 'ADMIN'], ['reviewer-2', 'REVIEWER', 'EMPLOYEE']] as const) {
+      await db().user.create({ data: { id, name: id, systemRole, createdAt: new Date(), updatedAt: new Date() } });
+      await db().projectMember.create({ data: { id: `membership-${id}`, projectId: project.id, userId: id, role, createdAt: new Date(), updatedAt: new Date() } });
+    }
+    const member = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'member-1', name: 'Member' }) });
+    const admin = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'admin-1', name: 'Admin', systemRole: 'ADMIN' }) });
+    const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-2', name: 'Reviewer' }) });
+    expect((await member.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: { submittedByUserId: 'forged' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(200);
+    expect((await member.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
+    expect((await admin.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'REWORK', reviewerId: 'forged' } })).statusCode).toBe(400);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'REWORK', comment: 'needs work' } })).statusCode).toBe(201);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(409);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(403);
+    await db().projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: 'reviewer-2' } } });
+    expect((await reviewer.inject({ method: 'GET', url: `/results/${created.id}/reviews` })).statusCode).toBe(404);
+    await Promise.all([member.close(), admin.close(), reviewer.close(), app.close()]);
+  });
+
+  it('makes omitted and blank review comments the same idempotent request', async () => {
+    const app = await createApp({ prisma: db() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const registered = await artifact(app, task.id, 'a.md');
+    const result = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('14') }, payload: { artifactIds: [registered.id] } })).json();
+    await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} });
+    await db().user.create({ data: { id: 'reviewer-empty', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
+    await db().projectMember.create({ data: { id: 'member-reviewer-empty', projectId: project.id, userId: 'reviewer-empty', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-empty', name: 'Reviewer' }) });
+    const first = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } });
+    const blank = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: '   ' } });
+    const changed = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: 'different' } });
+    expect(first.statusCode).toBe(201); expect(blank.statusCode).toBe(200); expect(blank.json().id).toBe(first.json().id); expect(changed.statusCode).toBe(409);
+    await Promise.all([reviewer.close(), app.close()]);
   });
 });
 

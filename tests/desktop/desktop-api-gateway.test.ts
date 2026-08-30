@@ -91,7 +91,7 @@ describe('Desktop Work Runtime gateway', () => {
       'listForTask',
       'register'
     ]);
-    expect(Object.keys(bridge.results).sort()).toEqual(['create', 'get']);
+    expect(Object.keys(bridge.results).sort()).toEqual(['create', 'decide', 'get', 'listReviews', 'submitReview']);
     expect(Object.keys(bridge.projects).sort()).toEqual([
       'create',
       'get',

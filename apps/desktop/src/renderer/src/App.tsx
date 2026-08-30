@@ -167,6 +167,12 @@ export function App() {
     // Do not replace the workspace and discard its idempotency identity.
     return window.enterpriseBrain.results.create(value.id, artifactIds, idempotencyKey);
   }
+  async function submitResult(resultId: string): Promise<DesktopResult<ResultContract>> {
+    return window.enterpriseBrain.results.submitReview(resultId);
+  }
+  const getResult = (resultId: string) => window.enterpriseBrain.results.get(resultId);
+  const listResultReviews = (resultId: string) => window.enterpriseBrain.results.listReviews(resultId);
+  const decideResult = (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => window.enterpriseBrain.results.decide(resultId, decision, comment);
 
   return (
     <div className="app-shell">
@@ -207,6 +213,10 @@ export function App() {
             onApproveWrite={approveWrite}
             onRejectWrite={rejectWrite}
             onCreateResult={createResult}
+            onSubmitResult={submitResult}
+            onGetResult={getResult}
+            onListReviews={listResultReviews}
+            onDecideReview={decideResult}
           />
         )}
       </main>

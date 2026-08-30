@@ -87,6 +87,9 @@ export function registerRuntimeHandlers(
     gateway.createResult(payload.taskId, payload.artifactIds, payload.idempotencyKey)
   );
   ipc.handle('results:get', (_event, payload: { id: string }) => gateway.getResult(payload.id));
+  ipc.handle('results:submit-review', (_event, payload: { id: string }) => gateway.submitResultForReview(payload.id));
+  ipc.handle('results:decide', (_event, payload: { id: string; decision: import('@enterprise-brain/contracts').ReviewDecision; comment?: string }) => gateway.createReview(payload.id, payload.decision, payload.comment));
+  ipc.handle('results:list-reviews', (_event, payload: { id: string }) => gateway.listReviews(payload.id));
 }
 
 async function handleWorkspace<T>(operation: () => Promise<T>) {

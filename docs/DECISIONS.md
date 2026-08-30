@@ -312,6 +312,18 @@ creation does not mutate Task or AgentRun state and creates no Review.
 
 ---
 
+## ADR-023 — Human Review Is Project-Role Scoped
+
+EB-012 makes Human Review backend-owned and immutable: only the Result creator
+may submit `CANDIDATE` while still a member; only a current `OWNER` or `REVIEWER`
+who is not that creator may issue one `ACCEPT` or `REWORK` decision. Submission
+and decision use RepeatableRead transactions and conditional state updates.
+Neither transition changes Task, Artifact, or AgentRun; Task acceptance and
+dependency effects remain deferred to EB-013. System `ADMIN` does not independently
+confer Review authority.
+
+---
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

@@ -199,6 +199,8 @@ interface Artifact {
   sha256: string
   version: 1
   createdByUserId: string
+  submittedByUserId?: string
+  submittedAt?: string
   createdAt: string
 }
 ```
@@ -231,8 +233,9 @@ interface Result {
 
 EB-011 creates only `CANDIDATE` through explicit employee confirmation. Result
 Artifact composition, identity, creator and Task/Project provenance are immutable.
-`submittedBy` and `submittedAt` are reserved for a future Human Review submission
-action. `rehydrateResult` is a trusted persistence boundary and never accepts HTTP
+EB-012 permits only `CANDIDATE → HUMAN_REVIEW → ACCEPTED | REWORK`; submission
+records server-derived actor/time once and final Review is unique per Result.
+`rehydrateResult` is a trusted persistence boundary and never accepts HTTP
 or LLM-controlled status input.
 
 ## 11. Review（人工评审）

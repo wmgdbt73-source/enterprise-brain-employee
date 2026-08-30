@@ -7,7 +7,7 @@ import { App } from '../../apps/desktop/src/renderer/src/App.js';
 import { TaskDetail } from '../../apps/desktop/src/renderer/src/features/tasks/TaskDetail.js';
 import type { EnterpriseBrainBridge } from '../../apps/desktop/src/shared/enterprise-brain.js';
 import type { DesktopResult } from '../../apps/desktop/src/shared/enterprise-brain.js';
-import type { ArtifactContract, ProjectContract, ResultContract, TaskContract } from '../../packages/contracts/src/index.js';
+import type { ArtifactContract, ProjectContract, ResultContract, ReviewContract, TaskContract } from '../../packages/contracts/src/index.js';
 
 const project: ProjectContract = { id: 'project-a', name: 'Project', status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
 const taskA = task('task-a', 'Task A');
@@ -37,7 +37,10 @@ describe('Result confirmation component lifecycle', () => {
             ? failure('API_UNAVAILABLE')
             : success(result('result-a', taskId, artifactIds));
         },
-        get: async () => failure('UNUSED')
+        get: async () => failure('UNUSED'),
+        submitReview: async () => failure('UNUSED'),
+        decide: async () => failure('UNUSED'),
+        listReviews: async () => ({ ok: true as const, data: [] })
       }
     });
     await renderApp();
@@ -83,6 +86,41 @@ describe('Result confirmation component lifecycle', () => {
     expect(text()).toContain('Task B');
     expect(text()).not.toContain('API unavailable');
   });
+
+  it('opens a Human Review Result by ID and sends an explicit reviewer decision without altering the Task', async () => {
+    const humanReview: ResultContract = { ...result('result-review', taskA.id, [artifact.id]), status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user', submittedAt: '2026-01-02T00:00:00.000Z' };
+    const decisions: Array<{ id: string; decision: string; comment?: string }> = [];
+    mount();
+    let getCount = 0; let listCount = 0;
+    await act(async () => root?.render(createElement(TaskDetail, { task: taskA, onStart: async () => {}, artifacts: [artifact], onReadFile: async () => undefined, onRegisterArtifact: async () => {}, onPrepareWrite: async () => undefined, onApproveWrite: async () => {}, onRejectWrite: async () => {}, onCreateResult: async () => failure('UNUSED'), onGetResult: async () => { getCount += 1; return success(humanReview); }, onListReviews: async () => { listCount += 1; return { ok: true as const, data: [] }; }, onDecideReview: async (id, decision, comment) => { decisions.push({ id, decision, comment }); return { ok: true as const, data: { id: 'review-1', resultId: id, reviewerId: 'reviewer', decision, ...(comment ? { comment } : {}), reviewedAt: '2026-01-03T00:00:00.000Z' } as ReviewContract }; } })));
+    const input = [...document.querySelectorAll('input')].find((element) => (element as HTMLInputElement).placeholder === 'Result ID') as HTMLInputElement;
+    await setInput(input, 'result-review'); await clickText('Open Result'); await act(async () => { await Promise.resolve(); });
+    await setTextArea(document.querySelector('textarea')!, 'Looks good');
+    await clickText('Accept Result');
+    expect(getCount).toBeGreaterThan(0); expect(listCount).toBe(1);
+    expect(decisions).toEqual([{ id: 'result-review', decision: 'ACCEPT', comment: 'Looks good' }]);
+    expect(text()).toContain('Task status is not changed by Human Review.');
+  });
+
+  it('blocks duplicate review decisions and ignores a delayed decision after switching tasks', async () => {
+    const humanReview: ResultContract = { ...result('result-review', taskA.id, [artifact.id]), status: 'HUMAN_REVIEW', submittedByUserId: 'dev-user', submittedAt: '2026-01-02T00:00:00.000Z' };
+    let resolveDecision: ((value: { ok: true; data: ReviewContract }) => void) | undefined;
+    let calls = 0;
+    mount();
+    const props = (task: TaskContract) => ({ task, onStart: async () => {}, artifacts: [artifact], onReadFile: async () => undefined, onRegisterArtifact: async () => {}, onPrepareWrite: async () => undefined, onApproveWrite: async () => {}, onRejectWrite: async () => {}, onCreateResult: async () => failure('UNUSED'), onGetResult: async () => success(humanReview), onListReviews: async () => ({ ok: true as const, data: [] }), onDecideReview: async () => {
+      calls += 1;
+      return new Promise<{ ok: true; data: ReviewContract }>((resolve) => { resolveDecision = resolve; });
+    } });
+    await act(async () => root?.render(createElement(TaskDetail, props(taskA))));
+    const input = [...document.querySelectorAll('input')].find((element) => (element as HTMLInputElement).placeholder === 'Result ID') as HTMLInputElement;
+    await setInput(input, 'result-review'); await clickText('Open Result'); await act(async () => { await Promise.resolve(); });
+    await clickText('Accept Result'); await clickText('Accept Result');
+    expect(calls).toBe(1);
+    await act(async () => root?.render(createElement(TaskDetail, props(taskB))));
+    await act(async () => resolveDecision?.({ ok: true, data: { id: 'review-a', resultId: 'result-review', reviewerId: 'reviewer', decision: 'ACCEPT', reviewedAt: '2026-01-03T00:00:00.000Z' } }));
+    expect(text()).toContain('Task B');
+    expect(text()).not.toContain('review-a');
+  });
 });
 
 function mount() {
@@ -92,6 +130,21 @@ function mount() {
   Object.assign(globalThis, { React });
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   root = createRoot(document.getElementById('root')!);
+}
+async function setInput(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(input), 'value')?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new window.Event('input', { bubbles: true }));
+    input.dispatchEvent(new window.Event('change', { bubbles: true }));
+  });
+}
+async function setTextArea(textarea: HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(textarea), 'value')?.set;
+    setter?.call(textarea, value);
+    textarea.dispatchEvent(new window.Event('input', { bubbles: true }));
+  });
 }
 async function renderApp() { await act(async () => root?.render(createElement(App))); }
 async function renderDetail(value: TaskContract, onCreate: (task: TaskContract, ids: string[], key: string) => Promise<DesktopResult<ResultContract>>) {
@@ -120,7 +173,7 @@ function bridge(overrides: Partial<EnterpriseBrainBridge>): EnterpriseBrainBridg
     projects: { list: async () => ({ ok: true, data: [project] }), get: async () => ({ ok: true, data: project }), create: async () => ({ ok: true, data: project }) },
     tasks: { list: async () => ({ ok: true, data: [taskA] }), get: async () => ({ ok: true, data: taskA }), create: async () => ({ ok: true, data: taskA }), start: async () => ({ ok: true, data: taskA }) },
     workspace: { get: async () => ({ ok: true, data: null }), select: async () => ({ ok: true, data: { cancelled: true } }), unbind: async () => ({ ok: true, data: undefined }), listDirectory: ok, readFile: async () => failure('UNUSED') },
-    agents: { run: async () => failure('UNUSED') }, artifacts: { register: async () => failure('UNUSED'), listForTask: async () => ({ ok: true, data: [artifact] }) }, results: { create: async () => failure('UNCONFIGURED'), get: async () => failure('UNUSED') }, confirmedWrites: { prepare: async () => failure('UNUSED'), approve: async () => failure('UNUSED'), reject: async () => failure('UNUSED') },
+    agents: { run: async () => failure('UNUSED') }, artifacts: { register: async () => failure('UNUSED'), listForTask: async () => ({ ok: true, data: [artifact] }) }, results: { create: async () => failure('UNCONFIGURED'), get: async () => failure('UNUSED'), submitReview: async () => failure('UNUSED'), decide: async () => failure('UNUSED'), listReviews: async () => ({ ok: true, data: [] }) }, confirmedWrites: { prepare: async () => failure('UNUSED'), approve: async () => failure('UNUSED'), reject: async () => failure('UNUSED') },
     ...overrides
   } as EnterpriseBrainBridge;
 }

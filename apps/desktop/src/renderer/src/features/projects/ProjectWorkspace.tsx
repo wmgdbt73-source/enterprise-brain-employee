@@ -29,6 +29,10 @@ export function ProjectWorkspace({
   onApproveWrite,
   onRejectWrite
   ,onCreateResult
+  ,onSubmitResult
+  ,onGetResult
+  ,onListReviews
+  ,onDecideReview
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -50,6 +54,10 @@ export function ProjectWorkspace({
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
   onCreateResult: (task: TaskContract, artifactIds: string[], idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
+  onSubmitResult: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
+  onGetResult: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
+  onListReviews: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract[]>>;
+  onDecideReview: (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract>>;
 }) {
   return (
     <section className="page">
@@ -91,6 +99,10 @@ export function ProjectWorkspace({
             onApproveWrite={onApproveWrite}
             onRejectWrite={onRejectWrite}
             onCreateResult={onCreateResult}
+            onSubmitResult={onSubmitResult}
+            onGetResult={onGetResult}
+            onListReviews={onListReviews}
+            onDecideReview={onDecideReview}
           />
         </div>
       )}
