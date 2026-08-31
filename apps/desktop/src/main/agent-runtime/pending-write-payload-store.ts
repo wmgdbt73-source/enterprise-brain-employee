@@ -9,5 +9,6 @@ export class PendingWritePayloadStore {
   put(payload: PendingWritePayload): void { this.payloads.set(payload.confirmationId, payload); }
   get(confirmationId: string): PendingWritePayload | undefined { return this.payloads.get(confirmationId); }
   take(confirmationId: string): PendingWritePayload | undefined { const value = this.payloads.get(confirmationId); this.payloads.delete(confirmationId); return value; }
+  clear(): void { this.payloads.clear(); }
   remove(confirmationId: string): void { this.payloads.delete(confirmationId); }
 }

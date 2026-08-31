@@ -42,9 +42,11 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  const confirmedWritesRef: { current?: ConfirmedWriteCoordinator } = {};
   const gateway = new DesktopApiGateway({
     baseUrl: process.env.EMPLOYEE_API_BASE_URL ?? 'http://127.0.0.1:3000',
     onAuthenticationLost: () => {
+      confirmedWritesRef.current?.clearSensitiveState();
       for (const window of BrowserWindow.getAllWindows()) window.webContents.send('auth:lost');
     }
   });
@@ -58,6 +60,8 @@ app.whenReady().then(async () => {
     store: new WorkspaceStore(directory),
     deviceId: await new DeviceIdStore(directory).get()
   });
+  const confirmedWrites = new ConfirmedWriteCoordinator(gateway, workspace);
+  confirmedWritesRef.current = confirmedWrites;
   registerRuntimeHandlers(
     ipcMain,
     gateway,
@@ -67,7 +71,7 @@ app.whenReady().then(async () => {
     },
     workspace,
     new DesktopAgentRunCoordinator(gateway, new AgentToolExecutor(workspace, gateway)),
-    new ConfirmedWriteCoordinator(gateway, workspace)
+    confirmedWrites
   );
   createWindow();
 

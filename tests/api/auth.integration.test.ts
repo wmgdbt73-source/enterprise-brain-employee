@@ -69,7 +69,9 @@ describe('production session identity API', () => {
     const second = (await app.inject({ method: 'POST', url: '/auth/login', payload: { login: 'second@example.test', password: 'DemoPassword!2026' } })).json().token as string;
     const headers = { authorization: `Bearer ${first}`, 'x-user-id': 'second-user' };
     expect((await app.inject({ method: 'GET', url: '/me?userId=second-user', headers })).json()).toMatchObject({ id: 'auth-user' });
-    expect((await app.inject({ method: 'GET', url: '/me', headers: { authorization: 'Bearer z'.repeat(44) } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/me', headers: { authorization: `Bearer ${'z'.repeat(43)}` } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'GET', url: '/me', headers: { authorization: `Bearer ${first}`, 'x-user-id': 'second-user' }, query: { userId: 'second-user' } })).json()).toMatchObject({ id: 'auth-user' });
+    expect((await app.inject({ method: 'POST', url: '/projects', headers: { authorization: `Bearer ${first}` }, payload: { name: 'Forged', userId: 'second-user' } })).statusCode).toBe(400);
     const created = await app.inject({ method: 'POST', url: '/projects', headers: { authorization: `Bearer ${first}` }, payload: { name: 'Private' } });
     expect(created.statusCode).toBe(201);
     expect((await app.inject({ method: 'GET', url: '/projects', headers: { authorization: `Bearer ${second}` } })).json()).toEqual({ projects: [] });

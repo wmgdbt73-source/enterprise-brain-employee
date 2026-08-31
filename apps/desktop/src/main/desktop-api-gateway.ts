@@ -192,7 +192,7 @@ export class DesktopApiGateway {
           method: options.method ?? 'GET',
           headers: {
             ...(options.body ? { 'content-type': 'application/json' } : {}),
-            ...(options.includeAuthorization !== false && token ? { authorization: `Bearer ${token}` } : {}),
+            ...((options.includeAuthorization !== false || options.authorizationToken !== undefined) && token ? { authorization: `Bearer ${token}` } : {}),
             ...options.headers
           },
           body: options.body ? JSON.stringify(options.body) : undefined

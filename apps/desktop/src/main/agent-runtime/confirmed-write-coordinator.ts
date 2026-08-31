@@ -43,6 +43,7 @@ export class ConfirmedWriteCoordinator {
     return completed.ok ? { ok: true as const, data: { confirmation: approved.data.confirmation, run: completed.data } } : completed;
   }
   async reject(confirmationId: string) { const result = await this.gateway.rejectHumanConfirmation(confirmationId); if (result.ok) this.payloads.remove(confirmationId); return result.ok ? { ok: true as const, data: { confirmation: result.data.confirmation } } : result; }
+  clearSensitiveState(): void { this.payloads.clear(); this.grants.clear(); }
 }
 function sameDetail(detail: HumanConfirmationDetailContract, pending: Pick<PendingWritePayload, 'relativePath'|'payloadSize'|'payloadSha256'|'effect'>) { return detail.action === 'write_file' && detail.relativePath === pending.relativePath && detail.payloadSize === pending.payloadSize && detail.payloadSha256 === pending.payloadSha256 && detail.effect === pending.effect; }
 function sameCreation(taskId: string, run: AgentRunContract, request: Extract<import('@enterprise-brain/contracts').AgentToolRequest, { name: 'write_file' }>, confirmation: HumanConfirmationContract, detail: HumanConfirmationDetailContract, deviceId: string, prepared: { relativePath: string; payloadSize: number; payloadSha256: string; effect: 'CREATE' | 'REPLACE'; expectedCurrentSha256?: string }) {

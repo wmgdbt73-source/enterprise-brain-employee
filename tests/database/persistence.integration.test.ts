@@ -98,9 +98,10 @@ describe('PostgreSQL persistence constraints', () => {
     expect((await db.session.findUniqueOrThrow({ where: { id: 'session-1' } })).tokenHash).not.toBe(rawToken);
     await expect(db.session.create({ data: { id: 'session-duplicate', accountId: 'account-1', tokenHash, createdAt: now, expiresAt: new Date(now.getTime() + 1_000) } })).rejects.toMatchObject({ code: 'P2002' });
     // Prisma 7's pg adapter reports this PostgreSQL FK failure as P2039.
-    await expect(db.account.create({ data: { id: 'account-noncanonical', userId: 'missing-user', login: 'Owner@Example.Test', passwordHash, status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toBeDefined();
+    await expect(db.account.create({ data: { id: 'account-missing-user', userId: 'missing-user', login: 'missing@example.test', passwordHash, status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toBeDefined();
     await db.user.create({ data: { id: 'user-canonical-check', name: 'Canonical', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now } });
     await expect(db.account.create({ data: { id: 'account-uppercase', userId: 'user-canonical-check', login: 'OWNER@EXAMPLE.TEST', passwordHash, status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toBeDefined();
+    await expect(db.account.create({ data: { id: 'account-duplicate-login', userId: 'user-canonical-check', login: 'owner@example.test', passwordHash, status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: 'P2002' });
     await expect(db.session.create({ data: { id: 'session-missing-account', accountId: 'missing-account', tokenHash: 'b'.repeat(64), createdAt: now, expiresAt: new Date(now.getTime() + 1_000) } })).rejects.toMatchObject({ code: 'P2003' });
   });
 

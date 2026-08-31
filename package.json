@@ -21,7 +21,7 @@
     "lint": "eslint . --max-warnings=0",
     "test": "vitest run tests/foundation.test.ts tests/domain tests/desktop",
     "test:api:integration": "vitest run tests/api",
-    "test:database": "vitest run tests/database",
+    "test:database": "vitest run --no-file-parallelism tests/database",
     "typecheck": "pnpm --recursive run typecheck"
   },
   "devDependencies": {

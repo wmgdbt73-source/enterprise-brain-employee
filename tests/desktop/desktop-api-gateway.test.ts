@@ -112,6 +112,23 @@ describe('Desktop Work Runtime gateway', () => {
     await gateway.getCurrentUser();
     expect(fetchImplementation.mock.calls[2][1].headers).toMatchObject({ authorization: 'Bearer new-token-value-abcdefghijklmnopqrstuvwxyz' });
   });
+  it('sends the captured token during logout and cannot erase a later login', async () => {
+    let resolveLogout!: (value: { ok: boolean; status: number; json(): Promise<unknown> }) => void;
+    const delayedLogout = new Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>((resolve) => { resolveLogout = resolve; });
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'old-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'old', name: 'Old', systemRole: 'EMPLOYEE' } }) })
+      .mockImplementationOnce(() => delayedLogout)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'new-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'new', name: 'New', systemRole: 'EMPLOYEE' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'new', name: 'New', systemRole: 'EMPLOYEE' } ) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await gateway.login({ login: 'old', password: 'x' });
+    const logout = gateway.logout();
+    expect(fetchImplementation.mock.calls[1][1].headers).toMatchObject({ authorization: 'Bearer old-token-value-abcdefghijklmnopqrstuvwxyz' });
+    await gateway.login({ login: 'new', password: 'x' });
+    resolveLogout({ ok: true, status: 200, json: async () => ({}) });
+    await logout; await gateway.getCurrentUser();
+    expect(fetchImplementation.mock.calls[3][1].headers).toMatchObject({ authorization: 'Bearer new-token-value-abcdefghijklmnopqrstuvwxyz' });
+  });
   it('exposes only the allowlisted preload bridge capabilities', () => {
     const invoke = vi.fn().mockResolvedValue({
       ok: true,
