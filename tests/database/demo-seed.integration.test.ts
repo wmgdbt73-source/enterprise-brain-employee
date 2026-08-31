@@ -21,5 +21,11 @@ describe('demo seed', () => {
     const members = await db().projectMember.findMany({ where: { projectId: 'demo-review-project' }, orderBy: { userId: 'asc' } });
     expect(members.map((member) => [member.userId, member.role])).toEqual([['demo-employee', 'OWNER'], ['demo-reviewer', 'REVIEWER']]);
     expect(await db().project.count({ where: { id: 'demo-review-project' } })).toBe(1);
+    const organization = await db().organization.findFirstOrThrow({ where: { name: 'Enterprise Brain Demo', status: 'ACTIVE' } });
+    expect(await db().organization.count({ where: { name: 'Enterprise Brain Demo' } })).toBe(1);
+    expect((await db().department.findMany({ where: { organizationId: organization.id }, orderBy: { name: 'asc' } })).map((item) => item.name)).toEqual(['Product', 'Research']);
+    const memberships = await db().organizationMembership.findMany({ where: { organizationId: organization.id }, orderBy: { userId: 'asc' }, include: { departmentMembership: { include: { department: true } } } });
+    expect(memberships.map((item) => [item.userId, item.role, item.departmentMembership?.department.name, item.departmentMembership?.role])).toEqual([['demo-admin', 'OWNER', undefined, undefined], ['demo-employee', 'MEMBER', 'Product', 'MEMBER'], ['demo-reviewer', 'MEMBER', 'Research', 'MEMBER']]);
+    expect(await db().organizationMembership.count()).toBe(3); expect(await db().departmentMembership.count()).toBe(2); expect(await db().department.count()).toBe(2);
   }, 20_000);
 });

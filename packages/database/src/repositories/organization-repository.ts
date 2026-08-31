@@ -32,20 +32,24 @@ export class OrganizationRepository {
     return rows.map((row) => ({ userId: row.userId, name: row.organizationMembership.user.name, role: row.role, status: row.status }));
   }
   async assign(userId: string, targetUserId: string, departmentId: string, role: 'MANAGER' | 'MEMBER'): Promise<DepartmentMemberContract | OrganizationAccess> {
-    const org = await this.adminOrganization(userId); if (typeof org === 'string') return org;
-    const [department, target] = await Promise.all([
-      this.prisma.department.findFirst({ where: { id: departmentId, organizationId: org.id, status: 'ACTIVE' } }),
-      this.prisma.organizationMembership.findFirst({ where: { organizationId: org.id, userId: targetUserId, status: 'ACTIVE' } })
-    ]);
-    if (!department || !target) return 'NOT_FOUND';
-    const now = new Date();
-    const row = await this.prisma.departmentMembership.upsert({
-      where: { organizationId_userId: { organizationId: org.id, userId: targetUserId } },
-      create: { id: randomUUID(), organizationId: org.id, departmentId: department.id, userId: targetUserId, role, status: 'ACTIVE', createdAt: now, updatedAt: now },
-      update: { departmentId: department.id, role, status: 'ACTIVE', updatedAt: now },
-      include: { organizationMembership: { include: { user: true } } }
-    });
-    return { userId: row.userId, name: row.organizationMembership.user.name, role: row.role, status: row.status };
+    return this.prisma.$transaction(async (tx) => {
+      const actor = await tx.organizationMembership.findFirst({ where: { userId, ...activeMembership }, include: { organization: true } });
+      if (!actor) return 'NOT_FOUND';
+      if (actor.role !== 'OWNER' && actor.role !== 'ADMIN') return 'FORBIDDEN';
+      const [department, target] = await Promise.all([
+        tx.department.findFirst({ where: { id: departmentId, organizationId: actor.organizationId, status: 'ACTIVE' } }),
+        tx.organizationMembership.findFirst({ where: { organizationId: actor.organizationId, userId: targetUserId, status: 'ACTIVE' } })
+      ]);
+      if (!department || !target) return 'NOT_FOUND';
+      const now = new Date();
+      const row = await tx.departmentMembership.upsert({
+        where: { organizationId_userId: { organizationId: actor.organizationId, userId: targetUserId } },
+        create: { id: randomUUID(), organizationId: actor.organizationId, departmentId: department.id, userId: targetUserId, role, status: 'ACTIVE', createdAt: now, updatedAt: now },
+        update: { departmentId: department.id, role, status: 'ACTIVE', updatedAt: now },
+        include: { organizationMembership: { include: { user: true } } }
+      });
+      return { userId: row.userId, name: row.organizationMembership.user.name, role: row.role, status: row.status };
+    }, { isolationLevel: 'RepeatableRead' });
   }
   private async adminOrganization(userId: string): Promise<{ id: string } | OrganizationAccess> {
     const member = await this.prisma.organizationMembership.findFirst({ where: { userId, ...activeMembership }, include: { organization: true } });
