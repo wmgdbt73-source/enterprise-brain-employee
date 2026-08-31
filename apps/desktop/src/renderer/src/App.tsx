@@ -322,7 +322,7 @@ export function App() {
             onDecideReview={decideResult}
           />
         )}
-        {currentUser && <button className="logout" onClick={() => void logout()}>Sign out · {currentUser.name}</button>}
+        {currentUser && <button className="logout" onClick={() => void logout()}>Sign out · {currentUser.name}{currentUser.organization ? ` · ${currentUser.organization.name}${currentUser.department ? ` · ${currentUser.department.name}` : ''}` : ''}</button>}
       </main>
     </div>
   );

@@ -8,6 +8,7 @@ import {
   ArtifactRepository,
   ResultRepository,
   HumanConfirmationRepository,
+  OrganizationRepository,
   createPrismaClient,
   ensureUser,
   SessionRepository,
@@ -45,6 +46,8 @@ import { HumanConfirmationConflictError, HumanConfirmationNotFoundError, HumanCo
 import { registerResultRoutes } from './modules/results/result-routes.js';
 import { ResultIdempotencyConflictError, ResultNotFoundError, ResultReviewConflictError, ResultReviewForbiddenError, ResultService, ResultStateConflictError } from './modules/results/result-service.js';
 import { InvalidCredentialsError, registerAuthRoutes } from './modules/auth/auth-routes.js';
+import { registerOrganizationRoutes } from './modules/organization/organization-routes.js';
+import { OrganizationForbiddenError, OrganizationNotFoundError, OrganizationService } from './modules/organization/organization-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -85,7 +88,9 @@ export async function createApp(
   app.get('/me', async (request): Promise<CurrentUserContract> => ({
     id: request.requestContext.currentUser.id,
     name: request.requestContext.currentUser.name,
-    systemRole: request.requestContext.currentUser.systemRole
+    systemRole: request.requestContext.currentUser.systemRole,
+    organization: request.requestContext.currentUser.organization,
+    department: request.requestContext.currentUser.department
   }));
   registerProjectRoutes(app, new ProjectService(new ProjectRepository(prisma)));
   registerTaskRoutes(app, new TaskService(new TaskRepository(prisma)));
@@ -102,6 +107,7 @@ export async function createApp(
   );
   registerHumanConfirmationRoutes(app, new HumanConfirmationService(new HumanConfirmationRepository(prisma)));
   registerResultRoutes(app, new ResultService(new ResultRepository(prisma)));
+  registerOrganizationRoutes(app, new OrganizationService(new OrganizationRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AuthenticationRequiredError || error instanceof InvalidCredentialsError) {
@@ -133,6 +139,7 @@ export async function createApp(
       error instanceof ArtifactNotFoundError
       || error instanceof ResultNotFoundError
       || error instanceof HumanConfirmationNotFoundError
+      || error instanceof OrganizationNotFoundError
     ) {
       return reply.code(404).send({
         error: {
@@ -172,6 +179,7 @@ export async function createApp(
     if (error instanceof HumanConfirmationConflictError) return reply.code(409).send({ error: { code: 'HUMAN_CONFIRMATION_CONFLICT', message: 'Conflicting confirmation decision', details: {} } });
     if (error instanceof ResultIdempotencyConflictError) return reply.code(409).send({ error: { code: 'IDEMPOTENCY_KEY_CONFLICT', message: 'Idempotency key was previously used for a different Result Candidate request', details: {} } });
     if (error instanceof ResultReviewForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot perform this human review action', details: {} } });
+    if (error instanceof OrganizationForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot manage this organization resource', details: {} } });
     if (error instanceof ResultStateConflictError) return reply.code(409).send({ error: { code: 'INVALID_STATE_TRANSITION', message: 'Result is not in the required state', details: {} } });
     if (error instanceof ResultReviewConflictError) return reply.code(409).send({ error: { code: 'REVIEW_CONFLICT', message: 'A different human review decision already exists', details: {} } });
 

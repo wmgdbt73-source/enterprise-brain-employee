@@ -345,6 +345,15 @@ effect on the next request. Electron Main owns a memory-only bearer token;
 Renderer receives only the current-user contract. Demo seed credentials are
 explicit development data, never implicit API startup behavior.
 
+## ADR-026 — Organization and Department Demo Boundary
+
+EB-015 adds Organization and Department memberships as scoped relationships,
+separate from the coarse platform `User.systemRole`. Each demo User has one
+Organization membership and at most one Department membership; composite
+relations prevent cross-Organization assignment. The authenticated session is
+the sole actor authority. This is not a general permission engine or desktop
+administration console.
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

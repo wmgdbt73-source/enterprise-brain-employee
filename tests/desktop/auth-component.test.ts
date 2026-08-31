@@ -34,6 +34,11 @@ describe('desktop session identity boundary', () => {
     await act(async () => notify());
     expect(text()).toContain('Sign in'); expect(text()).not.toContain('Sign out · Employee');
   });
+  it('renders the authenticated organization and department in the account area', async () => {
+    mount(); window.enterpriseBrain = bridge({ auth: { currentUser: async () => ({ ok: true as const, data: { id: 'employee', name: 'Employee', systemRole: 'EMPLOYEE', organization: { id: 'org', name: 'Enterprise Brain Demo', role: 'MEMBER' }, department: { id: 'product', name: 'Product', role: 'MEMBER' } } }), login: async () => failure('AUTHENTICATION_REQUIRED'), logout: async () => ({ ok: true as const, data: undefined }) } });
+    await render(); await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(text()).toContain('Enterprise Brain Demo'); expect(text()).toContain('Product');
+  });
   it('ignores delayed startup identity and project responses after authentication loss', async () => {
     let identityDone!: (value: ReturnType<typeof successUser>) => void; let lost!: () => void;
     const identity = new Promise<ReturnType<typeof successUser>>((resolve) => { identityDone = resolve; });

@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { createPrismaClient } from '../../packages/database/src/index.js';
+import { createPrismaClient, OrganizationRepository } from '../../packages/database/src/index.js';
 import { isSourceToolCallUniqueConflict } from '../../packages/database/src/repositories/artifact-repository.js';
 import { ResultRepository } from '../../packages/database/src/repositories/result-repository.js';
 import { encodePassword, hashSessionToken } from '../../packages/database/src/index.js';
@@ -71,6 +71,10 @@ describe('PostgreSQL persistence constraints', () => {
     await db.task.deleteMany();
     await db.projectMember.deleteMany();
     await db.project.deleteMany();
+    await db.departmentMembership.deleteMany();
+    await db.organizationMembership.deleteMany();
+    await db.department.deleteMany();
+    await db.organization.deleteMany();
     await db.user.deleteMany();
   });
 
@@ -86,6 +90,30 @@ describe('PostgreSQL persistence constraints', () => {
 
     expect(user.createdAt.toISOString()).toBe(now.toISOString());
     expect(user.updatedAt.toISOString()).toBe(now.toISOString());
+  });
+
+  it('enforces organization and department membership composite constraints', async () => {
+    const db = requireDatabase(); const now = new Date();
+    await db.user.createMany({ data: [{ id: 'org-user-a', name: 'A', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, { id: 'org-user-b', name: 'B', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, { id: 'org-user-c', name: 'C', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, { id: 'org-user-d', name: 'D', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }] });
+    await db.organization.createMany({ data: [{ id: 'org-a', name: 'A', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'org-b', name: 'B', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+    await db.organizationMembership.createMany({ data: [{ id: 'om-a', organizationId: 'org-a', userId: 'org-user-a', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'om-b', organizationId: 'org-b', userId: 'org-user-b', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'om-c', organizationId: 'org-a', userId: 'org-user-c', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'om-d', organizationId: 'org-b', userId: 'org-user-d', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+    await db.department.createMany({ data: [{ id: 'dept-a', organizationId: 'org-a', name: 'A', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'dept-b', organizationId: 'org-b', name: 'B', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+    await expect(db.organizationMembership.create({ data: { id: 'om-duplicate', organizationId: 'org-b', userId: 'org-user-a', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: 'P2002' });
+    await db.departmentMembership.create({ data: { id: 'dm-a', organizationId: 'org-a', departmentId: 'dept-a', userId: 'org-user-a', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+    await expect(db.departmentMembership.create({ data: { id: 'dm-duplicate', organizationId: 'org-a', departmentId: 'dept-a', userId: 'org-user-a', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: 'P2002' });
+    await expect(db.departmentMembership.create({ data: { id: 'dm-wrong-department', organizationId: 'org-a', departmentId: 'dept-b', userId: 'org-user-c', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2039$/) });
+    await expect(db.departmentMembership.create({ data: { id: 'dm-wrong-membership', organizationId: 'org-a', departmentId: 'dept-a', userId: 'org-user-d', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2039$/) });
+  });
+
+  it('rolls back a failed transactional department assignment without replacing the previous assignment', async () => {
+    const db = requireDatabase(); const now = new Date();
+    await db.user.createMany({ data: [{ id: 'assign-owner', name: 'Owner', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, { id: 'assign-employee', name: 'Employee', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }] });
+    await db.organization.create({ data: { id: 'assign-org', name: 'Assign', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+    await db.organizationMembership.createMany({ data: [{ id: 'assign-om-owner', organizationId: 'assign-org', userId: 'assign-owner', role: 'OWNER', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'assign-om-employee', organizationId: 'assign-org', userId: 'assign-employee', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+    await db.department.createMany({ data: [{ id: 'assign-old', organizationId: 'assign-org', name: 'Old', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'assign-new', organizationId: 'assign-org', name: 'New', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+    await db.departmentMembership.create({ data: { id: 'assign-existing', organizationId: 'assign-org', departmentId: 'assign-old', userId: 'assign-employee', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+    await expect(new OrganizationRepository(db).assign('assign-owner', 'assign-employee', 'assign-new', 'INVALID' as never)).rejects.toBeDefined();
+    expect((await db.departmentMembership.findUniqueOrThrow({ where: { userId: 'assign-employee' } })).departmentId).toBe('assign-old');
   });
 
   it('enforces Account and hashed Session persistence boundaries', async () => {

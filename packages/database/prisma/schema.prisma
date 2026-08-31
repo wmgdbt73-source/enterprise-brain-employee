@@ -17,6 +17,32 @@ enum AccountStatus {
   DISABLED
 }
 
+enum OrganizationStatus {
+  ACTIVE
+  DISABLED
+}
+enum OrganizationMembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+enum OrganizationMembershipStatus {
+  ACTIVE
+  DISABLED
+}
+enum DepartmentStatus {
+  ACTIVE
+  DISABLED
+}
+enum DepartmentMembershipRole {
+  MANAGER
+  MEMBER
+}
+enum DepartmentMembershipStatus {
+  ACTIVE
+  DISABLED
+}
+
 enum ProjectMemberRole {
   OWNER
   MEMBER
@@ -92,7 +118,6 @@ model User {
   id             String          @id @map("user_id")
   name           String
   systemRole     UserSystemRole  @map("system_role")
-  departmentId   String?         @map("department_id")
   createdAt      DateTime        @map("created_at") @db.Timestamptz(3)
   updatedAt      DateTime        @map("updated_at") @db.Timestamptz(3)
   projectMembers ProjectMember[]
@@ -101,8 +126,64 @@ model User {
   submittedResults Result[] @relation("ResultSubmitter")
   reviews        Review[]
   account        Account?
+  organizationMembership OrganizationMembership?
 
   @@map("users")
+}
+
+model Organization {
+  id String @id @map("organization_id")
+  name String
+  status OrganizationStatus
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  memberships OrganizationMembership[]
+  departments Department[]
+  @@map("organizations")
+}
+
+model OrganizationMembership {
+  id String @id @map("organization_membership_id")
+  organizationId String @map("organization_id")
+  userId String @unique(map: "organization_memberships_user_id_key") @map("user_id")
+  role OrganizationMembershipRole
+  status OrganizationMembershipStatus
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  user User @relation(fields: [userId], references: [id], onDelete: Restrict)
+  departmentMembership DepartmentMembership?
+  @@unique([organizationId, userId], map: "organization_memberships_organization_id_user_id_key")
+  @@map("organization_memberships")
+}
+
+model Department {
+  id String @id @map("department_id")
+  organizationId String @map("organization_id")
+  name String
+  status DepartmentStatus
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  memberships DepartmentMembership[]
+  @@unique([organizationId, name], map: "departments_organization_id_name_key")
+  @@unique([id, organizationId], map: "departments_department_id_organization_id_key")
+  @@map("departments")
+}
+
+model DepartmentMembership {
+  id String @id @map("department_membership_id")
+  organizationId String @map("organization_id")
+  departmentId String @map("department_id")
+  userId String @unique(map: "department_memberships_user_id_key") @map("user_id")
+  role DepartmentMembershipRole
+  status DepartmentMembershipStatus
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  organizationMembership OrganizationMembership @relation(fields: [organizationId, userId], references: [organizationId, userId], onDelete: Restrict)
+  department Department @relation(fields: [departmentId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([organizationId, userId], map: "department_memberships_organization_id_user_id_key")
+  @@map("department_memberships")
 }
 
 model Account {
