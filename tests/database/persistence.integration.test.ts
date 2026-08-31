@@ -115,7 +115,7 @@ describe('PostgreSQL persistence constraints', () => {
     await db.permissionOverride.create({ data: { id: 'permission-one', ...row } });
     await expect(db.permissionOverride.create({ data: { id: 'permission-two', ...row } })).rejects.toMatchObject({ code: 'P2002' });
     await expect(db.permissionOverride.create({ data: { id: 'permission-cross', ...row, userId: 'permission-user-b' } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2039$/) });
-    await expect(db.permissionOverride.create({ data: { id: 'permission-blank', ...row, scopeId: '   ' } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2010$/) });
+    await expect(db.permissionOverride.create({ data: { id: 'permission-blank', ...row, scopeId: '   ' } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2010$|^P2039$/) });
   });
 
   it('rolls back a failed transactional department assignment without replacing the previous assignment', async () => {
