@@ -16,4 +16,5 @@ export class ApprovedWriteExecutionGrantStore {
     if (value) this.consumed.add(toolCallId);
     return value;
   }
+  clear(): void { this.grants.clear(); this.consumed.clear(); }
 }

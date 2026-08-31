@@ -69,6 +69,77 @@ describe('Desktop Work Runtime gateway', () => {
       error: { code: 'API_UNAVAILABLE' }
     });
   });
+  it('keeps the bearer token in Main gateway memory and never returns it to the bridge caller', async () => {
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'secret-token-value', user: { id: 'user-1', name: 'User', systemRole: 'EMPLOYEE' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'user-1', name: 'User', systemRole: 'EMPLOYEE' }) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await expect(gateway.login({ login: 'user@example.test', password: 'password' })).resolves.toEqual({ ok: true, data: { id: 'user-1', name: 'User', systemRole: 'EMPLOYEE' } });
+    await gateway.getCurrentUser();
+    expect(fetchImplementation.mock.calls[1][1].headers).toMatchObject({ authorization: 'Bearer secret-token-value' });
+  });
+  it('binds late login, logout, and 401 token mutation to the active auth generation', async () => {
+    type DeferredResponse = { ok: boolean; status: number; json(): Promise<unknown> };
+    let resolveOldRequest!: (value: DeferredResponse) => void;
+    const oldRequest = new Promise<DeferredResponse>((resolve) => { resolveOldRequest = resolve; });
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'old-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'old', name: 'Old', systemRole: 'EMPLOYEE' } }) })
+      .mockImplementationOnce(() => oldRequest)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'new-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'new', name: 'New', systemRole: 'EMPLOYEE' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'new', name: 'New', systemRole: 'EMPLOYEE' } ) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await gateway.login({ login: 'old', password: 'x' });
+    const staleProtected = gateway.getCurrentUser();
+    await gateway.login({ login: 'new', password: 'x' });
+    resolveOldRequest({ ok: false, status: 401, json: async () => ({ error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } }) });
+    await staleProtected;
+    await gateway.getCurrentUser();
+    expect(fetchImplementation.mock.calls[3][1].headers).toMatchObject({ authorization: 'Bearer new-token-value-abcdefghijklmnopqrstuvwxyz' });
+  });
+  it('does not install a delayed older login after a newer login succeeds', async () => {
+    type DeferredResponse = { ok: boolean; status: number; json(): Promise<unknown> };
+    let resolveOld!: (value: DeferredResponse) => void;
+    const old = new Promise<DeferredResponse>((resolve) => { resolveOld = resolve; });
+    const fetchImplementation = vi.fn()
+      .mockImplementationOnce(() => old)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'new-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'new', name: 'New', systemRole: 'EMPLOYEE' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'new', name: 'New', systemRole: 'EMPLOYEE' } ) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    const stale = gateway.login({ login: 'old', password: 'x' });
+    await gateway.login({ login: 'new', password: 'x' });
+    resolveOld({ ok: true, status: 200, json: async () => ({ token: 'old-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'old', name: 'Old', systemRole: 'EMPLOYEE' } }) });
+    await stale;
+    await gateway.getCurrentUser();
+    expect(fetchImplementation.mock.calls[2][1].headers).toMatchObject({ authorization: 'Bearer new-token-value-abcdefghijklmnopqrstuvwxyz' });
+  });
+  it('sends the captured token during logout and cannot erase a later login', async () => {
+    let resolveLogout!: (value: { ok: boolean; status: number; json(): Promise<unknown> }) => void;
+    const delayedLogout = new Promise<{ ok: boolean; status: number; json(): Promise<unknown> }>((resolve) => { resolveLogout = resolve; });
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'old-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'old', name: 'Old', systemRole: 'EMPLOYEE' } }) })
+      .mockImplementationOnce(() => delayedLogout)
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'new-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'new', name: 'New', systemRole: 'EMPLOYEE' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'new', name: 'New', systemRole: 'EMPLOYEE' } ) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await gateway.login({ login: 'old', password: 'x' });
+    const logout = gateway.logout();
+    expect(fetchImplementation.mock.calls[1][1].headers).toMatchObject({ authorization: 'Bearer old-token-value-abcdefghijklmnopqrstuvwxyz' });
+    await gateway.login({ login: 'new', password: 'x' });
+    resolveLogout({ ok: true, status: 200, json: async () => ({}) });
+    await logout; await gateway.getCurrentUser();
+    expect(fetchImplementation.mock.calls[3][1].headers).toMatchObject({ authorization: 'Bearer new-token-value-abcdefghijklmnopqrstuvwxyz' });
+  });
+  it('remains locally signed out when logout network cleanup fails', async () => {
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'old-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'old', name: 'Old', systemRole: 'EMPLOYEE' } }) })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'wrong', name: 'Wrong', systemRole: 'EMPLOYEE' }) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await gateway.login({ login: 'old', password: 'x' });
+    await expect(gateway.logout()).resolves.toMatchObject({ ok: false, error: { code: 'API_UNAVAILABLE' } });
+    await gateway.getCurrentUser();
+    expect(fetchImplementation.mock.calls[2][1].headers).not.toHaveProperty('authorization');
+  });
   it('exposes only the allowlisted preload bridge capabilities', () => {
     const invoke = vi.fn().mockResolvedValue({
       ok: true,
@@ -78,6 +149,7 @@ describe('Desktop Work Runtime gateway', () => {
     expect(Object.keys(bridge).sort()).toEqual([
       'agents',
       'artifacts',
+      'auth',
       'confirmedWrites',
       'projects',
       'results',

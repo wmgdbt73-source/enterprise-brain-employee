@@ -56,6 +56,13 @@ describe('ConfirmedWriteCoordinator', () => {
     expect(execute).not.toHaveBeenCalled();
     expect(approveHumanConfirmation).not.toHaveBeenCalled();
   });
+  it('clears pending payloads and one-shot grant state at an authentication boundary', async () => {
+    const { coordinator, approveHumanConfirmation, execute } = setup();
+    await coordinator.prepare(ids.task, { relativePath: 'docs/file.md', content: 'text' });
+    coordinator.clearSensitiveState();
+    await expect(coordinator.approve(ids.confirmation)).resolves.toMatchObject({ ok: false });
+    expect(approveHumanConfirmation).not.toHaveBeenCalled(); expect(execute).not.toHaveBeenCalled();
+  });
   it('does not repeat a successful local mutation when backend completion fails', async () => {
     const { coordinator, execute, completeAgentRun } = setup();
     completeAgentRun.mockResolvedValue({ ok: false, error: { code: 'API_UNAVAILABLE', message: 'offline', details: {} } });

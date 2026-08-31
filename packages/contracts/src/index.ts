@@ -55,4 +55,5 @@ export type {
   UserContract,
   UserSystemRole
 } from './user.js';
+export type { AccountStatus, LoginRequest, LoginResponse } from './auth.js';
 export type { LocalPermission } from './workspace.js';

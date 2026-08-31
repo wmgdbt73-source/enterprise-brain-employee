@@ -335,6 +335,16 @@ the same Project and block START until every upstream Task is ACCEPTED or CLOSED
 
 ---
 
+## ADR-025 — Demo Authentication and In-Memory Desktop Session
+
+EB-014 replaces runtime development identity with Account-backed login and
+opaque 24-hour Session tokens. Passwords use versioned salted scrypt hashes;
+PostgreSQL stores only token SHA-256 hashes. Every protected request checks the
+Session, Account status, and User on demand, so revocation and disablement take
+effect on the next request. Electron Main owns a memory-only bearer token;
+Renderer receives only the current-user contract. Demo seed credentials are
+explicit development data, never implicit API startup behavior.
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

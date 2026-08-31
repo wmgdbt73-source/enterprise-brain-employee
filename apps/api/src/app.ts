@@ -1,5 +1,5 @@
 import Fastify, { type FastifyInstance } from 'fastify';
-import { createUser, type User } from '@enterprise-brain/domain';
+import { asUserId, createUser, type User } from '@enterprise-brain/domain';
 import type { CurrentUserContract } from '@enterprise-brain/contracts';
 import {
   ProjectRepository,
@@ -10,9 +10,9 @@ import {
   HumanConfirmationRepository,
   createPrismaClient,
   ensureUser,
+  SessionRepository,
   type PrismaClient
 } from '@enterprise-brain/database';
-import { DevIdentityProvider } from './identity/dev-identity-provider.js';
 import type { IdentityProvider } from './identity/identity-provider.js';
 import { registerProjectRoutes } from './modules/projects/project-routes.js';
 import {
@@ -44,6 +44,7 @@ import { registerHumanConfirmationRoutes } from './modules/human-confirmations/h
 import { HumanConfirmationConflictError, HumanConfirmationNotFoundError, HumanConfirmationService } from './modules/human-confirmations/human-confirmation-service.js';
 import { registerResultRoutes } from './modules/results/result-routes.js';
 import { ResultIdempotencyConflictError, ResultNotFoundError, ResultReviewConflictError, ResultReviewForbiddenError, ResultService, ResultStateConflictError } from './modules/results/result-service.js';
+import { InvalidCredentialsError, registerAuthRoutes } from './modules/auth/auth-routes.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -60,22 +61,27 @@ export async function createApp(
       }
     }
   });
-  const identityProvider =
-    options.identityProvider ?? new DevIdentityProvider();
   const prisma =
     options.prisma ??
     createPrismaClient(requireDatabaseUrl(process.env.DATABASE_URL));
-  const currentUser = await identityProvider.getCurrentUser();
-
-  await ensureUser(prisma, toDomainUser(currentUser));
+  const identityProvider = options.identityProvider;
+  const sessions = new SessionRepository(prisma);
+  // Injected identity is a test seam only. Production defaults to SessionRepository.
+  if (identityProvider) await ensureUser(prisma, toDomainUser(await identityProvider.getCurrentUser()));
 
   app.addHook('onRequest', async (request) => {
-    request.requestContext = {
-      currentUser: await identityProvider.getCurrentUser()
-    };
+    const currentUser = identityProvider
+      ? await identityProvider.getCurrentUser()
+      : await sessions.resolveBearer(request.headers.authorization);
+    request.requestContext = currentUser ? { currentUser: { ...currentUser, id: asUserId(currentUser.id) } } : ({} as typeof request.requestContext);
+  });
+  app.addHook('preHandler', async (request) => {
+    if (request.url === '/health' || request.url === '/auth/login') return;
+    if (!request.requestContext.currentUser) throw new AuthenticationRequiredError();
   });
 
   app.get('/health', async () => ({ status: 'ok' }));
+  registerAuthRoutes(app, sessions);
   app.get('/me', async (request): Promise<CurrentUserContract> => ({
     id: request.requestContext.currentUser.id,
     name: request.requestContext.currentUser.name,
@@ -98,6 +104,9 @@ export async function createApp(
   registerResultRoutes(app, new ResultService(new ResultRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
+    if (error instanceof AuthenticationRequiredError || error instanceof InvalidCredentialsError) {
+      return reply.code(401).send({ error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } });
+    }
     if (isDomainError(error) && error.code === 'INVALID_STATE_TRANSITION') {
       return reply.code(409).send({
         error: {
@@ -179,6 +188,8 @@ export async function createApp(
   return app;
 }
 
+export class AuthenticationRequiredError extends Error {}
+
 function requireDatabaseUrl(value: string | undefined): string {
   if (!value) {
     throw new Error('DATABASE_URL is required to create the API application');
@@ -196,16 +207,7 @@ function toErrorMessage(error: unknown): string {
 }
 
 function toDomainUser(currentUser: {
-  id: User['id'];
-  name: string;
-  systemRole: User['systemRole'];
+  id: User['id']; name: string; systemRole: User['systemRole'];
 }): User {
-  return createUser(
-    {
-      id: currentUser.id,
-      name: currentUser.name,
-      systemRole: currentUser.systemRole
-    },
-    new Date()
-  );
+  return createUser({ id: currentUser.id, name: currentUser.name, systemRole: currentUser.systemRole }, new Date());
 }

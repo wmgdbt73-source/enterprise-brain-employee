@@ -254,6 +254,7 @@ function bridge(overrides: Partial<EnterpriseBrainBridge>): EnterpriseBrainBridg
   const ok = async () => ({ ok: true as const, data: [] });
   return {
     runtime: { getInfo: async () => ({ ok: true, data: { runtime: 'desktop', platform: 'test', appVersion: '1' } }) },
+    auth: { currentUser: async () => ({ ok: true as const, data: { id: 'dev-user', name: 'Development Employee', systemRole: 'EMPLOYEE' } }), login: async () => failure('UNUSED'), logout: async () => ({ ok: true as const, data: undefined }) },
     projects: { list: async () => ({ ok: true, data: [project] }), get: async () => ({ ok: true, data: project }), create: async () => ({ ok: true, data: project }) },
     tasks: { list: async () => ({ ok: true, data: [taskA] }), get: async () => ({ ok: true, data: taskA }), create: async () => ({ ok: true, data: taskA }), start: async () => ({ ok: true, data: taskA }) },
     workspace: { get: async () => ({ ok: true, data: null }), select: async () => ({ ok: true, data: { cancelled: true } }), unbind: async () => ({ ok: true, data: undefined }), listDirectory: ok, readFile: async () => failure('UNUSED') },

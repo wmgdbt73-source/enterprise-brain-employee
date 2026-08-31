@@ -16,12 +16,12 @@ async function artifact(app: Awaited<ReturnType<typeof createApp>>, taskId: stri
 
 describe('Result Candidate API', () => {
   beforeEach(async () => {
-    await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().user.deleteMany();
+    await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().user.deleteMany();
   });
   afterAll(async () => database?.$disconnect());
 
   it('creates canonical Candidate Results idempotently without changing Artifact, Task, or AgentRun', async () => {
-    const app = await createApp({ prisma: db() });
+    const app = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const a = await artifact(app, task.id, 'a.md'); const b = await artifact(app, task.id, 'b.md', 'b'.repeat(64));
@@ -47,7 +47,7 @@ describe('Result Candidate API', () => {
   });
 
   it('hides invalid Artifact scope and rejects invalid Candidate input', async () => {
-    const app = await createApp({ prisma: db() });
+    const app = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const otherTask = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Other' } })).json();
@@ -73,7 +73,7 @@ describe('Result Candidate API', () => {
   });
 
   it('hides Result creation and reads when membership is absent or revoked', async () => {
-    const app = await createApp({ prisma: db() });
+    const app = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const registered = await artifact(app, task.id, 'a.md');
@@ -94,7 +94,7 @@ describe('Result Candidate API', () => {
     const secondaryClient = createPrismaClient(process.env.DATABASE_URL!);
     const app = await createApp({ prisma: wrapPrismaForResultApiTest(primaryClient, {
       beforeResultCreate: () => sameGate.arriveAndWait()
-    }) });
+    }), identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const a = await artifact(app, task.id, 'a.md');
@@ -102,7 +102,7 @@ describe('Result Candidate API', () => {
     const sameARequest = app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
     const sameApp = await createApp({ prisma: wrapPrismaForResultApiTest(secondaryClient, {
       beforeResultCreate: () => sameGate.arriveAndWait()
-    }) });
+    }), identityProvider: new DevIdentityProvider() });
     const sameBRequest = sameApp.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('10') }, payload: { artifactIds: [a.id, b.id] } });
     await sameGate.waitUntilReached();
     expect(sameGate.arrivals).toBe(2);
@@ -117,7 +117,7 @@ describe('Result Candidate API', () => {
     const conflictGate = boundedGate(2);
     const conflictApp = await createApp({ prisma: wrapPrismaForResultApiTest(secondaryClient, {
       beforeResultCreate: () => conflictGate.arriveAndWait()
-    }) });
+    }), identityProvider: new DevIdentityProvider() });
     const left = conflictApp.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [a.id] } });
     const right = conflictApp.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('11') }, payload: { artifactIds: [b.id] } });
     await conflictGate.waitUntilReached();
@@ -137,7 +137,7 @@ describe('Result Candidate API', () => {
   });
 
   it('coordinates submission and human ACCEPT with the owning Task', async () => {
-    const app = await createApp({ prisma: db() });
+    const app = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const dependent = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Dependent', dependencyIds: [task.id] } })).json();
@@ -169,7 +169,7 @@ describe('Result Candidate API', () => {
   });
 
   it('returns REWORK Result and Task IN_PROGRESS atomically', async () => {
-    const app = await createApp({ prisma: db() });
+    const app = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Rework' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const registered = await artifact(app, task.id, 'a.md');
@@ -186,7 +186,7 @@ describe('Result Candidate API', () => {
   });
 
   it('enforces review role, ownership, hidden scope and terminal conflict boundaries', async () => {
-    const app = await createApp({ prisma: db() });
+    const app = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const registered = await artifact(app, task.id, 'a.md');
@@ -214,7 +214,7 @@ describe('Result Candidate API', () => {
   });
 
   it('makes omitted and blank review comments the same idempotent request', async () => {
-    const app = await createApp({ prisma: db() });
+    const app = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'P' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
     const registered = await artifact(app, task.id, 'a.md');
