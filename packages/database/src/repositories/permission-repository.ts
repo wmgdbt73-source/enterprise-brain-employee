@@ -17,16 +17,18 @@ export class PermissionRepository {
   async evaluate(input: PermissionInput): Promise<EffectivePermissionContract> { return evaluatePermission(this.prisma, input); }
   async listForAdmin(actorId: string, userId: string): Promise<PermissionOverrideContract[] | 'NOT_FOUND' | 'FORBIDDEN'> {
     return this.prisma.$transaction(async (tx) => {
-      const actor = await activeAdmin(tx, actorId); if (!actor) return 'NOT_FOUND'; if (actor === 'FORBIDDEN') return 'FORBIDDEN';
-      if (!(await tx.organizationMembership.findFirst({ where: { organizationId: actor.organizationId, userId, status: 'ACTIVE' } }))) return 'NOT_FOUND';
+      const actor = await activeActor(tx, actorId); if (!actor) return 'NOT_FOUND';
+      const target = await tx.organizationMembership.findFirst({ where: { userId, status: 'ACTIVE' } }); if (!target || target.organizationId !== actor.organizationId) return 'NOT_FOUND';
+      if (!actor.admin) return 'FORBIDDEN';
       return (await tx.permissionOverride.findMany({ where: { organizationId: actor.organizationId, userId }, orderBy: { createdAt: 'asc' } })).map(toContract);
     }, { isolationLevel: 'RepeatableRead' });
   }
   async upsertForAdmin(actorId: string, userId: string, input: OverrideInput): Promise<PermissionOverrideContract | 'NOT_FOUND' | 'FORBIDDEN'> {
     return this.prisma.$transaction(async (tx) => {
-      const actor = await activeAdmin(tx, actorId); if (!actor) return 'NOT_FOUND'; if (actor === 'FORBIDDEN') return 'FORBIDDEN';
+      const actor = await activeActor(tx, actorId); if (!actor) return 'NOT_FOUND';
       if (!isSupportedPermission(input.resource, input.action)) return 'NOT_FOUND';
-      if (!(await tx.organizationMembership.findFirst({ where: { organizationId: actor.organizationId, userId, status: 'ACTIVE' } }))) return 'NOT_FOUND';
+      const target = await tx.organizationMembership.findFirst({ where: { userId, status: 'ACTIVE' } }); if (!target || target.organizationId !== actor.organizationId) return 'NOT_FOUND';
+      if (!actor.admin) return 'FORBIDDEN';
       if (input.scopeType === 'ORGANIZATION' && input.scopeId !== actor.organizationId) return 'NOT_FOUND';
       if (input.scopeType === 'DEPARTMENT' && !(await tx.department.findFirst({ where: { id: input.scopeId, organizationId: actor.organizationId, status: 'ACTIVE' } }))) return 'NOT_FOUND';
       const now = new Date(); const row = await tx.permissionOverride.upsert({
@@ -37,8 +39,9 @@ export class PermissionRepository {
   }
   async removeForAdmin(actorId: string, userId: string, overrideId: string): Promise<boolean | 'NOT_FOUND' | 'FORBIDDEN'> {
     return this.prisma.$transaction(async (tx) => {
-      const actor = await activeAdmin(tx, actorId); if (!actor) return 'NOT_FOUND'; if (actor === 'FORBIDDEN') return 'FORBIDDEN';
-      if (!(await tx.organizationMembership.findFirst({ where: { organizationId: actor.organizationId, userId, status: 'ACTIVE' } }))) return 'NOT_FOUND';
+      const actor = await activeActor(tx, actorId); if (!actor) return 'NOT_FOUND';
+      const target = await tx.organizationMembership.findFirst({ where: { userId, status: 'ACTIVE' } }); if (!target || target.organizationId !== actor.organizationId) return 'NOT_FOUND';
+      if (!actor.admin) return 'FORBIDDEN';
       const deleted = await tx.permissionOverride.deleteMany({ where: { id: overrideId, organizationId: actor.organizationId, userId } }); return deleted.count === 1 ? true : 'NOT_FOUND';
     }, { isolationLevel: 'RepeatableRead' });
   }
@@ -64,5 +67,5 @@ export async function evaluatePermission(db: PermissionDbClient, input: Permissi
   return { ...base, allowed: roleAllowed, source: roleAllowed ? 'ROLE' : 'DEFAULT_DENY' };
 }
 
-async function activeAdmin(db: PermissionDbClient, userId: string): Promise<{ organizationId: string } | 'FORBIDDEN' | undefined> { const member = await db.organizationMembership.findFirst({ where: { userId, status: 'ACTIVE', organization: { status: 'ACTIVE' } } }); if (!member) return undefined; return member.role === 'OWNER' || member.role === 'ADMIN' ? { organizationId: member.organizationId } : 'FORBIDDEN'; }
+async function activeActor(db: PermissionDbClient, userId: string): Promise<{ organizationId: string; admin: boolean } | undefined> { const member = await db.organizationMembership.findFirst({ where: { userId, status: 'ACTIVE', organization: { status: 'ACTIVE' } } }); return member ? { organizationId: member.organizationId, admin: member.role === 'OWNER' || member.role === 'ADMIN' } : undefined; }
 function toContract(row: { id:string; organizationId:string; userId:string; scopeType: PermissionScopeType; scopeId:string; resource: PermissionResource; action: PermissionAction; effect: PermissionEffect; createdAt:Date; updatedAt:Date }): PermissionOverrideContract { return { id:row.id,organizationId:row.organizationId,userId:row.userId,scopeType:row.scopeType,scopeId:row.scopeId,resource:row.resource,action:row.action,effect:row.effect,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString() }; }
