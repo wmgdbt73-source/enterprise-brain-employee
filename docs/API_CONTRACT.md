@@ -288,3 +288,11 @@ Before Codex adds or changes an endpoint, it must:
 1. check this file;
 2. reuse an existing contract where possible;
 3. update this file when a new public endpoint is introduced.
+
+## 13. Organization and Department
+
+`GET /organization` returns the current user's active Organization and role.
+`GET /departments` lists its active Departments. Organization `OWNER` and `ADMIN`
+may create or update Departments and assign a same-Organization employee through
+`PUT /employees/:userId/department`; a Department `MANAGER` may list that
+Department's members. Actor and Organization fields are always server-derived.

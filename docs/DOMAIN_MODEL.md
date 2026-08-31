@@ -284,3 +284,7 @@ optional revocation time. Raw passwords and tokens are never domain records.
 EB-013 persists `Task.dependencyIds` as same-Project TaskDependency rows. A
 dependency is satisfied only when its Task is `ACCEPTED` or `CLOSED`; it gates
 the formal `START` action without creating a new Task status.
+
+## 15. Organization and Department
+
+`OrganizationMembership` is the User's organizational relationship (`OWNER | ADMIN | MEMBER`); `DepartmentMembership` assigns that User to one Department in that Organization (`MANAGER | MEMBER`). Both are distinct from `User.systemRole`, and composite relations prevent cross-Organization department memberships. `User.departmentId` is no longer a source of truth.

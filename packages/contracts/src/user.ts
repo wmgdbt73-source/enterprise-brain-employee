@@ -16,4 +16,6 @@ export interface CurrentUserContract {
   id: UserId;
   name: string;
   systemRole: UserSystemRole;
+  organization?: { id: string; name: string; role: 'OWNER' | 'ADMIN' | 'MEMBER' };
+  department?: { id: string; name: string; role: 'MANAGER' | 'MEMBER' };
 }
