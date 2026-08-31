@@ -15,4 +15,5 @@ export {
 } from './repositories/artifact-repository.js';
 export { ResultRepository, isResultIdempotencyConflict, requestFingerprint, type ResultCreation, type ResultReviewAction } from './repositories/result-repository.js';
 export { OrganizationRepository } from './repositories/organization-repository.js';
+export { PermissionRepository } from './repositories/permission-repository.js';
 export type { PrismaClient } from './generated/prisma/client.js';

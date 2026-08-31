@@ -42,6 +42,26 @@ enum DepartmentMembershipStatus {
   ACTIVE
   DISABLED
 }
+enum PermissionScopeType {
+  ORGANIZATION
+  DEPARTMENT
+}
+enum PermissionResource {
+  ORGANIZATION
+  DEPARTMENT
+  PERMISSION
+  RESULT
+}
+enum PermissionAction {
+  VIEW
+  MANAGE
+  ASSIGN
+  REVIEW
+}
+enum PermissionEffect {
+  ALLOW
+  DENY
+}
 
 enum ProjectMemberRole {
   OWNER
@@ -153,8 +173,25 @@ model OrganizationMembership {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   user User @relation(fields: [userId], references: [id], onDelete: Restrict)
   departmentMembership DepartmentMembership?
+  permissionOverrides PermissionOverride[]
   @@unique([organizationId, userId], map: "organization_memberships_organization_id_user_id_key")
   @@map("organization_memberships")
+}
+
+model PermissionOverride {
+  id String @id @map("permission_override_id")
+  organizationId String @map("organization_id")
+  userId String @map("user_id")
+  scopeType PermissionScopeType @map("scope_type")
+  scopeId String @map("scope_id")
+  resource PermissionResource
+  action PermissionAction
+  effect PermissionEffect
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  organizationMembership OrganizationMembership @relation(fields: [organizationId, userId], references: [organizationId, userId], onDelete: Restrict)
+  @@unique([organizationId, userId, scopeType, scopeId, resource, action], map: "permission_overrides_tuple_key")
+  @@map("permission_overrides")
 }
 
 model Department {

@@ -57,4 +57,5 @@ export type {
 } from './user.js';
 export type { AccountStatus, LoginRequest, LoginResponse } from './auth.js';
 export type { OrganizationContract, OrganizationRole, OrganizationStatus, DepartmentContract, DepartmentRole, DepartmentStatus, DepartmentMemberContract } from './organization.js';
+export type { PermissionResource, PermissionAction, PermissionScopeType, PermissionEffect, PermissionDecisionSource, EffectivePermissionContract, PermissionOverrideContract } from './permission.js';
 export type { LocalPermission } from './workspace.js';
