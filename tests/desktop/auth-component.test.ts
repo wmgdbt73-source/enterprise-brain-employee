@@ -42,6 +42,17 @@ describe('desktop session identity boundary', () => {
     await act(async () => identityDone(successUser()));
     expect(text()).toContain('Sign in'); expect(text()).not.toContain('Sign out · Employee');
   });
+  it('ignores a delayed projects list after auth loss and a newer login', async () => {
+    type ProjectsResult = Awaited<ReturnType<EnterpriseBrainBridge['projects']['list']>>;
+    let resolveProjects!: (value: ProjectsResult) => void; let lost!: () => void;
+    const projects = new Promise<ProjectsResult>((resolve) => { resolveProjects = resolve; }); let listCalls = 0;
+    mount(); window.enterpriseBrain = bridge({ auth: { currentUser: async () => successUser(), login: async () => successUser(), logout: async () => ({ ok: true as const, data: undefined }), onAuthenticationLost: (listener) => { lost = listener; return () => undefined; } }, projects: { list: async () => ++listCalls === 1 ? projects : ({ ok: true as const, data: [] }), get: async () => failure('UNUSED'), create: async () => failure('UNUSED') } });
+    await render(); await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    await act(async () => lost());
+    const inputs = [...document.querySelectorAll('input')] as HTMLInputElement[]; await input(inputs[0], 'employee@example.test'); await input(inputs[1], 'password'); await click('Sign in');
+    await act(async () => resolveProjects({ ok: true as const, data: [{ id: 'old-project', name: 'Old Project', status: 'ACTIVE', createdAt: 'x', updatedAt: 'x' }] }));
+    expect(text()).not.toContain('Old Project');
+  });
   it('keeps invalid credentials recoverable and blocks duplicate login submit while pending', async () => {
     type LoginResult = Awaited<ReturnType<EnterpriseBrainBridge['auth']['login']>>;
     let resolveLogin!: (value: LoginResult) => void; let calls = 0;

@@ -166,12 +166,18 @@ export function App() {
     value: TaskContract,
     relativePath: string
   ): Promise<AgentRunContract | undefined> {
+    const generation = authGenerationRef.current;
     const operation = resolveOperation(
       await window.enterpriseBrain.agents.run(value.id, {
         name: 'read_file',
         relativePath
       })
     );
+    if (generation !== authGenerationRef.current) return undefined;
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') {
+      clearAuthenticatedState();
+      return undefined;
+    }
     if (operation.error) {
       setError(operation.error);
       return undefined;

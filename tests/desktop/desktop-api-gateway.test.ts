@@ -129,6 +129,17 @@ describe('Desktop Work Runtime gateway', () => {
     await logout; await gateway.getCurrentUser();
     expect(fetchImplementation.mock.calls[3][1].headers).toMatchObject({ authorization: 'Bearer new-token-value-abcdefghijklmnopqrstuvwxyz' });
   });
+  it('remains locally signed out when logout network cleanup fails', async () => {
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'old-token-value-abcdefghijklmnopqrstuvwxyz', user: { id: 'old', name: 'Old', systemRole: 'EMPLOYEE' } }) })
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'wrong', name: 'Wrong', systemRole: 'EMPLOYEE' }) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await gateway.login({ login: 'old', password: 'x' });
+    await expect(gateway.logout()).resolves.toMatchObject({ ok: false, error: { code: 'API_UNAVAILABLE' } });
+    await gateway.getCurrentUser();
+    expect(fetchImplementation.mock.calls[2][1].headers).not.toHaveProperty('authorization');
+  });
   it('exposes only the allowlisted preload bridge capabilities', () => {
     const invoke = vi.fn().mockResolvedValue({
       ok: true,
