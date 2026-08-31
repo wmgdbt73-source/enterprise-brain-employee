@@ -155,6 +155,7 @@ describe('Result Candidate API', () => {
     expect((await app.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
     await db().user.create({ data: { id: 'reviewer-1', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
     await db().projectMember.create({ data: { id: 'member-reviewer-1', projectId: project.id, userId: 'reviewer-1', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    await reviewOrganization('reviewer-1');
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-1', name: 'Reviewer' }) });
     const accepted = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: ' looks good ' } });
     expect(accepted.statusCode).toBe(201); expect(accepted.json()).toMatchObject({ resultId: result.id, reviewerId: 'reviewer-1', decision: 'ACCEPT', comment: 'looks good' });
@@ -178,6 +179,7 @@ describe('Result Candidate API', () => {
     await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} });
     await db().user.create({ data: { id: 'reviewer-rework', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
     await db().projectMember.create({ data: { id: 'member-reviewer-rework', projectId: project.id, userId: 'reviewer-rework', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    await reviewOrganization('reviewer-rework');
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-rework' }) });
     expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'REWORK' } })).statusCode).toBe(201);
     expect(await db().result.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: 'REWORK' });
@@ -199,6 +201,7 @@ describe('Result Candidate API', () => {
     const member = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'member-1', name: 'Member' }) });
     const admin = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'admin-1', name: 'Admin', systemRole: 'ADMIN' }) });
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-2', name: 'Reviewer' }) });
+    await reviewOrganization('reviewer-2');
     expect((await member.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: { submittedByUserId: 'forged' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(200);
@@ -223,6 +226,7 @@ describe('Result Candidate API', () => {
     await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} });
     await db().user.create({ data: { id: 'reviewer-empty', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
     await db().projectMember.create({ data: { id: 'member-reviewer-empty', projectId: project.id, userId: 'reviewer-empty', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    await reviewOrganization('reviewer-empty');
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-empty', name: 'Reviewer' }) });
     const first = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } });
     const blank = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: '   ' } });
@@ -231,6 +235,12 @@ describe('Result Candidate API', () => {
     await Promise.all([reviewer.close(), app.close()]);
   });
 });
+
+async function reviewOrganization(userId: string) {
+  const now = new Date();
+  await db().organization.upsert({ where: { id: 'review-org' }, create: { id: 'review-org', name: 'Review Organization', status: 'ACTIVE', createdAt: now, updatedAt: now }, update: {} });
+  await db().organizationMembership.create({ data: { id: `review-org-${userId}`, organizationId: 'review-org', userId, role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+}
 
 function wrapPrismaForResultApiTest(prisma: PrismaClient, hooks: { beforeResultCreate: () => Promise<void> | void }): PrismaClient {
   return new Proxy(prisma, {

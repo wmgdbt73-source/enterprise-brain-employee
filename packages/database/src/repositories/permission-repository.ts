@@ -60,7 +60,7 @@ export async function evaluatePermission(db: PermissionDbClient, input: Permissi
     ? input.roleAllowed === true
     : orgAdmin
       ? (input.resource === 'ORGANIZATION' && input.action === 'VIEW') || (input.resource === 'DEPARTMENT' && ['VIEW', 'MANAGE', 'ASSIGN'].includes(input.action)) || (input.resource === 'PERMISSION' && ['VIEW', 'MANAGE'].includes(input.action))
-      : member?.role === 'MEMBER' && ((input.resource === 'ORGANIZATION' && input.action === 'VIEW') || (input.resource === 'DEPARTMENT' && input.action === 'VIEW' && (input.scopeType === 'ORGANIZATION' || (member.departmentMembership?.status === 'ACTIVE' && member.departmentMembership.departmentId === input.scopeId))));
+      : member?.role === 'MEMBER' && ((input.resource === 'ORGANIZATION' && input.action === 'VIEW') || (input.resource === 'DEPARTMENT' && input.action === 'VIEW' && (input.scopeType === 'ORGANIZATION' || (member.departmentMembership?.status === 'ACTIVE' && member.departmentMembership.role === 'MANAGER' && member.departmentMembership.departmentId === input.scopeId))));
   return { ...base, allowed: roleAllowed, source: roleAllowed ? 'ROLE' : 'DEFAULT_DENY' };
 }
 

@@ -88,7 +88,7 @@ export class ResultRepository {
       const membership = await tx.projectMember.findUnique({ where: { projectId_userId: { projectId: result.projectId, userId: input.reviewerId } } });
       if (!membership || result.createdByUserId === input.reviewerId || (membership.role !== 'OWNER' && membership.role !== 'REVIEWER')) return 'FORBIDDEN';
       const organizationMembership = await tx.organizationMembership.findFirst({ where: { userId: input.reviewerId, status: 'ACTIVE', organization: { status: 'ACTIVE' } } });
-      if (organizationMembership && !(await evaluatePermission(tx, { organizationId: organizationMembership.organizationId, userId: input.reviewerId, scopeType: 'ORGANIZATION', scopeId: organizationMembership.organizationId, resource: 'RESULT', action: 'REVIEW', roleAllowed: true })).allowed) return 'FORBIDDEN';
+      if (!organizationMembership || !(await evaluatePermission(tx, { organizationId: organizationMembership.organizationId, userId: input.reviewerId, scopeType: 'ORGANIZATION', scopeId: organizationMembership.organizationId, resource: 'RESULT', action: 'REVIEW', roleAllowed: true })).allowed) return 'FORBIDDEN';
       const existing = await tx.review.findUnique({ where: { resultId: result.id } });
       if (existing) return sameReviewRequest(existing, input) ? { review: toReviewContract(existing), created: false } : 'CONFLICT';
       if (result.status !== 'HUMAN_REVIEW') return 'INVALID_STATE';
@@ -116,7 +116,7 @@ export class ResultRepository {
       const membership = await tx.projectMember.findUnique({ where: { projectId_userId: { projectId: result.projectId, userId: input.reviewerId } } });
       if (!membership || result.createdByUserId === input.reviewerId || (membership.role !== 'OWNER' && membership.role !== 'REVIEWER')) return 'FORBIDDEN';
       const organizationMembership = await tx.organizationMembership.findFirst({ where: { userId: input.reviewerId, status: 'ACTIVE', organization: { status: 'ACTIVE' } } });
-      if (organizationMembership && !(await evaluatePermission(tx, { organizationId: organizationMembership.organizationId, userId: input.reviewerId, scopeType: 'ORGANIZATION', scopeId: organizationMembership.organizationId, resource: 'RESULT', action: 'REVIEW', roleAllowed: true })).allowed) return 'FORBIDDEN';
+      if (!organizationMembership || !(await evaluatePermission(tx, { organizationId: organizationMembership.organizationId, userId: input.reviewerId, scopeType: 'ORGANIZATION', scopeId: organizationMembership.organizationId, resource: 'RESULT', action: 'REVIEW', roleAllowed: true })).allowed) return 'FORBIDDEN';
       const review = await tx.review.findUnique({ where: { resultId: result.id } });
       if (!review) return 'CONFLICT';
       return sameReviewRequest(review, input)

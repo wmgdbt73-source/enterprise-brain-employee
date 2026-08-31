@@ -37,9 +37,7 @@ export class OrganizationRepository {
     return this.prisma.$transaction(async (tx) => {
       const org = await this.actorOrganization(tx, userId); if (typeof org === 'string') return org;
       const department = await tx.department.findFirst({ where: { id: departmentId, organizationId: org.id } }); if (!department) return 'NOT_FOUND';
-      const own = await tx.departmentMembership.findUnique({ where: { userId } });
-      const manager = own?.departmentId === departmentId && own.status === 'ACTIVE' && own.role === 'MANAGER';
-      if (!(await allowed(tx, org.id, userId, 'DEPARTMENT', departmentId, 'DEPARTMENT', 'VIEW')) && !manager) return 'FORBIDDEN';
+      if (!(await allowed(tx, org.id, userId, 'DEPARTMENT', departmentId, 'DEPARTMENT', 'VIEW'))) return 'FORBIDDEN';
       const rows = await tx.departmentMembership.findMany({ where: { departmentId, status: 'ACTIVE' }, include: { organizationMembership: { include: { user: true } } }, orderBy: { createdAt: 'asc' } });
       return rows.map((row) => ({ userId: row.userId, name: row.organizationMembership.user.name, role: row.role, status: row.status }));
     }, { isolationLevel: 'RepeatableRead' });

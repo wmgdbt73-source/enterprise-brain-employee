@@ -40,4 +40,24 @@ describe('Organization API', () => {
     expect((await app.inject({ method: 'GET', url: '/me/permissions', headers: employee })).json().permissions).toContainEqual(expect.objectContaining({ resource: 'DEPARTMENT', action: 'VIEW', allowed: false, source: 'OVERRIDE_DENY' }));
     await app.close();
   });
+  it('enforces live Department overrides for manager listing and owner mutations', async () => {
+    await fixture(); const app = await createApp({ prisma: db() }); const owner = await token('owner'); const manager = await token('manager'); const employee = await token('employee'); const outsider = await token('outsider');
+    expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers: manager })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers: employee })).statusCode).toBe(403);
+    const deny = await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY' } });
+    expect(deny.statusCode).toBe(200); expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers: manager })).statusCode).toBe(403);
+    expect((await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'ALLOW' } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers: manager })).statusCode).toBe(200);
+    const mutationDeny = await app.inject({ method: 'PUT', url: '/employees/owner/permission-overrides', headers: owner, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-a', resource: 'DEPARTMENT', action: 'MANAGE', effect: 'DENY' } });
+    expect(mutationDeny.statusCode).toBe(200); const count = await db().department.count({ where: { organizationId: 'org-a' } });
+    expect((await app.inject({ method: 'POST', url: '/departments', headers: owner, payload: { name: 'Blocked' } })).statusCode).toBe(403); expect(await db().department.count({ where: { organizationId: 'org-a' } })).toBe(count);
+    expect((await app.inject({ method: 'PUT', url: '/employees/owner/permission-overrides', headers: owner, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-a', resource: 'DEPARTMENT', action: 'MANAGE', effect: 'ALLOW' } })).statusCode).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/departments', headers: owner, payload: { name: 'Allowed' } })).statusCode).toBe(201);
+    const before = await db().permissionOverride.count();
+    expect((await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'other-dept', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY' } })).statusCode).toBe(404); expect(await db().permissionOverride.count()).toBe(before);
+    expect((await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY', actorId: 'outsider' } })).statusCode).toBe(400);
+    expect((await app.inject({ method: 'DELETE', url: `/employees/manager/permission-overrides/${deny.json().id}`, headers: owner })).statusCode).toBe(200); expect(await db().permissionOverride.findUnique({ where: { id: deny.json().id } })).toBeNull();
+    expect((await app.inject({ method: 'GET', url: '/employees/manager/permission-overrides', headers: outsider })).statusCode).toBe(404);
+    await app.close();
+  });
 });
