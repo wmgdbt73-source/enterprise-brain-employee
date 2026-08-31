@@ -36,38 +36,48 @@ export function App() {
   const [runtimeLabel, setRuntimeLabel] = useState('Work · Desktop Runtime');
   const selectedTaskIdRef = useRef<string | undefined>(undefined);
   const selectedProjectIdRef = useRef<string | undefined>(undefined);
+  const authGenerationRef = useRef(0);
   selectedTaskIdRef.current = task?.id;
   selectedProjectIdRef.current = project?.id;
 
-  const loadProjects = useCallback(async () => {
+  const clearAuthenticatedState = useCallback(() => {
+    ++authGenerationRef.current;
+    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTasks([]); setTask(undefined); setArtifacts([]); setError(undefined); setLoading(false);
+  }, []);
+  const loadProjects = useCallback(async (generation = authGenerationRef.current) => {
     setLoading(true);
     const operation = resolveOperation(
       await window.enterpriseBrain.projects.list()
     );
+    if (generation !== authGenerationRef.current) return;
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
     if (operation.data) setProjects(operation.data);
-    setError(operation.error);
-    setLoading(false);
-  }, []);
-  const loadTasks = useCallback(async (projectId: string) => {
+    setError(operation.error); setLoading(false);
+  }, [clearAuthenticatedState]);
+  const loadTasks = useCallback(async (projectId: string, generation = authGenerationRef.current) => {
     setLoading(true);
     const operation = resolveOperation(
       await window.enterpriseBrain.tasks.list(projectId)
     );
+    if (generation !== authGenerationRef.current) return;
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
     if (operation.data) setTasks(operation.data);
-    setError(operation.error);
-    setLoading(false);
-  }, []);
+    setError(operation.error); setLoading(false);
+  }, [clearAuthenticatedState]);
   useEffect(() => {
+    const generation = authGenerationRef.current;
     void window.enterpriseBrain.auth.currentUser().then((result) => {
+      if (generation !== authGenerationRef.current) return;
       const operation = resolveOperation(result);
-      if (operation.data) { setCurrentUser(operation.data); void loadProjects(); }
+      if (operation.data) { setCurrentUser(operation.data); void loadProjects(generation); }
       else setLoading(false);
     });
   }, [loadProjects]);
+  useEffect(() => window.enterpriseBrain.auth.onAuthenticationLost?.(clearAuthenticatedState), [clearAuthenticatedState]);
   useEffect(() => {
     if (error?.code !== 'AUTHENTICATION_REQUIRED') return;
-    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTask(undefined); setArtifacts([]); setError(undefined); setLoading(false);
-  }, [error]);
+    clearAuthenticatedState();
+  }, [error, clearAuthenticatedState]);
   useEffect(() => {
     if (project) void loadTasks(project.id);
   }, [project, loadTasks]);
@@ -97,13 +107,15 @@ export function App() {
     setError(undefined);
   }
   async function login(input: { login: string; password: string }) {
+    const generation = ++authGenerationRef.current;
     const result = await window.enterpriseBrain.auth.login(input);
-    if (result.ok) { setCurrentUser(result.data); setError(undefined); await loadProjects(); }
+    if (generation !== authGenerationRef.current) return result;
+    if (result.ok) { setCurrentUser(result.data); setError(undefined); await loadProjects(generation); }
     return result;
   }
   async function logout() {
+    clearAuthenticatedState();
     await window.enterpriseBrain.auth.logout();
-    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTask(undefined); setArtifacts([]); setError(undefined); setLoading(false);
   }
   async function createProject(input: ProjectInput) {
     const operation = resolveOperation(

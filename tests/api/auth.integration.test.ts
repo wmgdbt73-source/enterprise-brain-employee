@@ -62,4 +62,20 @@ describe('production session identity API', () => {
     expect((await app.inject({ method: 'GET', url: '/me', headers: { authorization: `Bearer ${rightToken}` } })).statusCode).toBe(200);
     await app.close();
   });
+  it('uses only the bearer session identity and isolates two authenticated users', async () => {
+    await createAccount('auth-user', 'employee@example.test'); await createAccount('second-user', 'second@example.test');
+    const app = await createApp({ prisma: db() });
+    const first = (await app.inject({ method: 'POST', url: '/auth/login', payload: { login: 'employee@example.test', password: 'DemoPassword!2026' } })).json().token as string;
+    const second = (await app.inject({ method: 'POST', url: '/auth/login', payload: { login: 'second@example.test', password: 'DemoPassword!2026' } })).json().token as string;
+    const headers = { authorization: `Bearer ${first}`, 'x-user-id': 'second-user' };
+    expect((await app.inject({ method: 'GET', url: '/me?userId=second-user', headers })).json()).toMatchObject({ id: 'auth-user' });
+    expect((await app.inject({ method: 'GET', url: '/me', headers: { authorization: 'Bearer z'.repeat(44) } })).statusCode).toBe(401);
+    const created = await app.inject({ method: 'POST', url: '/projects', headers: { authorization: `Bearer ${first}` }, payload: { name: 'Private' } });
+    expect(created.statusCode).toBe(201);
+    expect((await app.inject({ method: 'GET', url: '/projects', headers: { authorization: `Bearer ${second}` } })).json()).toEqual({ projects: [] });
+    expect((await app.inject({ method: 'POST', url: '/projects/project-x/tasks', payload: { title: 'Nope' } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: '/tasks/project-x/results', payload: { artifactIds: ['x'] } })).statusCode).toBe(401);
+    expect(await db().task.count()).toBe(0); expect(await db().result.count()).toBe(0);
+    await app.close();
+  });
 });

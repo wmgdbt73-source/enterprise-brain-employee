@@ -32,10 +32,12 @@ export type FetchImplementation = (
 
 export class DesktopApiGateway {
   private bearerToken: string | undefined;
+  private authGeneration = 0;
   constructor(
     private readonly options: {
       baseUrl: string;
       fetchImplementation?: FetchImplementation;
+      onAuthenticationLost?: () => void;
     }
   ) {}
   listProjects(): Promise<DesktopResult<ProjectContract[]>> {
@@ -49,16 +51,22 @@ export class DesktopApiGateway {
     );
   }
   async login(input: LoginRequest): Promise<DesktopResult<CurrentUserContract>> {
+    const generation = ++this.authGeneration;
     const result = await this.request('/auth/login', { method: 'POST', body: input, includeAuthorization: false });
     if (!result.ok) return result;
     const payload = result.data as { token?: unknown; user?: CurrentUserContract };
     if (typeof payload.token !== 'string' || !payload.user) return { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Invalid login response', details: {} } };
+    // An earlier login response must never replace a newer session.
+    if (generation !== this.authGeneration) return { ok: false, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } };
     this.bearerToken = payload.token;
     return { ok: true, data: payload.user };
   }
   async logout(): Promise<DesktopResult<void>> {
-    const result = await this.request('/auth/logout', { method: 'POST' });
+    const token = this.bearerToken;
+    // Invalidate synchronously: late requests/logouts cannot affect a later login.
+    ++this.authGeneration;
     this.bearerToken = undefined;
+    const result = await this.request('/auth/logout', { method: 'POST', includeAuthorization: false, authorizationToken: token });
     return result.ok ? { ok: true, data: undefined } : result;
   }
   getCurrentUser(): Promise<DesktopResult<CurrentUserContract>> {
@@ -173,8 +181,10 @@ export class DesktopApiGateway {
   }
   private async request(
     path: string,
-    options: { method?: 'POST'; body?: unknown; headers?: Record<string, string>; includeAuthorization?: boolean } = {}
+    options: { method?: 'POST'; body?: unknown; headers?: Record<string, string>; includeAuthorization?: boolean; authorizationToken?: string } = {}
   ): Promise<DesktopResult<unknown>> {
+    const generation = this.authGeneration;
+    const token = options.authorizationToken ?? this.bearerToken;
     try {
       const response = await (this.options.fetchImplementation ?? fetch)(
         new URL(path, this.options.baseUrl).toString(),
@@ -182,7 +192,7 @@ export class DesktopApiGateway {
           method: options.method ?? 'GET',
           headers: {
             ...(options.body ? { 'content-type': 'application/json' } : {}),
-            ...(options.includeAuthorization !== false && this.bearerToken ? { authorization: `Bearer ${this.bearerToken}` } : {}),
+            ...(options.includeAuthorization !== false && token ? { authorization: `Bearer ${token}` } : {}),
             ...options.headers
           },
           body: options.body ? JSON.stringify(options.body) : undefined
@@ -190,7 +200,11 @@ export class DesktopApiGateway {
       );
       const payload = await response.json();
       if (response.ok) return { ok: true, data: payload };
-      if (response.status === 401) this.bearerToken = undefined;
+      if (response.status === 401 && generation === this.authGeneration && token === this.bearerToken) {
+        this.bearerToken = undefined;
+        ++this.authGeneration;
+        this.options.onAuthenticationLost?.();
+      }
       return { ok: false, error: toApiError(payload, response.status) };
     } catch {
       return {

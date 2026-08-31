@@ -70,6 +70,7 @@ export interface EnterpriseBrainBridge {
     currentUser(): Promise<DesktopResult<CurrentUserContract>>;
     login(input: { login: string; password: string }): Promise<DesktopResult<CurrentUserContract>>;
     logout(): Promise<DesktopResult<void>>;
+    onAuthenticationLost?(listener: () => void): () => void;
   };
   projects: {
     list(): Promise<DesktopResult<ProjectContract[]>>;
@@ -129,7 +130,8 @@ export interface EnterpriseBrainBridge {
 type Invoke = (channel: string, payload?: unknown) => Promise<unknown>;
 
 export function createEnterpriseBrainBridge(
-  invoke: Invoke
+  invoke: Invoke,
+  subscribeToAuthenticationLost?: (listener: () => void) => () => void
 ): EnterpriseBrainBridge {
   return {
     runtime: {
@@ -140,6 +142,7 @@ export function createEnterpriseBrainBridge(
       currentUser: () => invoke('auth:current-user') as Promise<DesktopResult<CurrentUserContract>>,
       login: (input) => invoke('auth:login', input) as Promise<DesktopResult<CurrentUserContract>>,
       logout: () => invoke('auth:logout') as Promise<DesktopResult<void>>
+      ,onAuthenticationLost: subscribeToAuthenticationLost
     },
     projects: {
       list: () =>

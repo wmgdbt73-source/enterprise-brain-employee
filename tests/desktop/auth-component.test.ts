@@ -26,6 +26,14 @@ describe('desktop session identity boundary', () => {
     expect(text()).toContain('Employee'); expect(text()).not.toContain('Bearer');
     await click('Sign out'); expect(logoutCalls).toBe(1); expect(text()).toContain('Sign in');
   });
+  it('globally clears the shell when any protected capability reports authentication loss', async () => {
+    let notify!: () => void;
+    mount(); window.enterpriseBrain = bridge({ auth: { currentUser: async () => ({ ok: true as const, data: { id: 'employee', name: 'Employee', systemRole: 'EMPLOYEE' } }), login: async () => failure('AUTHENTICATION_REQUIRED'), logout: async () => ({ ok: true as const, data: undefined }), onAuthenticationLost: (listener) => { notify = listener; return () => undefined; } } });
+    await render(); await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); });
+    expect(text()).toContain('Employee');
+    await act(async () => notify());
+    expect(text()).toContain('Sign in'); expect(text()).not.toContain('Sign out · Employee');
+  });
 });
 function mount() { dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'http://desktop.test' }); Object.assign(globalThis, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Event: dom.window.Event, MouseEvent: dom.window.MouseEvent, React }); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; root = createRoot(document.getElementById('root')!); }
 async function render() { await act(async () => root?.render(createElement(App))); }

@@ -25,6 +25,7 @@
   "devDependencies": {
     "@types/pg": "8.15.6",
     "dotenv": "17.2.2",
-    "prisma": "7.9.1"
+    "prisma": "7.9.1",
+    "tsx": "4.20.5"
   }
 }

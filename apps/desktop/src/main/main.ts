@@ -43,7 +43,10 @@ function createWindow() {
 
 app.whenReady().then(async () => {
   const gateway = new DesktopApiGateway({
-    baseUrl: process.env.EMPLOYEE_API_BASE_URL ?? 'http://127.0.0.1:3000'
+    baseUrl: process.env.EMPLOYEE_API_BASE_URL ?? 'http://127.0.0.1:3000',
+    onAuthenticationLost: () => {
+      for (const window of BrowserWindow.getAllWindows()) window.webContents.send('auth:lost');
+    }
   });
   const directory = app.getPath('userData');
   const workspace = new WorkspaceService({
