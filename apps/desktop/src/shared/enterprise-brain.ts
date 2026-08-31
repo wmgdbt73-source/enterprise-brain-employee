@@ -1,5 +1,6 @@
 import type {
   AgentRunContract,
+  CurrentUserContract,
   ReadOnlyAgentToolIntent,
   ArtifactContract,
   ResultContract, ReviewContract, ReviewDecision,
@@ -65,6 +66,11 @@ export type DesktopResult<T> =
 
 export interface EnterpriseBrainBridge {
   runtime: { getInfo(): Promise<DesktopResult<RuntimeInfo>> };
+  auth: {
+    currentUser(): Promise<DesktopResult<CurrentUserContract>>;
+    login(input: { login: string; password: string }): Promise<DesktopResult<CurrentUserContract>>;
+    logout(): Promise<DesktopResult<void>>;
+  };
   projects: {
     list(): Promise<DesktopResult<ProjectContract[]>>;
     get(id: string): Promise<DesktopResult<ProjectContract>>;
@@ -129,6 +135,11 @@ export function createEnterpriseBrainBridge(
     runtime: {
       getInfo: () =>
         invoke('runtime:get-info') as Promise<DesktopResult<RuntimeInfo>>
+    },
+    auth: {
+      currentUser: () => invoke('auth:current-user') as Promise<DesktopResult<CurrentUserContract>>,
+      login: (input) => invoke('auth:login', input) as Promise<DesktopResult<CurrentUserContract>>,
+      logout: () => invoke('auth:logout') as Promise<DesktopResult<void>>
     },
     projects: {
       list: () =>

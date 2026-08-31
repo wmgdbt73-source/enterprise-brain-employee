@@ -20,6 +20,7 @@ import {
   type ProjectTab
 } from './features/projects/ProjectWorkspace.js';
 import { resolveOperation } from './features/runtime/operation-state.js';
+import { LoginScreen } from './features/auth/LoginScreen.js';
 import './styles.css';
 
 export function App() {
@@ -31,6 +32,7 @@ export function App() {
   const [tab, setTab] = useState<ProjectTab>('任务');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DesktopApiError>();
+  const [currentUser, setCurrentUser] = useState<import('@enterprise-brain/contracts').CurrentUserContract>();
   const [runtimeLabel, setRuntimeLabel] = useState('Work · Desktop Runtime');
   const selectedTaskIdRef = useRef<string | undefined>(undefined);
   const selectedProjectIdRef = useRef<string | undefined>(undefined);
@@ -56,8 +58,16 @@ export function App() {
     setLoading(false);
   }, []);
   useEffect(() => {
-    void loadProjects();
+    void window.enterpriseBrain.auth.currentUser().then((result) => {
+      const operation = resolveOperation(result);
+      if (operation.data) { setCurrentUser(operation.data); void loadProjects(); }
+      else setLoading(false);
+    });
   }, [loadProjects]);
+  useEffect(() => {
+    if (error?.code !== 'AUTHENTICATION_REQUIRED') return;
+    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTask(undefined); setArtifacts([]); setError(undefined); setLoading(false);
+  }, [error]);
   useEffect(() => {
     if (project) void loadTasks(project.id);
   }, [project, loadTasks]);
@@ -85,6 +95,15 @@ export function App() {
     setProject(value);
     setTask(undefined);
     setError(undefined);
+  }
+  async function login(input: { login: string; password: string }) {
+    const result = await window.enterpriseBrain.auth.login(input);
+    if (result.ok) { setCurrentUser(result.data); setError(undefined); await loadProjects(); }
+    return result;
+  }
+  async function logout() {
+    await window.enterpriseBrain.auth.logout();
+    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTask(undefined); setArtifacts([]); setError(undefined); setLoading(false);
   }
   async function createProject(input: ProjectInput) {
     const operation = resolveOperation(
@@ -214,7 +233,9 @@ export function App() {
         onSelectProject={selectProject}
       />
       <main className="content">
-        {error ? (
+        {!currentUser ? (
+          <LoginScreen onLogin={login} />
+        ) : error ? (
           <ErrorState error={error} retry={retry} />
         ) : loading ? (
           <State
@@ -250,6 +271,7 @@ export function App() {
             onDecideReview={decideResult}
           />
         )}
+        {currentUser && <button className="logout" onClick={() => void logout()}>Sign out · {currentUser.name}</button>}
       </main>
     </div>
   );

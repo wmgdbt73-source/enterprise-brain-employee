@@ -89,6 +89,7 @@ and current Project membership.
 ## 8. Formal State Changes（正式状态变更）
 
 Server-side authorization is required for:
+- resolving the current user from an active, unexpired, unrevoked Session whose Account is ACTIVE;
 - assigning Task;
 - submitting Result;
 - reviewing Result;

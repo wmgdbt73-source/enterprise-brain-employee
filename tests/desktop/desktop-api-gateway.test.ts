@@ -69,6 +69,15 @@ describe('Desktop Work Runtime gateway', () => {
       error: { code: 'API_UNAVAILABLE' }
     });
   });
+  it('keeps the bearer token in Main gateway memory and never returns it to the bridge caller', async () => {
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'secret-token-value', user: { id: 'user-1', name: 'User', systemRole: 'EMPLOYEE' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ id: 'user-1', name: 'User', systemRole: 'EMPLOYEE' }) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await expect(gateway.login({ login: 'user@example.test', password: 'password' })).resolves.toEqual({ ok: true, data: { id: 'user-1', name: 'User', systemRole: 'EMPLOYEE' } });
+    await gateway.getCurrentUser();
+    expect(fetchImplementation.mock.calls[1][1].headers).toMatchObject({ authorization: 'Bearer secret-token-value' });
+  });
   it('exposes only the allowlisted preload bridge capabilities', () => {
     const invoke = vi.fn().mockResolvedValue({
       ok: true,
@@ -78,6 +87,7 @@ describe('Desktop Work Runtime gateway', () => {
     expect(Object.keys(bridge).sort()).toEqual([
       'agents',
       'artifacts',
+      'auth',
       'confirmedWrites',
       'projects',
       'results',

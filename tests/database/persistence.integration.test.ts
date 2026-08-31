@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createPrismaClient } from '../../packages/database/src/index.js';
 import { isSourceToolCallUniqueConflict } from '../../packages/database/src/repositories/artifact-repository.js';
 import { ResultRepository } from '../../packages/database/src/repositories/result-repository.js';
+import { encodePassword, hashSessionToken } from '../../packages/database/src/index.js';
 import type { PrismaClient } from '../../packages/database/src/generated/prisma/client.js';
 
 const connectionString = process.env.DATABASE_URL;
@@ -56,6 +57,8 @@ async function createProjectFixture() {
 describe('PostgreSQL persistence constraints', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.session.deleteMany();
+    await db.account.deleteMany();
     await db.humanConfirmation.deleteMany();
     await db.review.deleteMany();
     await db.resultArtifact.deleteMany();
@@ -83,6 +86,17 @@ describe('PostgreSQL persistence constraints', () => {
 
     expect(user.createdAt.toISOString()).toBe(now.toISOString());
     expect(user.updatedAt.toISOString()).toBe(now.toISOString());
+  });
+
+  it('enforces Account and hashed Session persistence boundaries', async () => {
+    const { db, now } = await createProjectFixture();
+    const passwordHash = await encodePassword('DemoPassword!2026');
+    await db.account.create({ data: { id: 'account-1', userId: 'user-owner', login: 'owner@example.test', passwordHash, status: 'ACTIVE', createdAt: now, updatedAt: now } });
+    await expect(db.account.create({ data: { id: 'account-duplicate', userId: 'user-owner', login: 'other@example.test', passwordHash, status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: 'P2002' });
+    const rawToken = 'opaque-demo-token'; const tokenHash = hashSessionToken(rawToken);
+    await db.session.create({ data: { id: 'session-1', accountId: 'account-1', tokenHash, createdAt: now, expiresAt: new Date(now.getTime() + 1_000) } });
+    expect((await db.session.findUniqueOrThrow({ where: { id: 'session-1' } })).tokenHash).not.toBe(rawToken);
+    await expect(db.session.create({ data: { id: 'session-duplicate', accountId: 'account-1', tokenHash, createdAt: now, expiresAt: new Date(now.getTime() + 1_000) } })).rejects.toMatchObject({ code: 'P2002' });
   });
 
   it('rejects duplicate membership and a second OWNER', async () => {

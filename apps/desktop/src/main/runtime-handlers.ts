@@ -21,6 +21,9 @@ export function registerRuntimeHandlers(
     ok: true,
     data: { runtime: 'desktop', ...runtimeInfo }
   }));
+  ipc.handle('auth:current-user', () => gateway.getCurrentUser());
+  ipc.handle('auth:login', (_event, payload) => gateway.login(payload));
+  ipc.handle('auth:logout', () => gateway.logout());
   ipc.handle('projects:list', () => gateway.listProjects());
   ipc.handle('projects:get', (_event, payload: { id: string }) =>
     gateway.getProject(payload.id)

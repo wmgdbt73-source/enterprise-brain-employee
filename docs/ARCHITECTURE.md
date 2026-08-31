@@ -198,3 +198,10 @@ The Renderer never receives a grant, device ID, absolute local path or file
 content returned from this flow. The backend owns confirmation state; Electron
 Main owns bytes and execution. This is not autonomous or model-generated file
 authoring, and it creates neither Artifact nor Result automatically.
+
+## 14. Demo Session Identity Boundary
+
+Electron Main holds an opaque bearer token only in memory and attaches it to the
+fixed Employee API gateway. The renderer receives `CurrentUserContract`, never
+the bearer token. API resolves every protected request through Session → Account
+→ User; account disablement, expiry, and revocation are checked on every request.

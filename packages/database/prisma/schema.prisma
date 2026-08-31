@@ -12,6 +12,11 @@ enum UserSystemRole {
   ADMIN
 }
 
+enum AccountStatus {
+  ACTIVE
+  DISABLED
+}
+
 enum ProjectMemberRole {
   OWNER
   MEMBER
@@ -95,8 +100,36 @@ model User {
   createdResults Result[] @relation("ResultCreator")
   submittedResults Result[] @relation("ResultSubmitter")
   reviews        Review[]
+  account        Account?
 
   @@map("users")
+}
+
+model Account {
+  id           String        @id @map("account_id")
+  userId       String        @unique(map: "accounts_user_id_key") @map("user_id")
+  login        String        @unique(map: "accounts_login_key")
+  passwordHash String        @map("password_hash")
+  status       AccountStatus
+  createdAt    DateTime      @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime      @map("updated_at") @db.Timestamptz(3)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  sessions     Session[]
+
+  @@map("accounts")
+}
+
+model Session {
+  id        String   @id @map("session_id")
+  accountId String   @map("account_id")
+  tokenHash String   @unique(map: "sessions_token_hash_key") @db.Char(64) @map("token_hash")
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  revokedAt DateTime? @map("revoked_at") @db.Timestamptz(3)
+  account   Account  @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([accountId, expiresAt], map: "sessions_account_id_expires_at_idx")
+  @@map("sessions")
 }
 
 model Project {

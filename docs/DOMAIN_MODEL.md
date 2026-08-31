@@ -274,6 +274,13 @@ interface ActivityEvent {
 - changes to core enums require an Architecture Decision Record（架构决策记录） in `DECISIONS.md`;
 - Alpha fields may evolve, but identity and ownership boundaries should remain stable.
 
+## 14. Account and Session（演示账号与会话）
+
+`Account` is the login credential record for one `User`; it stores a normalized
+unique login, versioned scrypt password hash, and `ACTIVE | DISABLED` status.
+`Session` stores only a SHA-256 hash of an opaque bearer token, plus expiry and
+optional revocation time. Raw passwords and tokens are never domain records.
+
 EB-013 persists `Task.dependencyIds` as same-Project TaskDependency rows. A
 dependency is satisfied only when its Task is `ACCEPTED` or `CLOSED`; it gates
 the formal `START` action without creating a new Task status.

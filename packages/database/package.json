@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "prisma": "prisma"
+    "prisma": "prisma",
+    "seed:demo": "tsx src/seed-demo.ts"
   },
   "dependencies": {
     "@enterprise-brain/contracts": "workspace:*",

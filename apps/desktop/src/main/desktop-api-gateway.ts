@@ -6,6 +6,7 @@ import type {
   ArtifactContract,
   ResultContract, ReviewContract, ReviewDecision,
   CurrentUserContract,
+  LoginRequest,
   HumanConfirmationContract,
   HumanConfirmationDetailContract,
   ApprovedWriteExecutionGrant,
@@ -30,6 +31,7 @@ export type FetchImplementation = (
 ) => Promise<FetchResponse>;
 
 export class DesktopApiGateway {
+  private bearerToken: string | undefined;
   constructor(
     private readonly options: {
       baseUrl: string;
@@ -45,6 +47,19 @@ export class DesktopApiGateway {
           }
         : result
     );
+  }
+  async login(input: LoginRequest): Promise<DesktopResult<CurrentUserContract>> {
+    const result = await this.request('/auth/login', { method: 'POST', body: input, includeAuthorization: false });
+    if (!result.ok) return result;
+    const payload = result.data as { token?: unknown; user?: CurrentUserContract };
+    if (typeof payload.token !== 'string' || !payload.user) return { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Invalid login response', details: {} } };
+    this.bearerToken = payload.token;
+    return { ok: true, data: payload.user };
+  }
+  async logout(): Promise<DesktopResult<void>> {
+    const result = await this.request('/auth/logout', { method: 'POST' });
+    this.bearerToken = undefined;
+    return result.ok ? { ok: true, data: undefined } : result;
   }
   getCurrentUser(): Promise<DesktopResult<CurrentUserContract>> {
     return this.request('/me') as Promise<DesktopResult<CurrentUserContract>>;
@@ -158,19 +173,24 @@ export class DesktopApiGateway {
   }
   private async request(
     path: string,
-    options: { method?: 'POST'; body?: unknown; headers?: Record<string, string> } = {}
+    options: { method?: 'POST'; body?: unknown; headers?: Record<string, string>; includeAuthorization?: boolean } = {}
   ): Promise<DesktopResult<unknown>> {
     try {
       const response = await (this.options.fetchImplementation ?? fetch)(
         new URL(path, this.options.baseUrl).toString(),
         {
           method: options.method ?? 'GET',
-          headers: options.body ? { 'content-type': 'application/json', ...options.headers } : options.headers,
+          headers: {
+            ...(options.body ? { 'content-type': 'application/json' } : {}),
+            ...(options.includeAuthorization !== false && this.bearerToken ? { authorization: `Bearer ${this.bearerToken}` } : {}),
+            ...options.headers
+          },
           body: options.body ? JSON.stringify(options.body) : undefined
         }
       );
       const payload = await response.json();
       if (response.ok) return { ok: true, data: payload };
+      if (response.status === 401) this.bearerToken = undefined;
       return { ok: false, error: toApiError(payload, response.status) };
     } catch {
       return {

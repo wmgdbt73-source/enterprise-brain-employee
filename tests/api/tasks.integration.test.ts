@@ -21,6 +21,8 @@ function requireDatabase() {
 describe('Task API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.session.deleteMany();
+    await db.account.deleteMany();
     await db.humanConfirmation.deleteMany();
     await db.review.deleteMany();
     await db.resultArtifact.deleteMany();
@@ -38,7 +40,7 @@ describe('Task API vertical slice', () => {
   afterAll(async () => database?.$disconnect());
 
   it('creates, lists, reads and starts an unassigned Task persistently', async () => {
-    const app = await createApp({ prisma: requireDatabase() });
+    const app = await createApp({ prisma: requireDatabase(), identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -110,7 +112,7 @@ describe('Task API vertical slice', () => {
   });
 
   it('persists TaskAssignment when creating an assigned Task', async () => {
-    const app = await createApp({ prisma: requireDatabase() });
+    const app = await createApp({ prisma: requireDatabase(), identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -139,7 +141,7 @@ describe('Task API vertical slice', () => {
 
   it('rejects outsider assignment, invalid input, and hidden resources', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -187,7 +189,7 @@ describe('Task API vertical slice', () => {
   });
 
   it('creates a running AgentRun and completes its one pending ToolCall idempotently', async () => {
-    const app = await createApp({ prisma: requireDatabase() });
+    const app = await createApp({ prisma: requireDatabase(), identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -248,7 +250,7 @@ describe('Task API vertical slice', () => {
 
   it('rejects receipts that do not match the original tool request without changing state', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -315,7 +317,7 @@ describe('Task API vertical slice', () => {
 
   it('rejects invalid list receipts, preserves pending state, and persists only intent', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -376,7 +378,7 @@ describe('Task API vertical slice', () => {
 
   it('hides and refuses completion after membership is revoked', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -435,7 +437,7 @@ describe('Task API vertical slice', () => {
 
   it('handles concurrent identical and conflicting completions without partial state', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -541,7 +543,7 @@ describe('Task API vertical slice', () => {
 
   it('rolls back ToolCall completion when AgentRun CAS cannot transition', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -588,7 +590,7 @@ describe('Task API vertical slice', () => {
 
   it('enforces the AgentRun Task and Project composite foreign key', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const a = (
       await app.inject({
         method: 'POST',
@@ -631,7 +633,7 @@ describe('Task API vertical slice', () => {
 
   it('registers a receipt-derived Artifact idempotently without changing Task or Run state', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -713,7 +715,7 @@ describe('Task API vertical slice', () => {
 
   it('preserves the receipt relativePath exactly when registering an Artifact', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -769,7 +771,7 @@ describe('Task API vertical slice', () => {
 
   it('rejects forged, ineligible, and hidden Artifact sources', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -883,7 +885,7 @@ describe('Task API vertical slice', () => {
 
   it('serializes concurrent Artifact registration to one durable row', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -941,7 +943,7 @@ describe('Task API vertical slice', () => {
 
   it('requires exactly one sequence-one ToolCall before Artifact registration', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -1004,7 +1006,7 @@ describe('Task API vertical slice', () => {
 
   it('rejects a ToolCall name that disagrees with its persisted read_file request', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const run = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'read_file', relativePath: 'a.md' } })).json();
@@ -1018,7 +1020,7 @@ describe('Task API vertical slice', () => {
 
   it('rejects Artifact registration when persisted request provenance or path is unsafe', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const complete = async (relativePath: string) => {
@@ -1041,7 +1043,7 @@ describe('Task API vertical slice', () => {
 
   it('hides Artifact registration after membership revocation and from another member', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const run = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'read_file', relativePath: 'a.md' } })).json();
@@ -1057,7 +1059,7 @@ describe('Task API vertical slice', () => {
 
   it('does not swallow unrelated Artifact uniqueness failures as idempotency', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (
       await app.inject({
         method: 'POST',
@@ -1119,7 +1121,7 @@ describe('Task API vertical slice', () => {
 
   it('creates, confirms, rejects, and completes device-scoped write runs', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const input = { name: 'write_file', relativePath: 'docs/你好.md', payloadSize: 10, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' };
@@ -1150,7 +1152,7 @@ describe('Task API vertical slice', () => {
 
   it('accepts a valid approved write success receipt and records a safe failed write receipt', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const createWrite = async (suffix: string) => app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: `docs/${suffix}.md`, payloadSize: 4, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } });
@@ -1174,7 +1176,7 @@ describe('Task API vertical slice', () => {
 
   it('uses decision CAS so concurrent approve and reject have one durable winner', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
@@ -1192,7 +1194,7 @@ describe('Task API vertical slice', () => {
 
   it('rejects idempotently and cancels the pending write run and ToolCall', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
@@ -1206,7 +1208,7 @@ describe('Task API vertical slice', () => {
 
   it('fails closed when the persisted write request is malformed', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
@@ -1219,7 +1221,7 @@ describe('Task API vertical slice', () => {
 
   it('rejects formal ToolCall name/request disagreement without changing the run', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
@@ -1233,7 +1235,7 @@ describe('Task API vertical slice', () => {
 
   it('persists same-project dependencies and blocks Start until they are accepted', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Dependencies' } })).json();
     const upstream = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Upstream' } })).json();
     expect((await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Duplicate', dependencyIds: [upstream.id, upstream.id] } })).statusCode).toBe(400);
@@ -1257,7 +1259,7 @@ describe('Task API vertical slice', () => {
 
   it('hides confirmations from revoked owners and other current project members', async () => {
     const db = requireDatabase();
-    const owner = await createApp({ prisma: db });
+    const owner = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     const project = (await owner.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
     const task = (await owner.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
     const created = (await owner.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();

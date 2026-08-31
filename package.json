@@ -15,6 +15,7 @@
     "db:generate": "pnpm --filter @enterprise-brain/database prisma generate --config prisma.config.ts",
     "db:migrate:dev": "pnpm --filter @enterprise-brain/database prisma migrate dev --config prisma.config.ts",
     "db:migrate:deploy": "pnpm --filter @enterprise-brain/database prisma migrate deploy --config prisma.config.ts",
+    "db:seed:demo": "pnpm --filter @enterprise-brain/database seed:demo",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
