@@ -354,6 +354,15 @@ relations prevent cross-Organization assignment. The authenticated session is
 the sole actor authority. This is not a general permission engine or desktop
 administration console.
 
+## ADR-027 — Live Demo Permission Evaluation
+
+EB-016 evaluates supported business permissions from the authenticated session on
+every protected request. Overrides belong to an active Organization member and
+are limited to Organization/Department scope. Matching `DENY` wins over matching
+`ALLOW`, then role-derived permission, then default deny. OWNER/ADMIN override
+management remains Organization-local; this demo policy is not a general RBAC
+engine and does not alter local Workspace permissions.
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

@@ -9,7 +9,7 @@ const db = () => { if (!database) throw new Error('DATABASE_URL is required for 
 
 describe('demo seed', () => {
   beforeEach(async () => {
-    await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany();
+    await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().permissionOverride.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany();
   });
   afterAll(async () => database?.$disconnect());
 

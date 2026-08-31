@@ -50,7 +50,7 @@ import { InvalidCredentialsError, registerAuthRoutes } from './modules/auth/auth
 import { registerOrganizationRoutes } from './modules/organization/organization-routes.js';
 import { OrganizationForbiddenError, OrganizationNotFoundError, OrganizationService } from './modules/organization/organization-service.js';
 import { registerPermissionRoutes } from './modules/permissions/permission-routes.js';
-import { PermissionForbiddenError, PermissionNotFoundError, PermissionService } from './modules/permissions/permission-service.js';
+import { PermissionForbiddenError, PermissionNotFoundError, PermissionService, PermissionValidationError } from './modules/permissions/permission-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -126,7 +126,7 @@ export async function createApp(
         }
       });
     }
-    if (hasValidationError(error) || isDomainError(error)) {
+    if (hasValidationError(error) || isDomainError(error) || error instanceof PermissionValidationError) {
       return reply.code(400).send({
         error: {
           code: 'VALIDATION_ERROR',

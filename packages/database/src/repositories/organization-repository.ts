@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { DepartmentContract, DepartmentMemberContract, OrganizationContract } from '@enterprise-brain/contracts';
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { evaluatePermission, type PermissionDbClient } from './permission-repository.js';
 
 export type OrganizationAccess = 'NOT_FOUND' | 'FORBIDDEN';
 const activeMembership = { status: 'ACTIVE' as const, organization: { status: 'ACTIVE' as const } };
@@ -18,51 +19,55 @@ export class OrganizationRepository {
     return rows.map(toDepartment);
   }
   async createDepartment(userId: string, name: string): Promise<DepartmentContract | OrganizationAccess> {
-    const org = await this.adminOrganization(userId); if (typeof org === 'string') return org;
-    return toDepartment(await this.prisma.department.create({ data: { id: randomUUID(), organizationId: org.id, name, status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date() } }));
+    return this.prisma.$transaction(async (tx) => {
+      const org = await this.actorOrganization(tx, userId); if (typeof org === 'string') return org;
+      if (!(await allowed(tx, org.id, userId, 'ORGANIZATION', org.id, 'DEPARTMENT', 'MANAGE'))) return 'FORBIDDEN';
+      return toDepartment(await tx.department.create({ data: { id: randomUUID(), organizationId: org.id, name, status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date() } }));
+    }, { isolationLevel: 'RepeatableRead' });
   }
   async updateDepartment(userId: string, departmentId: string, input: { name?: string; status?: 'ACTIVE' | 'DISABLED' }): Promise<DepartmentContract | OrganizationAccess> {
-    const org = await this.adminOrganization(userId); if (typeof org === 'string') return org;
-    const department = await this.prisma.department.findFirst({ where: { id: departmentId, organizationId: org.id } }); if (!department) return 'NOT_FOUND';
-    return toDepartment(await this.prisma.department.update({ where: { id: department.id }, data: { ...input, updatedAt: new Date() } }));
+    return this.prisma.$transaction(async (tx) => {
+      const org = await this.actorOrganization(tx, userId); if (typeof org === 'string') return org;
+      const department = await tx.department.findFirst({ where: { id: departmentId, organizationId: org.id } }); if (!department) return 'NOT_FOUND';
+      if (!(await allowed(tx, org.id, userId, 'DEPARTMENT', department.id, 'DEPARTMENT', 'MANAGE'))) return 'FORBIDDEN';
+      return toDepartment(await tx.department.update({ where: { id: department.id }, data: { ...input, updatedAt: new Date() } }));
+    }, { isolationLevel: 'RepeatableRead' });
   }
   async members(userId: string, departmentId: string): Promise<DepartmentMemberContract[] | OrganizationAccess> {
-    const access = await this.departmentManagerOrAdmin(userId, departmentId); if (typeof access === 'string') return access;
-    const rows = await this.prisma.departmentMembership.findMany({ where: { departmentId, status: 'ACTIVE' }, include: { organizationMembership: { include: { user: true } } }, orderBy: { createdAt: 'asc' } });
-    return rows.map((row) => ({ userId: row.userId, name: row.organizationMembership.user.name, role: row.role, status: row.status }));
+    return this.prisma.$transaction(async (tx) => {
+      const org = await this.actorOrganization(tx, userId); if (typeof org === 'string') return org;
+      const department = await tx.department.findFirst({ where: { id: departmentId, organizationId: org.id } }); if (!department) return 'NOT_FOUND';
+      const own = await tx.departmentMembership.findUnique({ where: { userId } });
+      const manager = own?.departmentId === departmentId && own.status === 'ACTIVE' && own.role === 'MANAGER';
+      if (!(await allowed(tx, org.id, userId, 'DEPARTMENT', departmentId, 'DEPARTMENT', 'VIEW')) && !manager) return 'FORBIDDEN';
+      const rows = await tx.departmentMembership.findMany({ where: { departmentId, status: 'ACTIVE' }, include: { organizationMembership: { include: { user: true } } }, orderBy: { createdAt: 'asc' } });
+      return rows.map((row) => ({ userId: row.userId, name: row.organizationMembership.user.name, role: row.role, status: row.status }));
+    }, { isolationLevel: 'RepeatableRead' });
   }
   async assign(userId: string, targetUserId: string, departmentId: string, role: 'MANAGER' | 'MEMBER'): Promise<DepartmentMemberContract | OrganizationAccess> {
     return this.prisma.$transaction(async (tx) => {
-      const actor = await tx.organizationMembership.findFirst({ where: { userId, ...activeMembership }, include: { organization: true } });
-      if (!actor) return 'NOT_FOUND';
-      if (actor.role !== 'OWNER' && actor.role !== 'ADMIN') return 'FORBIDDEN';
+      const actor = await this.actorOrganization(tx, userId); if (typeof actor === 'string') return actor;
       const [department, target] = await Promise.all([
-        tx.department.findFirst({ where: { id: departmentId, organizationId: actor.organizationId, status: 'ACTIVE' } }),
-        tx.organizationMembership.findFirst({ where: { organizationId: actor.organizationId, userId: targetUserId, status: 'ACTIVE' } })
+        tx.department.findFirst({ where: { id: departmentId, organizationId: actor.id, status: 'ACTIVE' } }),
+        tx.organizationMembership.findFirst({ where: { organizationId: actor.id, userId: targetUserId, status: 'ACTIVE' } })
       ]);
       if (!department || !target) return 'NOT_FOUND';
+      if (!(await allowed(tx, actor.id, userId, 'DEPARTMENT', department.id, 'DEPARTMENT', 'ASSIGN'))) return 'FORBIDDEN';
       const now = new Date();
       const row = await tx.departmentMembership.upsert({
-        where: { organizationId_userId: { organizationId: actor.organizationId, userId: targetUserId } },
-        create: { id: randomUUID(), organizationId: actor.organizationId, departmentId: department.id, userId: targetUserId, role, status: 'ACTIVE', createdAt: now, updatedAt: now },
+        where: { organizationId_userId: { organizationId: actor.id, userId: targetUserId } },
+        create: { id: randomUUID(), organizationId: actor.id, departmentId: department.id, userId: targetUserId, role, status: 'ACTIVE', createdAt: now, updatedAt: now },
         update: { departmentId: department.id, role, status: 'ACTIVE', updatedAt: now },
         include: { organizationMembership: { include: { user: true } } }
       });
       return { userId: row.userId, name: row.organizationMembership.user.name, role: row.role, status: row.status };
     }, { isolationLevel: 'RepeatableRead' });
   }
-  private async adminOrganization(userId: string): Promise<{ id: string } | OrganizationAccess> {
-    const member = await this.prisma.organizationMembership.findFirst({ where: { userId, ...activeMembership }, include: { organization: true } });
+  private async actorOrganization(db: PermissionDbClient, userId: string): Promise<{ id: string } | OrganizationAccess> {
+    const member = await db.organizationMembership.findFirst({ where: { userId, ...activeMembership }, include: { organization: true } });
     if (!member) return 'NOT_FOUND';
-    return member.role === 'OWNER' || member.role === 'ADMIN' ? { id: member.organizationId } : 'FORBIDDEN';
-  }
-  private async departmentManagerOrAdmin(userId: string, departmentId: string): Promise<true | OrganizationAccess> {
-    const own = await this.prisma.organizationMembership.findFirst({ where: { userId, ...activeMembership }, include: { departmentMembership: true } });
-    if (!own) return 'NOT_FOUND';
-    const department = await this.prisma.department.findFirst({ where: { id: departmentId, organizationId: own.organizationId } });
-    if (!department) return 'NOT_FOUND';
-    if (own.role === 'OWNER' || own.role === 'ADMIN' || (own.departmentMembership?.departmentId === departmentId && own.departmentMembership.status === 'ACTIVE' && own.departmentMembership.role === 'MANAGER')) return true;
-    return 'FORBIDDEN';
+    return { id: member.organizationId };
   }
 }
+async function allowed(db: PermissionDbClient, organizationId: string, userId: string, scopeType: 'ORGANIZATION' | 'DEPARTMENT', scopeId: string, resource: 'DEPARTMENT', action: 'VIEW' | 'MANAGE' | 'ASSIGN'): Promise<boolean> { return (await evaluatePermission(db, { organizationId, userId, scopeType, scopeId, resource, action })).allowed; }
 function toDepartment(row: { id: string; organizationId: string; name: string; status: 'ACTIVE' | 'DISABLED'; createdAt: Date; updatedAt: Date }): DepartmentContract { return { id: row.id, organizationId: row.organizationId, name: row.name, status: row.status, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString() }; }
