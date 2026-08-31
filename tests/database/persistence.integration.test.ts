@@ -826,6 +826,8 @@ async function createHumanReviewFixture(db: ReturnType<typeof requireDatabase>, 
   for (const reviewerId of ['reviewer-1', 'reviewer-2']) {
     await db.user.upsert({ where: { id: reviewerId }, create: { id: reviewerId, name: reviewerId, systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, update: {} });
     await db.projectMember.upsert({ where: { projectId_userId: { projectId: 'project-1', userId: reviewerId } }, create: { id: `member-${reviewerId}`, projectId: 'project-1', userId: reviewerId, role: 'REVIEWER', createdAt: now, updatedAt: now }, update: {} });
+    await db.organization.upsert({ where: { id: 'review-org' }, create: { id: 'review-org', name: 'Review', status: 'ACTIVE', createdAt: now, updatedAt: now }, update: {} });
+    await db.organizationMembership.upsert({ where: { userId: reviewerId }, create: { id: `review-organization-${reviewerId}`, organizationId: 'review-org', userId: reviewerId, role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }, update: {} });
   }
   await db.result.create({ data: { ...resultRow(id, 'task-1', 'project-1', now), status: 'HUMAN_REVIEW', submittedByUserId: 'user-owner', submittedAt: now } });
   await db.resultArtifact.create({ data: { resultId: id, artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } });
