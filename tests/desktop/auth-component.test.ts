@@ -34,7 +34,26 @@ describe('desktop session identity boundary', () => {
     await act(async () => notify());
     expect(text()).toContain('Sign in'); expect(text()).not.toContain('Sign out · Employee');
   });
+  it('ignores delayed startup identity and project responses after authentication loss', async () => {
+    let identityDone!: (value: ReturnType<typeof successUser>) => void; let lost!: () => void;
+    const identity = new Promise<ReturnType<typeof successUser>>((resolve) => { identityDone = resolve; });
+    mount(); window.enterpriseBrain = bridge({ auth: { currentUser: async () => identity, login: async () => failure('AUTHENTICATION_REQUIRED'), logout: async () => ({ ok: true as const, data: undefined }), onAuthenticationLost: (listener) => { lost = listener; return () => undefined; } } });
+    await render(); await act(async () => lost());
+    await act(async () => identityDone(successUser()));
+    expect(text()).toContain('Sign in'); expect(text()).not.toContain('Sign out · Employee');
+  });
+  it('keeps invalid credentials recoverable and blocks duplicate login submit while pending', async () => {
+    type LoginResult = Awaited<ReturnType<EnterpriseBrainBridge['auth']['login']>>;
+    let resolveLogin!: (value: LoginResult) => void; let calls = 0;
+    const login = new Promise<LoginResult>((resolve) => { resolveLogin = resolve; });
+    mount(); window.enterpriseBrain = bridge({ auth: { currentUser: async () => failure('AUTHENTICATION_REQUIRED'), login: async () => { calls += 1; return login; }, logout: async () => ({ ok: true as const, data: undefined }) } });
+    await render(); await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)); }); const inputs = [...document.querySelectorAll('input')] as HTMLInputElement[]; await input(inputs[0], 'employee@example.test'); await input(inputs[1], 'bad'); await click('Sign in'); await act(async () => (document.querySelector('button') as HTMLButtonElement).click());
+    expect(calls).toBe(1); await act(async () => { resolveLogin(failure('AUTHENTICATION_REQUIRED')); await new Promise((resolve) => setTimeout(resolve, 0)); });
+    const loginButton = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Sign in')) as HTMLButtonElement;
+    expect(text()).toContain('Sign in'); expect(loginButton.disabled).toBe(false);
+  });
 });
+function successUser() { return { ok: true as const, data: { id: 'employee', name: 'Employee', systemRole: 'EMPLOYEE' as const } }; }
 function mount() { dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'http://desktop.test' }); Object.assign(globalThis, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Event: dom.window.Event, MouseEvent: dom.window.MouseEvent, React }); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; root = createRoot(document.getElementById('root')!); }
 async function render() { await act(async () => root?.render(createElement(App))); }
 async function input(element: HTMLInputElement, value: string) { await act(async () => { Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set?.call(element, value); element.dispatchEvent(new window.Event('input', { bubbles: true })); element.dispatchEvent(new window.Event('change', { bubbles: true })); }); }

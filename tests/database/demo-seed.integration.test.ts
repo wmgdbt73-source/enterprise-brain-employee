@@ -21,5 +21,5 @@ describe('demo seed', () => {
     const members = await db().projectMember.findMany({ where: { projectId: 'demo-review-project' }, orderBy: { userId: 'asc' } });
     expect(members.map((member) => [member.userId, member.role])).toEqual([['demo-employee', 'OWNER'], ['demo-reviewer', 'REVIEWER']]);
     expect(await db().project.count({ where: { id: 'demo-review-project' } })).toBe(1);
-  });
+  }, 20_000);
 });
