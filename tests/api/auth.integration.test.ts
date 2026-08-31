@@ -74,7 +74,7 @@ describe('production session identity API', () => {
     expect(created.statusCode).toBe(201);
     expect((await app.inject({ method: 'GET', url: '/projects', headers: { authorization: `Bearer ${second}` } })).json()).toEqual({ projects: [] });
     expect((await app.inject({ method: 'POST', url: '/projects/project-x/tasks', payload: { title: 'Nope' } })).statusCode).toBe(401);
-    expect((await app.inject({ method: 'POST', url: '/tasks/project-x/results', payload: { artifactIds: ['x'] } })).statusCode).toBe(401);
+    expect((await app.inject({ method: 'POST', url: '/tasks/project-x/results', headers: { 'idempotency-key': '00000000-0000-4000-8000-000000000014' }, payload: { artifactIds: ['x'] } })).statusCode).toBe(401);
     expect(await db().task.count()).toBe(0); expect(await db().result.count()).toBe(0);
     await app.close();
   });
