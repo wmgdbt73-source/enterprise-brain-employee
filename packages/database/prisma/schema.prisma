@@ -127,6 +127,17 @@ enum AgentRunStatus {
   CANCELLED
 }
 
+enum AgentRunKind {
+  TOOL
+  MODEL
+}
+
+enum ModelInvocationStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
 enum AgentToolCallStatus {
   PENDING
   SUCCEEDED
@@ -169,6 +180,7 @@ model User {
   updatedAt      DateTime        @map("updated_at") @db.Timestamptz(3)
   projectMembers ProjectMember[]
   agentRuns      AgentRun[]
+  modelInvocations ModelInvocation[]
   createdResults Result[] @relation("ResultCreator")
   submittedResults Result[] @relation("ResultSubmitter")
   reviews        Review[]
@@ -366,6 +378,7 @@ model AgentRun {
   agentDefinitionKey String         @map("agent_definition_key")
   agentVersion       Int            @default(1) @map("agent_version")
   intent             Json
+  kind               AgentRunKind  @default(TOOL)
   status             AgentRunStatus
   createdAt          DateTime       @map("created_at") @db.Timestamptz(3)
   startedAt          DateTime?      @map("started_at") @db.Timestamptz(3)
@@ -377,9 +390,35 @@ model AgentRun {
   toolCalls          AgentToolCall[]
   artifacts          Artifact[] @relation("ArtifactRun")
   confirmations      HumanConfirmation[]
+  modelInvocation    ModelInvocation?
 
   @@unique([id, userId, projectId, taskId], map: "agent_runs_agent_run_id_user_id_project_id_task_id_key")
   @@map("agent_runs")
+}
+
+model ModelInvocation {
+  id                String                @id @map("model_invocation_id")
+  agentRunId        String                @unique @map("agent_run_id")
+  initiatedByUserId String                @map("initiated_by_user_id")
+  provider          String
+  model             String
+  status            ModelInvocationStatus
+  inputText         String                @map("input_text")
+  inputHash         String                @map("input_hash")
+  outputText        String?               @map("output_text")
+  providerResponseId String?              @map("provider_response_id")
+  inputTokens       Int?                  @map("input_tokens")
+  outputTokens      Int?                  @map("output_tokens")
+  totalTokens       Int?                  @map("total_tokens")
+  errorCode         String?               @map("error_code")
+  idempotencyKey    String                @map("idempotency_key")
+  requestFingerprint String               @map("request_fingerprint")
+  createdAt         DateTime              @map("created_at") @db.Timestamptz(3)
+  completedAt       DateTime?             @map("completed_at") @db.Timestamptz(3)
+  agentRun          AgentRun              @relation(fields:[agentRunId], references:[id], onDelete: Restrict)
+  initiatedByUser   User                  @relation(fields:[initiatedByUserId], references:[id], onDelete: Restrict)
+  @@unique([initiatedByUserId, idempotencyKey], map:"model_invocations_user_idempotency_key")
+  @@map("model_invocations")
 }
 
 model AgentDefinition {
