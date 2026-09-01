@@ -51,12 +51,35 @@ enum PermissionResource {
   DEPARTMENT
   PERMISSION
   RESULT
+  AGENT
 }
 enum PermissionAction {
   VIEW
   MANAGE
   ASSIGN
   REVIEW
+  EXECUTE
+}
+enum AgentDefinitionStatus {
+  ACTIVE
+  DISABLED
+}
+enum AgentVersionStatus {
+  ACTIVE
+  DISABLED
+}
+enum AgentRuntimeProfile {
+  READ_ONLY_WORK
+  CONFIRMED_WRITE_WORK
+}
+enum AgentAssignmentScopeType {
+  ORGANIZATION
+  DEPARTMENT
+  USER
+}
+enum AgentAssignmentStatus {
+  ACTIVE
+  DISABLED
 }
 enum PermissionEffect {
   ALLOW
@@ -159,6 +182,7 @@ model Organization {
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
   memberships OrganizationMembership[]
   departments Department[]
+  agentDefinitions AgentDefinition[]
   @@map("organizations")
 }
 
@@ -311,6 +335,7 @@ model AgentRun {
   projectId          String         @map("project_id")
   taskId             String         @map("task_id")
   agentDefinitionKey String         @map("agent_definition_key")
+  agentVersion       Int            @default(1) @map("agent_version")
   intent             Json
   status             AgentRunStatus
   createdAt          DateTime       @map("created_at") @db.Timestamptz(3)
@@ -326,6 +351,47 @@ model AgentRun {
 
   @@unique([id, userId, projectId, taskId], map: "agent_runs_agent_run_id_user_id_project_id_task_id_key")
   @@map("agent_runs")
+}
+
+model AgentDefinition {
+  id String @id @map("agent_definition_id")
+  organizationId String @map("organization_id")
+  key String
+  name String
+  description String?
+  status AgentDefinitionStatus
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  versions AgentVersion[]
+  assignments AgentAssignment[]
+  @@unique([organizationId, key], map: "agent_definitions_organization_id_key_key")
+  @@unique([id, organizationId], map: "agent_definitions_agent_definition_id_organization_id_key")
+  @@map("agent_definitions")
+}
+model AgentVersion {
+  id String @id @map("agent_version_id")
+  agentDefinitionId String @map("agent_definition_id")
+  version Int
+  runtimeProfile AgentRuntimeProfile @map("runtime_profile")
+  status AgentVersionStatus
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  agentDefinition AgentDefinition @relation(fields: [agentDefinitionId], references: [id], onDelete: Restrict)
+  @@unique([agentDefinitionId, version], map: "agent_versions_agent_definition_id_version_key")
+  @@map("agent_versions")
+}
+model AgentAssignment {
+  id String @id @map("agent_assignment_id")
+  organizationId String @map("organization_id")
+  agentDefinitionId String @map("agent_definition_id")
+  scopeType AgentAssignmentScopeType @map("scope_type")
+  scopeId String @map("scope_id")
+  status AgentAssignmentStatus
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  definition AgentDefinition @relation(fields: [agentDefinitionId, organizationId], references: [id, organizationId], onDelete: Restrict)
+  @@unique([organizationId, agentDefinitionId, scopeType, scopeId], map: "agent_assignments_tuple_key")
+  @@map("agent_assignments")
 }
 
 model AgentToolCall {

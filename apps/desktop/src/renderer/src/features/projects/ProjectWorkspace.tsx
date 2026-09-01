@@ -1,7 +1,7 @@
 import type {
   ProjectContract,
   ArtifactContract,
-  TaskContract
+  TaskContract, AvailableAgentContract
 } from '@enterprise-brain/contracts';
 import type { DesktopResult, TaskInput } from '../../../../shared/enterprise-brain.js';
 import { State } from '../../components/State.js';
@@ -33,6 +33,7 @@ export function ProjectWorkspace({
   ,onGetResult
   ,onListReviews
   ,onDecideReview
+  ,agents, selectedAgentId, onSelectAgent
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -58,6 +59,7 @@ export function ProjectWorkspace({
   onGetResult: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
   onListReviews: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract[]>>;
   onDecideReview: (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract>>;
+  agents: AvailableAgentContract[]; selectedAgentId?: string; onSelectAgent: (id:string)=>void;
 }) {
   return (
     <section className="page">
@@ -103,6 +105,7 @@ export function ProjectWorkspace({
             onGetResult={onGetResult}
             onListReviews={onListReviews}
             onDecideReview={onDecideReview}
+            agents={agents} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent}
           />
         </div>
       )}

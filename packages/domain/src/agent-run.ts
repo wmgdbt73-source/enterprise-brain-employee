@@ -10,9 +10,8 @@ export interface AgentRun {
   readonly userId: UserId;
   readonly projectId: ProjectId;
   readonly taskId: TaskId;
-  readonly agentDefinitionKey:
-    | 'read-only-work-agent-v1'
-    | 'confirmed-write-work-agent-v1';
+  readonly agentDefinitionKey: string;
+  readonly agentVersion?: number;
   readonly intent: AgentToolIntent;
   readonly status: AgentRunStatus;
   readonly createdAt: Date;

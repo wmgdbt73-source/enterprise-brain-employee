@@ -10,6 +10,7 @@ import {
   HumanConfirmationRepository,
   OrganizationRepository,
   PermissionRepository,
+  AgentCatalogRepository,
   createPrismaClient,
   ensureUser,
   SessionRepository,
@@ -33,6 +34,8 @@ import {
   AgentRunConflictError,
   AgentRunInvalidResultError,
   HumanConfirmationRequiredError,
+  AgentToolNotAllowedError,
+  AgentRunForbiddenError,
   AgentRunNotFoundError,
   AgentRunService
 } from './modules/agent-runs/agent-run-service.js';
@@ -51,6 +54,8 @@ import { registerOrganizationRoutes } from './modules/organization/organization-
 import { OrganizationForbiddenError, OrganizationNotFoundError, OrganizationService } from './modules/organization/organization-service.js';
 import { registerPermissionRoutes } from './modules/permissions/permission-routes.js';
 import { PermissionForbiddenError, PermissionNotFoundError, PermissionService, PermissionValidationError } from './modules/permissions/permission-service.js';
+import { registerAgentRoutes } from './modules/agents/agent-routes.js';
+import { AgentForbiddenError, AgentNotFoundError, AgentService } from './modules/agents/agent-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -112,6 +117,7 @@ export async function createApp(
   registerResultRoutes(app, new ResultService(new ResultRepository(prisma)));
   registerOrganizationRoutes(app, new OrganizationService(new OrganizationRepository(prisma)));
   registerPermissionRoutes(app, new PermissionService(new PermissionRepository(prisma)));
+  registerAgentRoutes(app, new AgentService(new AgentCatalogRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AuthenticationRequiredError || error instanceof InvalidCredentialsError) {
@@ -145,6 +151,7 @@ export async function createApp(
       || error instanceof HumanConfirmationNotFoundError
       || error instanceof OrganizationNotFoundError
       || error instanceof PermissionNotFoundError
+      || error instanceof AgentNotFoundError
     ) {
       return reply.code(404).send({
         error: {
@@ -162,6 +169,8 @@ export async function createApp(
           details: {}
         }
       });
+    if (error instanceof AgentRunForbiddenError) return reply.code(403).send({ error:{code:'PERMISSION_DENIED',message:'Current user cannot execute this Agent',details:{}}});
+    if (error instanceof AgentToolNotAllowedError) return reply.code(400).send({ error:{code:'AGENT_TOOL_NOT_ALLOWED',message:'Selected Agent does not support this tool',details:{}}});
     if (error instanceof TaskDependencyBlockedError)
       return reply.code(409).send({ error: { code: 'TASK_DEPENDENCY_BLOCKED', message: 'Task dependencies are not accepted', details: { blockingDependencyIds: error.blockingDependencyIds } } });
     if (error instanceof AgentRunInvalidResultError)
@@ -186,6 +195,7 @@ export async function createApp(
     if (error instanceof ResultReviewForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot perform this human review action', details: {} } });
     if (error instanceof OrganizationForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot manage this organization resource', details: {} } });
     if (error instanceof PermissionForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot manage permission overrides', details: {} } });
+    if (error instanceof AgentForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot manage this Agent resource', details: {} } });
     if (error instanceof ResultStateConflictError) return reply.code(409).send({ error: { code: 'INVALID_STATE_TRANSITION', message: 'Result is not in the required state', details: {} } });
     if (error instanceof ResultReviewConflictError) return reply.code(409).send({ error: { code: 'REVIEW_CONFLICT', message: 'A different human review decision already exists', details: {} } });
 

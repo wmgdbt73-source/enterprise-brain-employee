@@ -5,6 +5,7 @@ import type {
   ArtifactContract,
   AgentRunContract,
   ResultContract
+  ,AvailableAgentContract
 } from '@enterprise-brain/contracts';
 import type {
   DesktopApiError,
@@ -29,6 +30,8 @@ export function App() {
   const [tasks, setTasks] = useState<TaskContract[]>([]);
   const [task, setTask] = useState<TaskContract>();
   const [artifacts, setArtifacts] = useState<ArtifactContract[]>([]);
+  const [agents, setAgents] = useState<AvailableAgentContract[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>();
   const [tab, setTab] = useState<ProjectTab>('任务');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DesktopApiError>();
@@ -42,7 +45,7 @@ export function App() {
 
   const clearAuthenticatedState = useCallback(() => {
     ++authGenerationRef.current;
-    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTasks([]); setTask(undefined); setArtifacts([]); setError(undefined); setLoading(false);
+    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTasks([]); setTask(undefined); setArtifacts([]); setAgents([]); setSelectedAgentId(undefined); setError(undefined); setLoading(false);
   }, []);
   const loadProjects = useCallback(async (generation = authGenerationRef.current) => {
     setLoading(true);
@@ -73,6 +76,7 @@ export function App() {
       else setLoading(false);
     });
   }, [loadProjects]);
+  const loadAgents = useCallback(async (generation = authGenerationRef.current) => { const list=window.enterpriseBrain.agents.list; if (!list) return; const result=await list(); if(generation!==authGenerationRef.current)return; if(!result.ok){if(result.error.code==='AUTHENTICATION_REQUIRED')clearAuthenticatedState();return;} setAgents(result.data);setSelectedAgentId(old=>result.data.some(a=>a.id===old)?old:result.data[0]?.id); },[clearAuthenticatedState]);
   useEffect(() => window.enterpriseBrain.auth.onAuthenticationLost?.(clearAuthenticatedState), [clearAuthenticatedState]);
   useEffect(() => {
     if (error?.code !== 'AUTHENTICATION_REQUIRED') return;
@@ -113,7 +117,7 @@ export function App() {
     const generation = ++authGenerationRef.current;
     const result = await window.enterpriseBrain.auth.login(input);
     if (generation !== authGenerationRef.current) return result;
-    if (result.ok) { setCurrentUser(result.data); setError(undefined); await loadProjects(generation); }
+    if (result.ok) { setCurrentUser(result.data); setError(undefined); await Promise.all([loadProjects(generation),loadAgents(generation)]); }
     return result;
   }
   async function logout() {
@@ -167,8 +171,9 @@ export function App() {
     relativePath: string
   ): Promise<AgentRunContract | undefined> {
     const generation = authGenerationRef.current;
+    if (!selectedAgentId) return undefined;
     const operation = resolveOperation(
-      await window.enterpriseBrain.agents.run(value.id, {
+      await window.enterpriseBrain.agents.run(value.id, selectedAgentId, {
         name: 'read_file',
         relativePath
       })
@@ -320,6 +325,9 @@ export function App() {
             onGetResult={getResult}
             onListReviews={listResultReviews}
             onDecideReview={decideResult}
+            agents={agents}
+            selectedAgentId={selectedAgentId}
+            onSelectAgent={setSelectedAgentId}
           />
         )}
         {currentUser && <button className="logout" onClick={() => void logout()}>Sign out · {currentUser.name}{currentUser.organization ? ` · ${currentUser.organization.name}${currentUser.department ? ` · ${currentUser.department.name}` : ''}` : ''}</button>}

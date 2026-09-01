@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- JSON persistence boundary is validated by runtime contracts. */
+import { randomUUID } from 'node:crypto';
 import type {
   AgentRunContract,
   AgentToolCompletionReceipt,
@@ -6,6 +8,7 @@ import type {
 import { normalizeToolCompletion, normalizeWriteToolRequest } from '@enterprise-brain/contracts';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { HumanConfirmationContract } from '@enterprise-brain/contracts';
+import { evaluatePermission } from './permission-repository.js';
 
 export class AgentRunRepository {
   constructor(private readonly prisma: PrismaClient) {}
@@ -40,6 +43,21 @@ export class AgentRunRepository {
         }
       });
     });
+  }
+  async createCatalogRun(input:{id:string;toolCallId:string;userId:string;taskId:string;agentId:string;intent:AgentToolRequest extends never ? never : import('@enterprise-brain/contracts').AgentToolIntent}):Promise<{run:AgentRunContract;toolRequest:AgentToolRequest;humanConfirmation?:HumanConfirmationContract}|'NOT_FOUND'|'FORBIDDEN'|'TOOL_NOT_ALLOWED'> {
+    return this.prisma.$transaction(async tx=>{
+      const task=await tx.task.findFirst({where:{id:input.taskId,project:{members:{some:{userId:input.userId}}}}}); if(!task)return 'NOT_FOUND';
+      const member=await tx.organizationMembership.findFirst({where:{userId:input.userId,status:'ACTIVE',organization:{status:'ACTIVE'}},include:{departmentMembership:true}}); if(!member)return 'FORBIDDEN';
+      const definition=await tx.agentDefinition.findFirst({where:{id:input.agentId,organizationId:member.organizationId,status:'ACTIVE'},include:{versions:{where:{status:'ACTIVE'},orderBy:{version:'desc'},take:1}}});const version=definition?.versions[0];if(!definition||!version)return 'FORBIDDEN';
+      const scopes=[{scopeType:'ORGANIZATION' as const,scopeId:member.organizationId},{scopeType:'USER' as const,scopeId:input.userId},...(member.departmentMembership?.status==='ACTIVE'?[{scopeType:'DEPARTMENT' as const,scopeId:member.departmentMembership.departmentId}]:[])];
+      const assigned=await tx.agentAssignment.findFirst({where:{organizationId:member.organizationId,agentDefinitionId:definition.id,status:'ACTIVE',OR:scopes}});if(!assigned)return 'FORBIDDEN';
+      const permission=await evaluatePermission(tx,{organizationId:member.organizationId,userId:input.userId,scopeType:member.departmentMembership?.status==='ACTIVE'?'DEPARTMENT':'ORGANIZATION',scopeId:member.departmentMembership?.status==='ACTIVE'?member.departmentMembership.departmentId:member.organizationId,resource:'AGENT',action:'EXECUTE'});if(!permission.allowed)return 'FORBIDDEN';
+      const supported=version.runtimeProfile==='READ_ONLY_WORK'?input.intent.name!=='write_file':input.intent.name==='write_file';if(!supported)return 'TOOL_NOT_ALLOWED';
+      const now=new Date();const status=input.intent.name==='write_file'?'WAITING_HUMAN':'RUNNING';const run:AgentRunContract={id:input.id as any,userId:input.userId as any,projectId:task.projectId as any,taskId:task.id as any,agentDefinitionKey:definition.key,agentVersion:version.version,status,createdAt:now.toISOString(),...(status==='RUNNING'?{startedAt:now.toISOString()}:{}),updatedAt:now.toISOString()};const request:any={id:input.toolCallId,runId:run.id,userId:run.userId,projectId:run.projectId,...input.intent};
+      await tx.agentRun.create({data:{id:run.id,userId:run.userId,projectId:run.projectId,taskId:run.taskId,agentDefinitionKey:run.agentDefinitionKey,agentVersion:run.agentVersion,intent:{name:request.name,relativePath:request.relativePath},status,createdAt:now,updatedAt:now,...(status==='RUNNING'?{startedAt:now}:{})}});
+      await tx.agentToolCall.create({data:{id:request.id,agentRunId:run.id,sequence:1,name:request.name,deviceId:request.deviceId,request,status:'PENDING',createdAt:now}});
+      if(status==='WAITING_HUMAN'){const confirmation={id:randomUUID(),agentRunId:run.id,toolCallId:request.id,userId:run.userId,projectId:run.projectId,taskId:run.taskId,status:'PENDING' as const,createdAt:now.toISOString()};await tx.humanConfirmation.create({data:{...confirmation,deviceId:request.deviceId,createdAt:now}} as any);return {run,toolRequest:request,humanConfirmation:confirmation};}return {run,toolRequest:request};
+    },{isolationLevel:'RepeatableRead'});
   }
   async createWaitingForHuman(run: AgentRunContract, request: AgentToolRequest, confirmation: HumanConfirmationContract): Promise<void> {
     const normalizedRequest = normalizeWriteToolRequest(request);
@@ -158,6 +176,7 @@ function toContract(run: {
   projectId: string;
   taskId: string;
   agentDefinitionKey: string;
+  agentVersion?: number;
   status: AgentRunContract['status'];
   createdAt: Date;
   startedAt: Date | null;
@@ -170,6 +189,7 @@ function toContract(run: {
     projectId: run.projectId,
     taskId: run.taskId,
     agentDefinitionKey: asAgentDefinitionKey(run.agentDefinitionKey),
+    agentVersion: run.agentVersion ?? 1,
     status: run.status,
     createdAt: run.createdAt.toISOString(),
     ...(run.startedAt ? { startedAt: run.startedAt.toISOString() } : {}),
@@ -177,7 +197,4 @@ function toContract(run: {
     updatedAt: run.updatedAt.toISOString()
   };
 }
-function asAgentDefinitionKey(value: string): AgentRunContract['agentDefinitionKey'] {
-  if (value === 'read-only-work-agent-v1' || value === 'confirmed-write-work-agent-v1') return value;
-  throw new Error('Unknown persisted AgentDefinition key');
-}
+function asAgentDefinitionKey(value: string): AgentRunContract['agentDefinitionKey'] { return value; }

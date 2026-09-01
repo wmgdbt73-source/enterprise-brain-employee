@@ -18,6 +18,13 @@ export type {
   AgentToolName,
   AgentToolRequest,
   AgentDefinitionKey,
+  AgentRuntimeProfile,
+  AgentDefinitionStatus,
+  AgentAssignmentScopeType,
+  AgentAssignmentStatus,
+  AvailableAgentContract,
+  AgentDefinitionContract,
+  AgentAssignmentContract,
   WriteFileEffect
 } from './agent-run.js';
 export type { HumanConfirmationContract, HumanConfirmationDetailContract, HumanConfirmationStatus, ApprovedWriteExecutionGrant } from './human-confirmation.js';

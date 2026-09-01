@@ -3,6 +3,7 @@ import type {
   AgentToolCompletionReceipt,
   AgentToolIntent,
   AgentToolRequest,
+  AvailableAgentContract,
   ArtifactContract,
   ResultContract, ReviewContract, ReviewDecision,
   CurrentUserContract,
@@ -113,15 +114,17 @@ export class DesktopApiGateway {
   }
   createAgentRun(
     taskId: string,
-    intent: AgentToolIntent
+    agentId: string | AgentToolIntent,
+    maybeIntent?: AgentToolIntent
   ): Promise<DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest; humanConfirmation?: HumanConfirmationContract }>> {
     return this.request(`/tasks/${encodeURIComponent(taskId)}/agent-runs`, {
       method: 'POST',
-      body: intent
+      body: typeof agentId === 'string' ? { agentId, intent: maybeIntent } : agentId
     }) as Promise<
       DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest; humanConfirmation?: HumanConfirmationContract }>
     >;
   }
+  listAvailableAgents(): Promise<DesktopResult<AvailableAgentContract[]>> { return this.request('/me/agents').then(r=>r.ok?{ok:true,data:(r.data as {agents:AvailableAgentContract[]}).agents}:r); }
   getHumanConfirmation(id: string): Promise<DesktopResult<HumanConfirmationDetailContract>> {
     return this.request(`/human-confirmations/${encodeURIComponent(id)}`) as Promise<DesktopResult<HumanConfirmationDetailContract>>;
   }

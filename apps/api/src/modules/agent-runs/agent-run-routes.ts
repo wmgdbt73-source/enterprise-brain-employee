@@ -94,10 +94,10 @@ export function registerAgentRunRoutes(
 ): void {
   app.post<{
     Params: { taskId: string };
-    Body: import('@enterprise-brain/contracts').AgentToolIntent;
+    Body: { agentId:string; intent: import('@enterprise-brain/contracts').AgentToolIntent };
   }>(
     '/tasks/:taskId/agent-runs',
-    { schema: { params: taskParams, body: intent } },
+    { schema: { params: taskParams, body: { type:'object',additionalProperties:false,required:['agentId','intent'],properties:{agentId:{type:'string',minLength:1},intent} } } },
     async (request, reply) =>
       reply
         .code(201)

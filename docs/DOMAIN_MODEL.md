@@ -138,6 +138,11 @@ interface AgentDefinition {
   outputSchema?: Record<string, unknown>
   approvalPolicy?: Record<string, unknown>
 }
+
+EB-017 persists organization-owned definitions, active version `1`, and scoped
+assignments (`ORGANIZATION`, `DEPARTMENT`, `USER`). A new AgentRun snapshots the
+server-selected `agentDefinitionKey` and `agentVersion`; clients never choose a
+runtime profile or allowed tools.
 ```
 
 ## 8. AgentRun（Agent 执行实例）
