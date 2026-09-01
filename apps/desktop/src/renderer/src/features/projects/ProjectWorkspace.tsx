@@ -33,7 +33,7 @@ export function ProjectWorkspace({
   ,onGetResult
   ,onListReviews
   ,onDecideReview
-  ,agents, selectedAgentId, onSelectAgent
+  ,agents, selectedAgentId, onSelectAgent, agentError, agentsLoading, onRefreshAgents
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -59,7 +59,7 @@ export function ProjectWorkspace({
   onGetResult: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
   onListReviews: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract[]>>;
   onDecideReview: (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract>>;
-  agents: AvailableAgentContract[]; selectedAgentId?: string; onSelectAgent: (id:string)=>void;
+  agents: AvailableAgentContract[]; selectedAgentId?: string; onSelectAgent: (id:string)=>void; agentError?: import('../../../../shared/enterprise-brain.js').DesktopApiError; agentsLoading?: boolean; onRefreshAgents: () => void;
 }) {
   return (
     <section className="page">
@@ -105,7 +105,7 @@ export function ProjectWorkspace({
             onGetResult={onGetResult}
             onListReviews={onListReviews}
             onDecideReview={onDecideReview}
-            agents={agents} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent}
+            agents={agents} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} agentError={agentError} agentsLoading={agentsLoading} onRefreshAgents={onRefreshAgents}
           />
         </div>
       )}
