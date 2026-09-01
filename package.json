@@ -11,6 +11,7 @@
     "build": "pnpm --recursive run build",
     "dev:api": "pnpm --filter @enterprise-brain/api dev",
     "dev:desktop": "pnpm --filter @enterprise-brain/desktop dev",
+    "dev:admin": "pnpm --filter @enterprise-brain/admin dev",
     "db:validate": "pnpm --filter @enterprise-brain/database prisma validate --config prisma.config.ts",
     "db:generate": "pnpm --filter @enterprise-brain/database prisma generate --config prisma.config.ts",
     "db:migrate:dev": "pnpm --filter @enterprise-brain/database prisma migrate dev --config prisma.config.ts",
