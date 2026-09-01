@@ -11,6 +11,7 @@ import {
   OrganizationRepository,
   PermissionRepository,
   AgentCatalogRepository,
+  AuditRepository,
   createPrismaClient,
   ensureUser,
   SessionRepository,
@@ -56,6 +57,8 @@ import { registerPermissionRoutes } from './modules/permissions/permission-route
 import { PermissionForbiddenError, PermissionNotFoundError, PermissionService, PermissionValidationError } from './modules/permissions/permission-service.js';
 import { registerAgentRoutes } from './modules/agents/agent-routes.js';
 import { AgentForbiddenError, AgentNotFoundError, AgentService } from './modules/agents/agent-service.js';
+import { registerAuditRoutes } from './modules/audit/audit-routes.js';
+import { AuditForbiddenError, AuditNotFoundError, AuditService, CannotModifySelfError, InvalidReasonError, LastActiveOwnerError } from './modules/audit/audit-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -120,6 +123,7 @@ export async function createApp(
   registerOrganizationRoutes(app, new OrganizationService(new OrganizationRepository(prisma)));
   registerPermissionRoutes(app, new PermissionService(new PermissionRepository(prisma)));
   registerAgentRoutes(app, new AgentService(new AgentCatalogRepository(prisma)));
+  registerAuditRoutes(app, new AuditService(new AuditRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AuthenticationRequiredError || error instanceof InvalidCredentialsError) {
@@ -154,6 +158,7 @@ export async function createApp(
       || error instanceof OrganizationNotFoundError
       || error instanceof PermissionNotFoundError
       || error instanceof AgentNotFoundError
+      || error instanceof AuditNotFoundError
     ) {
       return reply.code(404).send({
         error: {
@@ -163,6 +168,10 @@ export async function createApp(
         }
       });
     }
+    if (error instanceof AuditForbiddenError) return reply.code(403).send({error:{code:'FORBIDDEN',message:'Current user is not authorized',details:{}}});
+    if (error instanceof CannotModifySelfError) return reply.code(409).send({error:{code:'CANNOT_MODIFY_SELF',message:'Current user cannot modify their own account',details:{}}});
+    if (error instanceof LastActiveOwnerError) return reply.code(409).send({error:{code:'LAST_ACTIVE_OWNER',message:'Cannot disable the last active owner',details:{}}});
+    if (error instanceof InvalidReasonError) return reply.code(400).send({error:{code:'INVALID_REASON',message:'Reason must be 3 to 500 characters',details:{}}});
     if (error instanceof AgentRunConflictError)
       return reply.code(409).send({
         error: {

@@ -34,6 +34,7 @@ export class SessionRepository {
     if (!token) return undefined;
     const session = await this.prisma.session.findUnique({ where: { tokenHash: hashSessionToken(token) }, include: { account: { include: { user: { include: userInclude } } } } });
     if (!session || session.revokedAt || session.expiresAt <= now || session.account.status !== 'ACTIVE') return undefined;
+    if (session.account.user.organizationMembership && (session.account.user.organizationMembership.status !== 'ACTIVE' || session.account.user.organizationMembership.organization.status !== 'ACTIVE')) return undefined;
     return toCurrentUser(session.account.user);
   }
 

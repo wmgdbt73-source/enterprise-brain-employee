@@ -16,6 +16,10 @@ enum AccountStatus {
   ACTIVE
   DISABLED
 }
+enum AuditSource {
+  ADMIN_API
+  SYSTEM
+}
 
 enum OrganizationStatus {
   ACTIVE
@@ -169,6 +173,7 @@ model User {
   submittedResults Result[] @relation("ResultSubmitter")
   reviews        Review[]
   account        Account?
+  auditEvents AuditEvent[]
   organizationMembership OrganizationMembership?
 
   @@map("users")
@@ -183,6 +188,7 @@ model Organization {
   memberships OrganizationMembership[]
   departments Department[]
   agentDefinitions AgentDefinition[]
+  auditEvents AuditEvent[]
   @@map("organizations")
 }
 
@@ -259,6 +265,29 @@ model Account {
   sessions     Session[]
 
   @@map("accounts")
+}
+
+model AuditEvent {
+  id String @id @map("audit_event_id")
+  organizationId String @map("organization_id")
+  actorUserId String @map("actor_user_id")
+  action String
+  subjectType String @map("subject_type")
+  subjectId String? @map("subject_id")
+  resourceType String @map("resource_type")
+  resourceId String? @map("resource_id")
+  before Json?
+  after Json?
+  reason String?
+  source AuditSource
+  requestId String? @map("request_id")
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  organization Organization @relation(fields:[organizationId], references:[id], onDelete:Restrict)
+  actor User @relation(fields:[actorUserId], references:[id], onDelete:Restrict)
+  @@index([organizationId, createdAt, id], map:"audit_events_organization_created_id_idx")
+  @@index([action, createdAt], map:"audit_events_action_created_idx")
+  @@index([subjectType, subjectId], map:"audit_events_subject_idx")
+  @@map("audit_events")
 }
 
 model Session {
