@@ -205,6 +205,29 @@ describe('Result confirmation component lifecycle', () => {
     expect(text()).toContain('Task B');
     expect(text()).not.toContain('review-a');
   });
+
+  it('renders catalog Agents, forwards the selected agent id, and disables selection when none are available', async () => {
+    const selected: string[] = [];
+    const props = (agents: import('@enterprise-brain/contracts').AvailableAgentContract[]) => ({
+      task: taskA, onStart: async () => {}, artifacts: [artifact], onReadFile: async () => undefined,
+      onRegisterArtifact: async () => {}, onPrepareWrite: async () => undefined,
+      onApproveWrite: async () => {}, onRejectWrite: async () => {}, onCreateResult: async () => failure('UNUSED'),
+      agents, selectedAgentId: agents[0]?.id, onSelectAgent: (id: string) => selected.push(id)
+    });
+    const catalog = [
+      { id: 'agent-reader', key: 'reader', name: 'Research Reader', version: 1, runtimeProfile: 'READ_ONLY_WORK' as const, assignmentSources: ['ORGANIZATION' as const] },
+      { id: 'agent-writer', key: 'writer', name: 'Confirmed Writer', version: 1, runtimeProfile: 'CONFIRMED_WRITE_WORK' as const, assignmentSources: ['USER' as const] }
+    ];
+    mount();
+    await act(async () => root?.render(createElement(TaskDetail, props(catalog))));
+    expect(text()).toContain('Research Reader · READ_ONLY_WORK');
+    const select = document.querySelector('select') as HTMLSelectElement;
+    await act(async () => { select.value = 'agent-writer'; select.dispatchEvent(new window.Event('change', { bubbles: true })); });
+    expect(selected).toEqual(['agent-writer']);
+    await act(async () => root?.render(createElement(TaskDetail, props([]))));
+    expect((document.querySelector('select') as HTMLSelectElement).disabled).toBe(true);
+    expect(text()).toContain('No available Agent');
+  });
 });
 
 function mount() {
