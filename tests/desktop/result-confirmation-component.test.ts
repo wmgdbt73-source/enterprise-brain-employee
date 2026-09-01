@@ -7,7 +7,7 @@ import { App } from '../../apps/desktop/src/renderer/src/App.js';
 import { TaskDetail } from '../../apps/desktop/src/renderer/src/features/tasks/TaskDetail.js';
 import type { EnterpriseBrainBridge } from '../../apps/desktop/src/shared/enterprise-brain.js';
 import type { DesktopResult } from '../../apps/desktop/src/shared/enterprise-brain.js';
-import type { ArtifactContract, ProjectContract, ResultContract, ReviewContract, TaskContract } from '../../packages/contracts/src/index.js';
+import type { ArtifactContract, AvailableAgentContract, ProjectContract, ResultContract, ReviewContract, TaskContract } from '../../packages/contracts/src/index.js';
 
 const project: ProjectContract = { id: 'project-a', name: 'Project', status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
 const taskA = task('task-a', 'Task A');
@@ -208,7 +208,7 @@ describe('Result confirmation component lifecycle', () => {
 
   it('renders catalog Agents, forwards the selected agent id, and disables selection when none are available', async () => {
     const selected: string[] = [];
-    const props = (agents: import('@enterprise-brain/contracts').AvailableAgentContract[]) => ({
+    const props = (agents: AvailableAgentContract[]) => ({
       task: taskA, onStart: async () => {}, artifacts: [artifact], onReadFile: async () => undefined,
       onRegisterArtifact: async () => {}, onPrepareWrite: async () => undefined,
       onApproveWrite: async () => {}, onRejectWrite: async () => {}, onCreateResult: async () => failure('UNUSED'),
