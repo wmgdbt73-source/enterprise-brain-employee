@@ -288,3 +288,10 @@ the formal `START` action without creating a new Task status.
 ## 15. Organization and Department
 
 `OrganizationMembership` is the User's organizational relationship (`OWNER | ADMIN | MEMBER`); `DepartmentMembership` assigns that User to one Department in that Organization (`MANAGER | MEMBER`). Both are distinct from `User.systemRole`, and composite relations prevent cross-Organization department memberships. `User.departmentId` is no longer a source of truth.
+
+## 16. PermissionOverride
+
+`PermissionOverride` is a live, Organization-scoped exception for one active
+Organization member and one supported resource/action tuple. It is unique by
+Organization, User, scope type/id, resource, and action. Effective evaluation is
+`DENY > ALLOW > role > default deny`; it does not grant local filesystem rights.

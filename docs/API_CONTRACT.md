@@ -296,3 +296,12 @@ Before Codex adds or changes an endpoint, it must:
 may create or update Departments and assign a same-Organization employee through
 `PUT /employees/:userId/department`; a Department `MANAGER` may list that
 Department's members. Actor and Organization fields are always server-derived.
+
+## 14. Demo Permission Overrides
+
+`GET /me/permissions` returns effective permissions with `resource`, `action`,
+`scopeType`, `scopeId`, `allowed`, and `source`. Organization `OWNER`/`ADMIN`
+may list, upsert, and delete same-Organization employee overrides at
+`/employees/:userId/permission-overrides`. Supported tuples are Organization
+VIEW; Department VIEW/MANAGE/ASSIGN; Permission VIEW/MANAGE; and Result REVIEW.
+Unsupported tuples and forged actor/scope fields are rejected.

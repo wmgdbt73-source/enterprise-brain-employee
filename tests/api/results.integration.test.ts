@@ -16,7 +16,7 @@ async function artifact(app: Awaited<ReturnType<typeof createApp>>, taskId: stri
 
 describe('Result Candidate API', () => {
   beforeEach(async () => {
-    await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany();
+    await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().permissionOverride.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany();
   });
   afterAll(async () => database?.$disconnect());
 
@@ -155,6 +155,7 @@ describe('Result Candidate API', () => {
     expect((await app.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
     await db().user.create({ data: { id: 'reviewer-1', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
     await db().projectMember.create({ data: { id: 'member-reviewer-1', projectId: project.id, userId: 'reviewer-1', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    await reviewOrganization('reviewer-1');
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-1', name: 'Reviewer' }) });
     const accepted = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: ' looks good ' } });
     expect(accepted.statusCode).toBe(201); expect(accepted.json()).toMatchObject({ resultId: result.id, reviewerId: 'reviewer-1', decision: 'ACCEPT', comment: 'looks good' });
@@ -178,6 +179,7 @@ describe('Result Candidate API', () => {
     await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} });
     await db().user.create({ data: { id: 'reviewer-rework', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
     await db().projectMember.create({ data: { id: 'member-reviewer-rework', projectId: project.id, userId: 'reviewer-rework', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    await reviewOrganization('reviewer-rework');
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-rework' }) });
     expect((await reviewer.inject({ method: 'POST', url: `/results/${created.id}/reviews`, payload: { decision: 'REWORK' } })).statusCode).toBe(201);
     expect(await db().result.findUniqueOrThrow({ where: { id: created.id } })).toMatchObject({ status: 'REWORK' });
@@ -199,6 +201,7 @@ describe('Result Candidate API', () => {
     const member = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'member-1', name: 'Member' }) });
     const admin = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'admin-1', name: 'Admin', systemRole: 'ADMIN' }) });
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-2', name: 'Reviewer' }) });
+    await reviewOrganization('reviewer-2');
     expect((await member.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(403);
     expect((await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: { submittedByUserId: 'forged' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'POST', url: `/results/${created.id}/submit-review`, payload: {} })).statusCode).toBe(200);
@@ -223,6 +226,7 @@ describe('Result Candidate API', () => {
     await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} });
     await db().user.create({ data: { id: 'reviewer-empty', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
     await db().projectMember.create({ data: { id: 'member-reviewer-empty', projectId: project.id, userId: 'reviewer-empty', role: 'REVIEWER', createdAt: new Date(), updatedAt: new Date() } });
+    await reviewOrganization('reviewer-empty');
     const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'reviewer-empty', name: 'Reviewer' }) });
     const first = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } });
     const blank = await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT', comment: '   ' } });
@@ -230,7 +234,38 @@ describe('Result Candidate API', () => {
     expect(first.statusCode).toBe(201); expect(blank.statusCode).toBe(200); expect(blank.json().id).toBe(first.json().id); expect(changed.statusCode).toBe(409);
     await Promise.all([reviewer.close(), app.close()]);
   });
+
+  it('rechecks live Organization RESULT REVIEW permission for the same reviewer session', async () => {
+    const app = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider() });
+    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Permission review' } })).json();
+    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'T' } })).json();
+    const registered = await artifact(app, task.id, 'a.md');
+    const result = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/results`, headers: { 'idempotency-key': key('16') }, payload: { artifactIds: [registered.id] } })).json();
+    await app.inject({ method: 'POST', url: `/tasks/${task.id}/start` }); await app.inject({ method: 'POST', url: `/results/${result.id}/submit-review`, payload: {} });
+    const now = new Date(); await db().user.create({ data: { id: 'permission-reviewer', name: 'Reviewer', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now } });
+    await db().projectMember.create({ data: { id: 'permission-reviewer-member', projectId: project.id, userId: 'permission-reviewer', role: 'REVIEWER', createdAt: now, updatedAt: now } });
+    await db().organization.create({ data: { id: 'permission-review-org', name: 'Review Org', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+    await db().organizationMembership.createMany({ data: [{ id: 'permission-review-owner', organizationId: 'permission-review-org', userId: 'dev-user', role: 'OWNER', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'permission-review-reviewer', organizationId: 'permission-review-org', userId: 'permission-reviewer', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+    const reviewer = await createApp({ prisma: db(), identityProvider: new DevIdentityProvider({ id: 'permission-reviewer', name: 'Reviewer' }) });
+    expect((await app.inject({ method: 'PUT', url: '/employees/permission-reviewer/permission-overrides', payload: { scopeType: 'ORGANIZATION', scopeId: 'permission-review-org', resource: 'RESULT', action: 'REVIEW', effect: 'DENY' } })).statusCode).toBe(200);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403);
+    expect(await db().review.count({ where: { resultId: result.id } })).toBe(0); expect((await db().result.findUniqueOrThrow({ where: { id: result.id } })).status).toBe('HUMAN_REVIEW'); expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('READY_FOR_REVIEW');
+    expect((await app.inject({ method: 'PUT', url: '/employees/permission-reviewer/permission-overrides', payload: { scopeType: 'ORGANIZATION', scopeId: 'permission-review-org', resource: 'RESULT', action: 'REVIEW', effect: 'ALLOW' } })).statusCode).toBe(200);
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(201);
+    const disabledTask = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Disabled reviewer' } })).json(); const disabledArtifact = await artifact(app, disabledTask.id, 'disabled.md');
+    const disabledResult = (await app.inject({ method: 'POST', url: `/tasks/${disabledTask.id}/results`, headers: { 'idempotency-key': key('17') }, payload: { artifactIds: [disabledArtifact.id] } })).json();
+    await app.inject({ method: 'POST', url: `/tasks/${disabledTask.id}/start` }); await app.inject({ method: 'POST', url: `/results/${disabledResult.id}/submit-review`, payload: {} });
+    await db().organizationMembership.update({ where: { userId: 'permission-reviewer' }, data: { status: 'DISABLED', updatedAt: new Date() } });
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${disabledResult.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403); expect(await db().review.count({ where: { resultId: disabledResult.id } })).toBe(0);
+    await reviewer.close(); await app.close();
+  });
 });
+
+async function reviewOrganization(userId: string) {
+  const now = new Date();
+  await db().organization.upsert({ where: { id: 'review-org' }, create: { id: 'review-org', name: 'Review Organization', status: 'ACTIVE', createdAt: now, updatedAt: now }, update: {} });
+  await db().organizationMembership.create({ data: { id: `review-org-${userId}`, organizationId: 'review-org', userId, role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } });
+}
 
 function wrapPrismaForResultApiTest(prisma: PrismaClient, hooks: { beforeResultCreate: () => Promise<void> | void }): PrismaClient {
   return new Proxy(prisma, {

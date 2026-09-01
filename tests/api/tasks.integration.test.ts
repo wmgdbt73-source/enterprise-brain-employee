@@ -36,6 +36,7 @@ describe('Task API vertical slice', () => {
     await db.projectMember.deleteMany();
     await db.project.deleteMany();
     await db.departmentMembership.deleteMany();
+    await db.permissionOverride.deleteMany();
     await db.organizationMembership.deleteMany();
     await db.department.deleteMany();
     await db.organization.deleteMany();

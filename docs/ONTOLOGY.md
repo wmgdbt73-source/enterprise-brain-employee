@@ -187,6 +187,8 @@ Side state:
 - Agent may precheck, but may not perform formal Acceptance（正式验收）.
 - Human reviewer with authority performs Accept / Rework.
 - Local tool permissions are independent from normal business object permissions.
+- Business `PermissionOverride` is evaluated live per request within Organization
+  or Department scope; it never expands Desktop local-tool permissions.
 
 ## 7. Event Baseline（事件基线）
 

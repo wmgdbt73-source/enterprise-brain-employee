@@ -9,6 +9,7 @@ import {
   ResultRepository,
   HumanConfirmationRepository,
   OrganizationRepository,
+  PermissionRepository,
   createPrismaClient,
   ensureUser,
   SessionRepository,
@@ -48,6 +49,8 @@ import { ResultIdempotencyConflictError, ResultNotFoundError, ResultReviewConfli
 import { InvalidCredentialsError, registerAuthRoutes } from './modules/auth/auth-routes.js';
 import { registerOrganizationRoutes } from './modules/organization/organization-routes.js';
 import { OrganizationForbiddenError, OrganizationNotFoundError, OrganizationService } from './modules/organization/organization-service.js';
+import { registerPermissionRoutes } from './modules/permissions/permission-routes.js';
+import { PermissionForbiddenError, PermissionNotFoundError, PermissionService, PermissionValidationError } from './modules/permissions/permission-service.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
@@ -108,6 +111,7 @@ export async function createApp(
   registerHumanConfirmationRoutes(app, new HumanConfirmationService(new HumanConfirmationRepository(prisma)));
   registerResultRoutes(app, new ResultService(new ResultRepository(prisma)));
   registerOrganizationRoutes(app, new OrganizationService(new OrganizationRepository(prisma)));
+  registerPermissionRoutes(app, new PermissionService(new PermissionRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AuthenticationRequiredError || error instanceof InvalidCredentialsError) {
@@ -122,7 +126,7 @@ export async function createApp(
         }
       });
     }
-    if (hasValidationError(error) || isDomainError(error)) {
+    if (hasValidationError(error) || isDomainError(error) || error instanceof PermissionValidationError) {
       return reply.code(400).send({
         error: {
           code: 'VALIDATION_ERROR',
@@ -140,6 +144,7 @@ export async function createApp(
       || error instanceof ResultNotFoundError
       || error instanceof HumanConfirmationNotFoundError
       || error instanceof OrganizationNotFoundError
+      || error instanceof PermissionNotFoundError
     ) {
       return reply.code(404).send({
         error: {
@@ -180,6 +185,7 @@ export async function createApp(
     if (error instanceof ResultIdempotencyConflictError) return reply.code(409).send({ error: { code: 'IDEMPOTENCY_KEY_CONFLICT', message: 'Idempotency key was previously used for a different Result Candidate request', details: {} } });
     if (error instanceof ResultReviewForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot perform this human review action', details: {} } });
     if (error instanceof OrganizationForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot manage this organization resource', details: {} } });
+    if (error instanceof PermissionForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot manage permission overrides', details: {} } });
     if (error instanceof ResultStateConflictError) return reply.code(409).send({ error: { code: 'INVALID_STATE_TRANSITION', message: 'Result is not in the required state', details: {} } });
     if (error instanceof ResultReviewConflictError) return reply.code(409).send({ error: { code: 'REVIEW_CONFLICT', message: 'A different human review decision already exists', details: {} } });
 

@@ -72,6 +72,7 @@ describe('PostgreSQL persistence constraints', () => {
     await db.projectMember.deleteMany();
     await db.project.deleteMany();
     await db.departmentMembership.deleteMany();
+    await db.permissionOverride.deleteMany();
     await db.organizationMembership.deleteMany();
     await db.department.deleteMany();
     await db.organization.deleteMany();
@@ -103,6 +104,18 @@ describe('PostgreSQL persistence constraints', () => {
     await expect(db.departmentMembership.create({ data: { id: 'dm-duplicate', organizationId: 'org-a', departmentId: 'dept-a', userId: 'org-user-a', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: 'P2002' });
     await expect(db.departmentMembership.create({ data: { id: 'dm-wrong-department', organizationId: 'org-a', departmentId: 'dept-b', userId: 'org-user-c', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2039$/) });
     await expect(db.departmentMembership.create({ data: { id: 'dm-wrong-membership', organizationId: 'org-a', departmentId: 'dept-a', userId: 'org-user-d', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2039$/) });
+  });
+
+  it('enforces PermissionOverride ownership, tuple uniqueness, and a nonblank scope', async () => {
+    const db = requireDatabase(); const now = new Date();
+    await db.user.createMany({ data: [{ id: 'permission-user-a', name: 'A', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, { id: 'permission-user-b', name: 'B', systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }] });
+    await db.organization.createMany({ data: [{ id: 'permission-org-a', name: 'A', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'permission-org-b', name: 'B', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+    await db.organizationMembership.createMany({ data: [{ id: 'permission-om-a', organizationId: 'permission-org-a', userId: 'permission-user-a', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'permission-om-b', organizationId: 'permission-org-b', userId: 'permission-user-b', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+    const row = { organizationId: 'permission-org-a', userId: 'permission-user-a', scopeType: 'ORGANIZATION' as const, scopeId: 'permission-org-a', resource: 'ORGANIZATION' as const, action: 'VIEW' as const, effect: 'DENY' as const, createdAt: now, updatedAt: now };
+    await db.permissionOverride.create({ data: { id: 'permission-one', ...row } });
+    await expect(db.permissionOverride.create({ data: { id: 'permission-two', ...row } })).rejects.toMatchObject({ code: 'P2002' });
+    await expect(db.permissionOverride.create({ data: { id: 'permission-cross', ...row, userId: 'permission-user-b' } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2039$/) });
+    await expect(db.permissionOverride.create({ data: { id: 'permission-blank', ...row, scopeId: '   ' } })).rejects.toMatchObject({ code: expect.stringMatching(/^P2003$|^P2010$|^P2039$/) });
   });
 
   it('rolls back a failed transactional department assignment without replacing the previous assignment', async () => {
@@ -813,6 +826,8 @@ async function createHumanReviewFixture(db: ReturnType<typeof requireDatabase>, 
   for (const reviewerId of ['reviewer-1', 'reviewer-2']) {
     await db.user.upsert({ where: { id: reviewerId }, create: { id: reviewerId, name: reviewerId, systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now }, update: {} });
     await db.projectMember.upsert({ where: { projectId_userId: { projectId: 'project-1', userId: reviewerId } }, create: { id: `member-${reviewerId}`, projectId: 'project-1', userId: reviewerId, role: 'REVIEWER', createdAt: now, updatedAt: now }, update: {} });
+    await db.organization.upsert({ where: { id: 'review-org' }, create: { id: 'review-org', name: 'Review', status: 'ACTIVE', createdAt: now, updatedAt: now }, update: {} });
+    await db.organizationMembership.upsert({ where: { userId: reviewerId }, create: { id: `review-organization-${reviewerId}`, organizationId: 'review-org', userId: reviewerId, role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }, update: {} });
   }
   await db.result.create({ data: { ...resultRow(id, 'task-1', 'project-1', now), status: 'HUMAN_REVIEW', submittedByUserId: 'user-owner', submittedAt: now } });
   await db.resultArtifact.create({ data: { resultId: id, artifactId: 'artifact-1', taskId: 'task-1', projectId: 'project-1' } });
