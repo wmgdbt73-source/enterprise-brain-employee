@@ -68,6 +68,27 @@ describe('desktop session identity boundary', () => {
     const loginButton = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Sign in')) as HTMLButtonElement;
     expect(text()).toContain('Sign in'); expect(loginButton.disabled).toBe(false);
   });
+  it('protects the Agent Catalog across authentication changes, revocation, and retry', async () => {
+    type AgentListResult = Awaited<ReturnType<NonNullable<EnterpriseBrainBridge['agents']['list']>>>;
+    let lost!: () => void; let resolveOld!: (value: AgentListResult) => void; let stage = 0; let listCount = 0;
+    const old = new Promise<AgentListResult>((resolve) => { resolveOld = resolve; });
+    const project = { id: 'project', name: 'Project', status: 'ACTIVE' as const, createdAt: 'x', updatedAt: 'x' };
+    const task = { id: 'task', projectId: 'project', title: 'Task', priority: 'P2' as const, status: 'TODO' as const, acceptanceCriteria: [], dependencyIds: [], createdAt: 'x', updatedAt: 'x' };
+    const agent = (id: string, name: string) => ({ id, key: id, name, version: 1, runtimeProfile: 'READ_ONLY_WORK' as const, assignmentSources: ['USER' as const] });
+    mount(); window.enterpriseBrain = bridge({
+      auth: { currentUser: async () => failure('AUTHENTICATION_REQUIRED'), login: async () => ({ ok: true as const, data: { id: stage++ === 0 ? 'a' : 'b', name: stage === 1 ? 'User A' : 'User B', systemRole: 'EMPLOYEE' as const } }), logout: async () => ({ ok: true as const, data: undefined }), onAuthenticationLost: (listener) => { lost = listener; return () => undefined; } },
+      projects: { list: async () => ({ ok: true as const, data: [project] }), get: async () => ({ ok: true as const, data: project }), create: async () => failure('UNUSED') },
+      tasks: { list: async () => ({ ok: true as const, data: [task] }), get: async () => ({ ok: true as const, data: task }), create: async () => failure('UNUSED'), start: async () => failure('UNUSED') },
+      agents: { list: async () => { listCount += 1; return listCount === 1 ? old : listCount === 2 ? ({ ok: true as const, data: [agent('agent-b', 'Agent B')] }) : listCount === 3 ? ({ ok: true as const, data: [] }) : listCount === 4 ? failure('API_UNAVAILABLE') : ({ ok: true as const, data: [agent('agent-c', 'Agent C')] }); }, run: async () => failure('UNUSED') }
+    });
+    await render(); let inputs = [...document.querySelectorAll('input')] as HTMLInputElement[]; await input(inputs[0], 'a'); await input(inputs[1], 'p'); await click('Sign in'); await act(async () => lost());
+    inputs = [...document.querySelectorAll('input')] as HTMLInputElement[]; await input(inputs[0], 'b'); await input(inputs[1], 'p'); await click('Sign in'); await click('Project'); await click('Task'); await act(async () => resolveOld({ ok: true as const, data: [agent('agent-a', 'Agent A')] }));
+    expect(text()).toContain('Agent B'); expect(text()).not.toContain('Agent A');
+    const select = document.querySelector('[data-testid="agent-catalog-select"]') as HTMLSelectElement; expect(select.value).toBe('agent-b');
+    await act(async () => { (document.querySelector('[data-testid="refresh-agents"]') as HTMLButtonElement).click(); }); expect(text()).toContain('Task'); expect(select.value).toBe('');
+    await act(async () => { (document.querySelector('[data-testid="refresh-agents"]') as HTMLButtonElement).click(); }); expect(document.querySelector('[data-testid="agent-catalog-error"]')?.textContent).toContain('Authentication is required');
+    await act(async () => { (document.querySelector('[data-testid="refresh-agents"]') as HTMLButtonElement).click(); }); expect(text()).toContain('Agent C'); expect(document.querySelector('[data-testid="agent-catalog-error"]')).toBeNull();
+  });
 });
 function successUser() { return { ok: true as const, data: { id: 'employee', name: 'Employee', systemRole: 'EMPLOYEE' as const } }; }
 function mount() { dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'http://desktop.test' }); Object.assign(globalThis, { window: dom.window, document: dom.window.document, HTMLElement: dom.window.HTMLElement, Event: dom.window.Event, MouseEvent: dom.window.MouseEvent, React }); (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; root = createRoot(document.getElementById('root')!); }

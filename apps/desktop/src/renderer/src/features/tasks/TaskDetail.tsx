@@ -139,12 +139,12 @@ export function TaskDetail({
           <p className="eyebrow">TASK DETAIL</p>
           <h2>{task.title}</h2>
           <label>Agent
-            <select value={selectedAgentId ?? ''} onChange={(event)=>onSelectAgent?.(event.target.value)} disabled={(agents ?? []).length===0}>
+            <select data-testid="agent-catalog-select" value={selectedAgentId ?? ''} onChange={(event)=>onSelectAgent?.(event.target.value)} disabled={(agents ?? []).length===0}>
               {(agents ?? []).length===0 ? <option value="">No available Agent</option> : agents!.map(agent=><option key={agent.id} value={agent.id}>{agent.name} · {agent.runtimeProfile}</option>)}
             </select>
           </label>
-          <button onClick={onRefreshAgents} disabled={agentsLoading}>{agentsLoading ? 'Refreshing Agents' : 'Refresh Agents'}</button>
-          {agentError && <p className="agent-error">{agentError.message}</p>}
+          <button data-testid="refresh-agents" onClick={onRefreshAgents} disabled={agentsLoading}>{agentsLoading ? 'Refreshing Agents' : 'Refresh Agents'}</button>
+          {agentError && <p data-testid="agent-catalog-error" className="agent-error">{agentError.message}</p>}
           <p>{task.description || '没有任务说明。'}</p>
           <dl>
             <dt>状态</dt>

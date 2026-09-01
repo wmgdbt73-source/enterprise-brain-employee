@@ -48,6 +48,7 @@ export function App() {
 
   const clearAuthenticatedState = useCallback(() => {
     ++authGenerationRef.current;
+    agentsLoadingRef.current = false;
     setCurrentUser(undefined); setProjects([]); setProject(undefined); setTasks([]); setTask(undefined); setArtifacts([]); setAgents([]); setSelectedAgentId(undefined); setAgentError(undefined); setError(undefined); setLoading(false);
   }, []);
   const loadProjects = useCallback(async (generation = authGenerationRef.current) => {
