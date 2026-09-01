@@ -58,6 +58,7 @@ describe('Organization API', () => {
     expect((await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY', actorId: 'outsider' } })).statusCode).toBe(400);
     expect((await app.inject({ method: 'DELETE', url: `/employees/manager/permission-overrides/${deny.json().id}`, headers: owner })).statusCode).toBe(200); expect(await db().permissionOverride.findUnique({ where: { id: deny.json().id } })).toBeNull();
     expect((await app.inject({ method: 'GET', url: '/employees/manager/permission-overrides', headers: outsider })).statusCode).toBe(404);
+    expect((await app.inject({ method: 'DELETE', url: `/employees/manager/permission-overrides/${mutationDeny.json().id}`, headers: outsider })).statusCode).toBe(404);
     await app.close();
   });
 });

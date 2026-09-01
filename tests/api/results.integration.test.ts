@@ -252,6 +252,11 @@ describe('Result Candidate API', () => {
     expect(await db().review.count({ where: { resultId: result.id } })).toBe(0); expect((await db().result.findUniqueOrThrow({ where: { id: result.id } })).status).toBe('HUMAN_REVIEW'); expect((await db().task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('READY_FOR_REVIEW');
     expect((await app.inject({ method: 'PUT', url: '/employees/permission-reviewer/permission-overrides', payload: { scopeType: 'ORGANIZATION', scopeId: 'permission-review-org', resource: 'RESULT', action: 'REVIEW', effect: 'ALLOW' } })).statusCode).toBe(200);
     expect((await reviewer.inject({ method: 'POST', url: `/results/${result.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(201);
+    const disabledTask = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Disabled reviewer' } })).json(); const disabledArtifact = await artifact(app, disabledTask.id, 'disabled.md');
+    const disabledResult = (await app.inject({ method: 'POST', url: `/tasks/${disabledTask.id}/results`, headers: { 'idempotency-key': key('17') }, payload: { artifactIds: [disabledArtifact.id] } })).json();
+    await app.inject({ method: 'POST', url: `/tasks/${disabledTask.id}/start` }); await app.inject({ method: 'POST', url: `/results/${disabledResult.id}/submit-review`, payload: {} });
+    await db().organizationMembership.update({ where: { userId: 'permission-reviewer' }, data: { status: 'DISABLED', updatedAt: new Date() } });
+    expect((await reviewer.inject({ method: 'POST', url: `/results/${disabledResult.id}/reviews`, payload: { decision: 'ACCEPT' } })).statusCode).toBe(403); expect(await db().review.count({ where: { resultId: disabledResult.id } })).toBe(0);
     await reviewer.close(); await app.close();
   });
 });
