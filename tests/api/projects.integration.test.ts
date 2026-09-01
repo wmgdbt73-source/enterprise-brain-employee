@@ -36,6 +36,9 @@ describe('Project API vertical slice', () => {
     await db.artifact.deleteMany();
     await db.agentToolCall.deleteMany();
     await db.agentRun.deleteMany();
+    await db.agentAssignment.deleteMany();
+    await db.agentVersion.deleteMany();
+    await db.agentDefinition.deleteMany();
     await db.taskDependency.deleteMany();
     await db.taskAssignment.deleteMany();
     await db.task.deleteMany();
