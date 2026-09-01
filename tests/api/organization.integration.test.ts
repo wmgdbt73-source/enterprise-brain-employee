@@ -77,4 +77,18 @@ describe('Organization API', () => {
     await fixture(); const app=await createApp({prisma:db()}); const owner=await token('owner'); const employee=await token('employee');
     const response=await app.inject({method:'PATCH',url:'/employees/employee/account-status',headers:owner,payload:{status:'DISABLED',reason:'Offboarding approved'}}); expect(response.statusCode).toBe(200); expect((await db().account.findUniqueOrThrow({where:{userId:'employee'}})).status).toBe('DISABLED'); expect(await db().session.count({where:{account:{userId:'employee'},revokedAt:null}})).toBe(0); expect(await db().auditEvent.count({where:{action:'ACCOUNT_STATUS_CHANGED',subjectId:'employee'}})).toBe(1); expect((await app.inject({method:'GET',url:'/me',headers:employee})).statusCode).toBe(401); expect((await app.inject({method:'GET',url:'/audit-events',headers:owner})).json().items).toHaveLength(1); await app.close();
   });
+  it('records each successful control-plane mutation once and omits no-op mutations', async () => {
+    await fixture(); const app=await createApp({prisma:db()}); const owner=await token('owner');
+    const department=(await app.inject({method:'POST',url:'/departments',headers:owner,payload:{name:'Design'}})).json();
+    expect((await app.inject({method:'PUT',url:'/employees/employee/department',headers:owner,payload:{departmentId:'research',role:'MEMBER'}})).statusCode).toBe(200);
+    const override=(await app.inject({method:'PUT',url:'/employees/employee/permission-overrides',headers:owner,payload:{scopeType:'ORGANIZATION',scopeId:'org-a',resource:'AGENT',action:'VIEW',effect:'DENY'}})).json();
+    expect((await app.inject({method:'DELETE',url:`/employees/employee/permission-overrides/${override.id}`,headers:owner})).statusCode).toBe(200);
+    const agent=(await app.inject({method:'POST',url:'/agents',headers:owner,payload:{key:'designer',name:'Designer',runtimeProfile:'READ_ONLY_WORK'}})).json();
+    const assignment=(await app.inject({method:'PUT',url:`/agents/${agent.id}/assignments`,headers:owner,payload:{scopeType:'DEPARTMENT',scopeId:department.id}})).json();
+    expect((await app.inject({method:'DELETE',url:`/agents/${agent.id}/assignments/${assignment.id}`,headers:owner})).statusCode).toBe(204);
+    const events=(await app.inject({method:'GET',url:'/audit-events',headers:owner})).json().items;
+    expect(events.map((event:{action:string})=>event.action).sort()).toEqual(['AGENT_ASSIGNMENT_CREATED','AGENT_ASSIGNMENT_DELETED','AGENT_CREATED','DEPARTMENT_CREATED','EMPLOYEE_DEPARTMENT_ASSIGNED','PERMISSION_OVERRIDE_DELETED','PERMISSION_OVERRIDE_UPSERTED']);
+    expect(events.every((event:{actorUserId:string;organizationId:string;source:string})=>event.actorUserId==='owner'&&event.organizationId==='org-a'&&event.source==='ADMIN_API')).toBe(true);
+    const count=await db().auditEvent.count(); await app.inject({method:'PUT',url:'/employees/employee/department',headers:owner,payload:{departmentId:'research',role:'MEMBER'}}); await app.inject({method:'PUT',url:`/agents/${agent.id}/assignments`,headers:owner,payload:{scopeType:'DEPARTMENT',scopeId:department.id}}); await app.inject({method:'PUT',url:`/agents/${agent.id}/assignments`,headers:owner,payload:{scopeType:'DEPARTMENT',scopeId:department.id}}); expect(await db().auditEvent.count()).toBe(count+1); await app.close();
+  });
 });
