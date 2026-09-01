@@ -1,5 +1,5 @@
-export type PermissionResource = 'ORGANIZATION' | 'DEPARTMENT' | 'PERMISSION' | 'RESULT';
-export type PermissionAction = 'VIEW' | 'MANAGE' | 'ASSIGN' | 'REVIEW';
+export type PermissionResource = 'ORGANIZATION' | 'DEPARTMENT' | 'PERMISSION' | 'RESULT' | 'AGENT';
+export type PermissionAction = 'VIEW' | 'MANAGE' | 'ASSIGN' | 'REVIEW' | 'EXECUTE';
 export type PermissionScopeType = 'ORGANIZATION' | 'DEPARTMENT';
 export type PermissionEffect = 'ALLOW' | 'DENY';
 export type PermissionDecisionSource = 'ROLE' | 'OVERRIDE_ALLOW' | 'OVERRIDE_DENY' | 'DEFAULT_DENY';

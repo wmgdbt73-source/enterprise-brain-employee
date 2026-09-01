@@ -27,6 +27,7 @@ export function registerRuntimeHandlers(
     confirmedWrites?.clearSensitiveState();
     return gateway.logout();
   });
+  ipc.handle('agents:list', () => gateway.listAvailableAgents());
   ipc.handle('projects:list', () => gateway.listProjects());
   ipc.handle('projects:get', (_event, payload: { id: string }) =>
     gateway.getProject(payload.id)
@@ -75,7 +76,7 @@ export function registerRuntimeHandlers(
   }
   if (agents) {
     ipc.handle('agent-runs:run', (_event, payload) =>
-      agents.run(payload.taskId, payload.intent)
+      agents.run(payload.taskId, payload.agentId, payload.intent)
     );
   }
   if (confirmedWrites) {

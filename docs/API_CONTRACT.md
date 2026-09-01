@@ -124,7 +124,10 @@ only project-scoped `get`, `select`, `unbind`, `listDirectory` and `readFile`.
 `POST /tasks/:taskId/agent-runs` accepts only `{ name, relativePath }`, where
 `name` is `list_directory` or `read_file`. Identity, Project, status, agent key,
 commands and URLs are server-owned or rejected. The response includes a RUNNING
-AgentRun and one ToolRequest for Electron Main.
+AgentRun and one ToolRequest for Electron Main. EB-017 requires `{ agentId, intent }`;
+the server resolves the active version, assignment and permitted profile. `GET /me/agents`
+returns only active effective assignments; organization administrators manage `/agents`
+and scoped assignments.
 
 `POST /agent-runs/:runId/tool-results` accepts a structured completion receipt.
 It persists only safe metadata (relative path, count/size/encoding/hash), never

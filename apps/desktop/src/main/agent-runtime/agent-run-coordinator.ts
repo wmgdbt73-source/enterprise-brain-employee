@@ -6,10 +6,12 @@ export class DesktopAgentRunCoordinator {
     private readonly gateway: DesktopApiGateway,
     private readonly executor: AgentToolExecutor
   ) {}
-  async run(taskId: string, intent: ReadOnlyAgentToolIntent | AgentToolIntent) {
+  async run(taskId: string, agentId: string | ReadOnlyAgentToolIntent | AgentToolIntent, maybeIntent?: ReadOnlyAgentToolIntent | AgentToolIntent) {
+    const intent = typeof agentId === 'string' ? maybeIntent! : agentId;
     if (intent.name === 'write_file')
       return { ok: false as const, error: { code: 'AGENT_TOOL_REQUEST_INVALID', message: 'write_file requires the confirmed write workflow', details: {} } };
-    const created = await this.gateway.createAgentRun(taskId, intent);
+    if (typeof agentId !== 'string') return { ok: false as const, error: { code: 'AGENT_TOOL_REQUEST_INVALID', message: 'An explicit Agent selection is required', details: {} } };
+    const created = await this.gateway.createAgentRun(taskId, agentId, intent);
     if (!created.ok) return created;
     const request = created.data.toolRequest;
     if (request.runId !== created.data.run.id || request.userId !== created.data.run.userId || request.projectId !== created.data.run.projectId) return { ok: false as const, error: { code: 'AGENT_TOOL_REQUEST_INVALID', message: 'ToolRequest scope does not match AgentRun', details: {} } };

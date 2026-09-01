@@ -45,4 +45,17 @@ for (const member of [
     update: { role: member.role, updatedAt: now }
   });
 }
+// Catalog entries are organization-owned; assignments, not client-side keys,
+// determine which demo employee may initiate a new run.
+for (const item of [
+  { id: 'demo-agent-research', key: 'research-agent', name: 'Research Agent', runtimeProfile: 'READ_ONLY_WORK' as const },
+  { id: 'demo-agent-file-writer', key: 'file-writer-agent', name: 'File Writer Agent', runtimeProfile: 'CONFIRMED_WRITE_WORK' as const }
+]) {
+  await db.agentDefinition.upsert({ where: { id: item.id }, create: { id: item.id, organizationId: 'enterprise-brain-demo', key: item.key, name: item.name, status: 'ACTIVE', createdAt: now, updatedAt: now }, update: { key: item.key, name: item.name, status: 'ACTIVE', updatedAt: now } });
+  await db.agentVersion.upsert({ where: { agentDefinitionId_version: { agentDefinitionId: item.id, version: 1 } }, create: { id: `${item.id}-v1`, agentDefinitionId: item.id, version: 1, runtimeProfile: item.runtimeProfile, status: 'ACTIVE', createdAt: now }, update: { runtimeProfile: item.runtimeProfile, status: 'ACTIVE' } });
+}
+for (const item of [
+  { id: 'demo-agent-research-org', agentDefinitionId: 'demo-agent-research', scopeType: 'ORGANIZATION' as const, scopeId: 'enterprise-brain-demo' },
+  { id: 'demo-agent-writer-employee', agentDefinitionId: 'demo-agent-file-writer', scopeType: 'USER' as const, scopeId: 'demo-employee' }
+]) await db.agentAssignment.upsert({ where: { organizationId_agentDefinitionId_scopeType_scopeId: { organizationId: 'enterprise-brain-demo', agentDefinitionId: item.agentDefinitionId, scopeType: item.scopeType, scopeId: item.scopeId } }, create: { ...item, organizationId: 'enterprise-brain-demo', status: 'ACTIVE', createdAt: now, updatedAt: now }, update: { status: 'ACTIVE', updatedAt: now } });
 await db.$disconnect();

@@ -363,6 +363,16 @@ are limited to Organization/Department scope. Matching `DENY` wins over matching
 management remains Organization-local; this demo policy is not a general RBAC
 engine and does not alter local Workspace permissions.
 
+## ADR-028 — Catalog Assignment Is Required for New Agent Runs
+
+EB-017 makes AgentDefinition and active AgentVersion organization-owned records.
+An active AgentAssignment and live `AGENT/EXECUTE` permission are separate required
+conditions for a new run; an allow override never creates an assignment. Assignments
+are Organization, Department, or User scoped; Project scope is deferred until Projects
+are organization-scoped. New runs snapshot the server-selected definition key and
+version. Later revocation blocks new runs but does not invalidate existing run
+provenance or completion.
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

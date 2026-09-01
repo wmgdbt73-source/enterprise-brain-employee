@@ -10,7 +10,15 @@ export type AgentRunStatus =
   'QUEUED' | 'RUNNING' | 'WAITING_HUMAN' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 export type AgentToolName = 'list_directory' | 'read_file' | 'write_file';
 export type AgentToolCallStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
-export type AgentDefinitionKey = 'read-only-work-agent-v1' | 'confirmed-write-work-agent-v1';
+/** A persisted catalog key is server-owned; clients select by AgentDefinition id. */
+export type AgentDefinitionKey = string;
+export type AgentRuntimeProfile = 'READ_ONLY_WORK' | 'CONFIRMED_WRITE_WORK';
+export type AgentDefinitionStatus = 'ACTIVE' | 'DISABLED';
+export type AgentAssignmentScopeType = 'ORGANIZATION' | 'DEPARTMENT' | 'USER';
+export type AgentAssignmentStatus = 'ACTIVE' | 'DISABLED';
+export interface AvailableAgentContract { id: string; key: string; name: string; description?: string; version: number; runtimeProfile: AgentRuntimeProfile; assignmentSources: AgentAssignmentScopeType[]; }
+export interface AgentDefinitionContract { id: string; organizationId: string; key: string; name: string; description?: string; status: AgentDefinitionStatus; version: number; runtimeProfile: AgentRuntimeProfile; createdAt: string; updatedAt: string; }
+export interface AgentAssignmentContract { id: string; organizationId: string; agentDefinitionId: string; scopeType: AgentAssignmentScopeType; scopeId: string; status: AgentAssignmentStatus; createdAt: string; updatedAt: string; }
 export type WriteFileEffect = 'CREATE' | 'REPLACE';
 
 export type AgentToolIntent =
@@ -53,6 +61,7 @@ export interface AgentRunContract {
   projectId: ProjectId;
   taskId: TaskId;
   agentDefinitionKey: AgentDefinitionKey;
+  agentVersion: number;
   status: AgentRunStatus;
   createdAt: string;
   startedAt?: string;

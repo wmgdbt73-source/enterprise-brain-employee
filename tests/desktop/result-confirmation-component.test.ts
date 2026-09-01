@@ -7,7 +7,7 @@ import { App } from '../../apps/desktop/src/renderer/src/App.js';
 import { TaskDetail } from '../../apps/desktop/src/renderer/src/features/tasks/TaskDetail.js';
 import type { EnterpriseBrainBridge } from '../../apps/desktop/src/shared/enterprise-brain.js';
 import type { DesktopResult } from '../../apps/desktop/src/shared/enterprise-brain.js';
-import type { ArtifactContract, ProjectContract, ResultContract, ReviewContract, TaskContract } from '../../packages/contracts/src/index.js';
+import type { ArtifactContract, AvailableAgentContract, ProjectContract, ResultContract, ReviewContract, TaskContract } from '../../packages/contracts/src/index.js';
 
 const project: ProjectContract = { id: 'project-a', name: 'Project', status: 'ACTIVE', createdAt: '2026-01-01T00:00:00.000Z', updatedAt: '2026-01-01T00:00:00.000Z' };
 const taskA = task('task-a', 'Task A');
@@ -204,6 +204,29 @@ describe('Result confirmation component lifecycle', () => {
     await act(async () => resolveDecision?.({ ok: true, data: { id: 'review-a', resultId: 'result-review', reviewerId: 'reviewer', decision: 'ACCEPT', reviewedAt: '2026-01-03T00:00:00.000Z' } }));
     expect(text()).toContain('Task B');
     expect(text()).not.toContain('review-a');
+  });
+
+  it('renders catalog Agents, forwards the selected agent id, and disables selection when none are available', async () => {
+    const selected: string[] = [];
+    const props = (agents: AvailableAgentContract[]) => ({
+      task: taskA, onStart: async () => {}, artifacts: [artifact], onReadFile: async () => undefined,
+      onRegisterArtifact: async () => {}, onPrepareWrite: async () => undefined,
+      onApproveWrite: async () => {}, onRejectWrite: async () => {}, onCreateResult: async () => failure('UNUSED'),
+      agents, selectedAgentId: agents[0]?.id, onSelectAgent: (id: string) => selected.push(id)
+    });
+    const catalog = [
+      { id: 'agent-reader', key: 'reader', name: 'Research Reader', version: 1, runtimeProfile: 'READ_ONLY_WORK' as const, assignmentSources: ['ORGANIZATION' as const] },
+      { id: 'agent-writer', key: 'writer', name: 'Confirmed Writer', version: 1, runtimeProfile: 'CONFIRMED_WRITE_WORK' as const, assignmentSources: ['USER' as const] }
+    ];
+    mount();
+    await act(async () => root?.render(createElement(TaskDetail, props(catalog))));
+    expect(text()).toContain('Research Reader · READ_ONLY_WORK');
+    const select = document.querySelector('select') as HTMLSelectElement;
+    await act(async () => { select.value = 'agent-writer'; select.dispatchEvent(new window.Event('change', { bubbles: true })); });
+    expect(selected).toEqual(['agent-writer']);
+    await act(async () => root?.render(createElement(TaskDetail, props([]))));
+    expect((document.querySelector('select') as HTMLSelectElement).disabled).toBe(true);
+    expect(text()).toContain('No available Agent');
   });
 });
 

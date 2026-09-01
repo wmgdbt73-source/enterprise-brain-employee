@@ -5,6 +5,7 @@ import type {
   ArtifactContract,
   AgentRunContract,
   ResultContract
+  ,AvailableAgentContract
 } from '@enterprise-brain/contracts';
 import type {
   DesktopApiError,
@@ -29,6 +30,10 @@ export function App() {
   const [tasks, setTasks] = useState<TaskContract[]>([]);
   const [task, setTask] = useState<TaskContract>();
   const [artifacts, setArtifacts] = useState<ArtifactContract[]>([]);
+  const [agents, setAgents] = useState<AvailableAgentContract[]>([]);
+  const [selectedAgentId, setSelectedAgentId] = useState<string>();
+  const [agentError, setAgentError] = useState<DesktopApiError>();
+  const [agentsLoading, setAgentsLoading] = useState(false);
   const [tab, setTab] = useState<ProjectTab>('任务');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DesktopApiError>();
@@ -37,12 +42,14 @@ export function App() {
   const selectedTaskIdRef = useRef<string | undefined>(undefined);
   const selectedProjectIdRef = useRef<string | undefined>(undefined);
   const authGenerationRef = useRef(0);
+  const agentsLoadingRef = useRef(false);
   selectedTaskIdRef.current = task?.id;
   selectedProjectIdRef.current = project?.id;
 
   const clearAuthenticatedState = useCallback(() => {
     ++authGenerationRef.current;
-    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTasks([]); setTask(undefined); setArtifacts([]); setError(undefined); setLoading(false);
+    agentsLoadingRef.current = false;
+    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTasks([]); setTask(undefined); setArtifacts([]); setAgents([]); setSelectedAgentId(undefined); setAgentError(undefined); setError(undefined); setLoading(false);
   }, []);
   const loadProjects = useCallback(async (generation = authGenerationRef.current) => {
     setLoading(true);
@@ -69,10 +76,11 @@ export function App() {
     void window.enterpriseBrain.auth.currentUser().then((result) => {
       if (generation !== authGenerationRef.current) return;
       const operation = resolveOperation(result);
-      if (operation.data) { setCurrentUser(operation.data); void loadProjects(generation); }
+      if (operation.data) { setCurrentUser(operation.data); void loadProjects(generation); void loadAgents(generation); }
       else setLoading(false);
     });
   }, [loadProjects]);
+  const loadAgents = useCallback(async (generation = authGenerationRef.current) => { const list=window.enterpriseBrain.agents.list; if (!list || agentsLoadingRef.current) return; agentsLoadingRef.current=true; setAgentsLoading(true); const result=await list(); if(generation!==authGenerationRef.current){agentsLoadingRef.current=false;return;} agentsLoadingRef.current=false;setAgentsLoading(false);if(!result.ok){if(result.error.code==='AUTHENTICATION_REQUIRED')return clearAuthenticatedState();setAgentError(result.error);return;} setAgentError(undefined);setAgents(result.data);setSelectedAgentId(old=>old&&result.data.some(a=>a.id===old)?old:undefined); },[clearAuthenticatedState]);
   useEffect(() => window.enterpriseBrain.auth.onAuthenticationLost?.(clearAuthenticatedState), [clearAuthenticatedState]);
   useEffect(() => {
     if (error?.code !== 'AUTHENTICATION_REQUIRED') return;
@@ -113,7 +121,7 @@ export function App() {
     const generation = ++authGenerationRef.current;
     const result = await window.enterpriseBrain.auth.login(input);
     if (generation !== authGenerationRef.current) return result;
-    if (result.ok) { setCurrentUser(result.data); setError(undefined); await loadProjects(generation); }
+    if (result.ok) { setCurrentUser(result.data); setError(undefined); await Promise.all([loadProjects(generation),loadAgents(generation)]); }
     return result;
   }
   async function logout() {
@@ -167,8 +175,9 @@ export function App() {
     relativePath: string
   ): Promise<AgentRunContract | undefined> {
     const generation = authGenerationRef.current;
+    if (!selectedAgentId) return undefined;
     const operation = resolveOperation(
-      await window.enterpriseBrain.agents.run(value.id, {
+      await window.enterpriseBrain.agents.run(value.id, selectedAgentId, {
         name: 'read_file',
         relativePath
       })
@@ -320,6 +329,12 @@ export function App() {
             onGetResult={getResult}
             onListReviews={listResultReviews}
             onDecideReview={decideResult}
+            agents={agents}
+            selectedAgentId={selectedAgentId}
+            onSelectAgent={setSelectedAgentId}
+            agentError={agentError}
+            agentsLoading={agentsLoading}
+            onRefreshAgents={() => void loadAgents()}
           />
         )}
         {currentUser && <button className="logout" onClick={() => void logout()}>Sign out · {currentUser.name}{currentUser.organization ? ` · ${currentUser.organization.name}${currentUser.department ? ` · ${currentUser.department.name}` : ''}` : ''}</button>}

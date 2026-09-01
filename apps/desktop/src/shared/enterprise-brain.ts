@@ -1,5 +1,6 @@
 import type {
   AgentRunContract,
+  AvailableAgentContract,
   CurrentUserContract,
   ReadOnlyAgentToolIntent,
   ArtifactContract,
@@ -104,8 +105,10 @@ export interface EnterpriseBrainBridge {
     ): Promise<DesktopResult<TextFile>>;
   };
   agents: {
+    list(): Promise<DesktopResult<AvailableAgentContract[]>>;
     run(
       taskId: string,
+      agentId: string,
       intent: ReadOnlyAgentToolIntent
     ): Promise<DesktopResult<{ run: AgentRunContract; localResult?: unknown }>>;
   };
@@ -194,8 +197,9 @@ export function createEnterpriseBrainBridge(
         >
     },
     agents: {
-      run: (taskId, intent) =>
-        invoke('agent-runs:run', { taskId, intent }) as Promise<
+      list: () => invoke('agents:list') as Promise<DesktopResult<AvailableAgentContract[]>>,
+      run: (taskId, agentId, intent) =>
+        invoke('agent-runs:run', { taskId, agentId, intent }) as Promise<
           DesktopResult<{ run: AgentRunContract; localResult?: unknown }>
         >
     },
