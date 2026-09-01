@@ -300,3 +300,9 @@ the formal `START` action without creating a new Task status.
 Organization member and one supported resource/action tuple. It is unique by
 Organization, User, scope type/id, resource, and action. Effective evaluation is
 `DENY > ALLOW > role > default deny`; it does not grant local filesystem rights.
+
+## 17. Admin Console Control Plane
+
+The Admin Console is a Web React/Vite control plane over the same backend contracts.
+It displays Organization-scoped Departments, Employees, PermissionOverrides and
+Agent Catalog assignments; it is not a separate business source of truth.

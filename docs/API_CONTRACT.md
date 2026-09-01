@@ -308,3 +308,15 @@ may list, upsert, and delete same-Organization employee overrides at
 `/employees/:userId/permission-overrides`. Supported tuples are Organization
 VIEW; Department VIEW/MANAGE/ASSIGN; Permission VIEW/MANAGE; and Result REVIEW.
 Unsupported tuples and forged actor/scope fields are rejected.
+
+## 15. Admin employee directory and CORS
+
+`GET /employees` is available only to the authenticated active Organization
+`OWNER` or `ADMIN`. It returns same-Organization employee directory entries only:
+`userId`, display name/email, account status, Organization role, and optional
+Department id/name/role. It never returns credentials, Sessions, password hashes,
+or caller-supplied Organization scope.
+
+Browser Admin requests may use the configured `ADMIN_ORIGIN` only. The API allows
+`Authorization` and `Content-Type` and supports OPTIONS preflight; it does not use
+wildcard origins or credential cookies.

@@ -61,4 +61,16 @@ describe('Organization API', () => {
     expect((await app.inject({ method: 'DELETE', url: `/employees/manager/permission-overrides/${mutationDeny.json().id}`, headers: outsider })).statusCode).toBe(404);
     await app.close();
   });
+  it('returns only the Session organization employee directory to owners/admins and protects sensitive fields', async () => {
+    await fixture(); const app = await createApp({ prisma: db() }); const owner = await token('owner'); const admin = await token('admin'); const member = await token('member'); await token('employee'); await token('outsider');
+    const ownerResponse = await app.inject({ method: 'GET', url: '/employees?organizationId=org-b', headers: { ...owner, organizationid: 'org-b' } });
+    expect(ownerResponse.statusCode).toBe(200); const employees = ownerResponse.json().employees; expect(employees.map((employee: { userId:string }) => employee.userId).sort()).toEqual(['admin','employee','member','owner']);
+    expect(JSON.stringify(employees)).not.toMatch(/passwordHash|tokenHash|session-/); expect((await app.inject({ method: 'GET', url: '/employees', headers: admin })).statusCode).toBe(200); expect((await app.inject({ method: 'GET', url: '/employees', headers: member })).statusCode).toBe(403); expect((await app.inject({ method: 'GET', url: '/employees' })).statusCode).toBe(401); await app.close();
+  });
+  it('allows only the configured Admin origin to use CORS and leaves non-browser API calls unchanged', async () => {
+    await fixture(); const previous = process.env.ADMIN_ORIGIN; process.env.ADMIN_ORIGIN = 'http://admin.test'; const app = await createApp({ prisma: db() }); const owner = await token('owner');
+    const allowed = await app.inject({ method: 'GET', url: '/employees', headers: { ...owner, origin: 'http://admin.test' } }); expect(allowed.headers['access-control-allow-origin']).toBe('http://admin.test');
+    const preflight = await app.inject({ method: 'OPTIONS', url: '/employees', headers: { origin: 'http://admin.test', 'access-control-request-method': 'GET' } }); expect(preflight.statusCode).toBe(204); expect(preflight.headers['access-control-allow-headers']).toContain('Authorization');
+    const denied = await app.inject({ method: 'GET', url: '/employees', headers: { ...owner, origin: 'http://other.test' } }); expect(denied.headers['access-control-allow-origin']).toBeUndefined(); expect((await app.inject({ method: 'GET', url: '/employees', headers: owner })).statusCode).toBe(200); await app.close(); if (previous === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = previous;
+  });
 });

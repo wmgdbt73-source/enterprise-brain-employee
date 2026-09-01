@@ -205,3 +205,10 @@ Electron Main holds an opaque bearer token only in memory and attaches it to the
 fixed Employee API gateway. The renderer receives `CurrentUserContract`, never
 the bearer token. API resolves every protected request through Session → Account
 → User; account disablement, expiry, and revocation are checked on every request.
+
+## 15. Admin Console Boundary
+
+The Admin Console is a React/Vite Web control plane using the same typed contracts
+and Employee API as Desktop. Its bearer token is held in browser `sessionStorage`
+for the demo only; production authentication will move to secure HttpOnly cookies.
+The frontend renders server decisions and never evaluates authorization itself.

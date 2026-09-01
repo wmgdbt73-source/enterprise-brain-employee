@@ -72,6 +72,8 @@ export async function createApp(
       }
     }
   });
+  const adminOrigin=process.env.ADMIN_ORIGIN??'http://127.0.0.1:5174';
+  app.addHook('onRequest',async(request,reply)=>{const origin=request.headers.origin;if(origin===adminOrigin){reply.header('Access-Control-Allow-Origin',origin);reply.header('Access-Control-Allow-Headers','Authorization, Content-Type');reply.header('Access-Control-Allow-Methods','GET, POST, PUT, PATCH, DELETE, OPTIONS');}if(request.method==='OPTIONS'&&origin===adminOrigin)return reply.code(204).send();});
   const prisma =
     options.prisma ??
     createPrismaClient(requireDatabaseUrl(process.env.DATABASE_URL));

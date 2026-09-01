@@ -6,6 +6,7 @@ const departmentPatch = { type: 'object', additionalProperties: false, minProper
 const assignBody = { type: 'object', additionalProperties: false, required: ['departmentId', 'role'], properties: { departmentId: id, role: { type: 'string', enum: ['MANAGER', 'MEMBER'] } } } as const;
 export function registerOrganizationRoutes(app: FastifyInstance, service: OrganizationService): void {
   app.get('/organization', async (request) => service.get(request.requestContext));
+  app.get('/employees', async (request) => ({ employees: await service.employees(request.requestContext) }));
   app.get('/departments', async (request) => ({ departments: await service.list(request.requestContext) }));
   app.post<{ Body: { name: string } }>('/departments', { schema: { body: departmentBody } }, async (request, reply) => reply.code(201).send(await service.create(request.requestContext, request.body.name)));
   app.patch<{ Params: { id: string }; Body: { name?: string; status?: 'ACTIVE' | 'DISABLED' } }>('/departments/:id', { schema: { params: { type: 'object', additionalProperties: false, required: ['id'], properties: { id } }, body: departmentPatch } }, async (request) => service.update(request.requestContext, request.params.id, request.body));
