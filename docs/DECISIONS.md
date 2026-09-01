@@ -373,6 +373,15 @@ are organization-scoped. New runs snapshot the server-selected definition key an
 version. Later revocation blocks new runs but does not invalidate existing run
 provenance or completion.
 
+## ADR-029 — Admin Console Is a Demo Web Control Plane
+
+EB-018 adds a React/Vite Admin Console that reuses backend APIs and shared
+contracts for Organization control-plane work. The demo stores its bearer token in
+`sessionStorage`; a production deployment must replace this with secure HttpOnly
+cookie authentication. Admin UI never evaluates permissions locally: it renders
+live server authorization outcomes. Account revocation and audit surfaces remain
+deferred to EB-019.
+
 ## Decision Update Rule（决策更新规则）
 
 Before changing any ADR above:

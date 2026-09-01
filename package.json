@@ -21,7 +21,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint . --max-warnings=0",
-    "test": "vitest run tests/foundation.test.ts tests/domain tests/desktop",
+    "test": "vitest run tests/foundation.test.ts tests/domain tests/desktop tests/admin",
     "test:api:integration": "vitest run --no-file-parallelism tests/api",
     "test:database": "vitest run --no-file-parallelism tests/database",
     "typecheck": "pnpm --recursive run typecheck"

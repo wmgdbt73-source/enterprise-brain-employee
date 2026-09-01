@@ -189,6 +189,9 @@ Side state:
 - Local tool permissions are independent from normal business object permissions.
 - Business `PermissionOverride` is evaluated live per request within Organization
   or Department scope; it never expands Desktop local-tool permissions.
+- Admin Console is a Web control-plane view of Organization, Department, User,
+  PermissionOverride and Agent Catalog relationships; it creates no parallel
+  ontology or client-owned authorization truth.
 
 ## 7. Event Baseline（事件基线）
 
