@@ -29,3 +29,6 @@ Demo accounts: `admin@example.test` / `DemoAdmin!2026`,
 5. Sign into Employee Desktop and refresh Agent Catalog to see the assignment.
 6. Remove the Admin assignment; the Employee's next refresh removes the Agent,
    and the next AgentRun is blocked by live assignment/permission evaluation.
+## Audit and authorization revocation
+
+EB-019 provides append-only, organization-scoped Audit Events for successful control-plane mutations. Organization Owners and Admins can read them through `GET /audit-events`; the Admin Console Audit Logs page is read-only. Disabling an account via `PATCH /employees/:userId/account-status` revokes its existing sessions, so the next protected request fails and the employee must sign in again.
