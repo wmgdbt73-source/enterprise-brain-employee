@@ -218,3 +218,6 @@ Examples:
 - ontology schema version migration platform
 
 Add them only when a real Employee Alpha flow requires them.
+## Control-plane audit
+
+An AuditEvent records an immutable observation of a formal control-plane mutation. It is not a mutable Activity feed and does not authorize later actions.

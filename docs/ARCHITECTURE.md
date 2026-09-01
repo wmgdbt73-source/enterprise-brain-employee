@@ -212,3 +212,6 @@ The Admin Console is a React/Vite Web control plane using the same typed contrac
 and Employee API as Desktop. Its bearer token is held in browser `sessionStorage`
 for the demo only; production authentication will move to secure HttpOnly cookies.
 The frontend renders server decisions and never evaluates authorization itself.
+## Audit boundary
+
+Control-plane repositories append AuditEvent in the same RepeatableRead transaction as the business mutation. Failed or rejected mutations do not produce a success audit event. Account disable revokes sessions in that same transaction; already-started concurrent requests have no deterministic winner defined in EB-019.

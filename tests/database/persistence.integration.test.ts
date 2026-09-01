@@ -57,6 +57,7 @@ async function createProjectFixture() {
 describe('PostgreSQL persistence constraints', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.auditEvent.deleteMany();
     await db.session.deleteMany();
     await db.account.deleteMany();
     await db.humanConfirmation.deleteMany();

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { DepartmentContract, DepartmentMemberContract, EmployeeDirectoryEntryContract, OrganizationContract } from '@enterprise-brain/contracts';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { evaluatePermission, type PermissionDbClient } from './permission-repository.js';
+import { AuditRepository } from './audit-repository.js';
 
 export type OrganizationAccess = 'NOT_FOUND' | 'FORBIDDEN';
 const activeMembership = { status: 'ACTIVE' as const, organization: { status: 'ACTIVE' as const } };
@@ -23,7 +24,9 @@ export class OrganizationRepository {
     return this.prisma.$transaction(async (tx) => {
       const org = await this.actorOrganization(tx, userId); if (typeof org === 'string') return org;
       if (!(await allowed(tx, org.id, userId, 'ORGANIZATION', org.id, 'DEPARTMENT', 'MANAGE'))) return 'FORBIDDEN';
-      return toDepartment(await tx.department.create({ data: { id: randomUUID(), organizationId: org.id, name, status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date() } }));
+      const department=await tx.department.create({ data: { id: randomUUID(), organizationId: org.id, name, status: 'ACTIVE', createdAt: new Date(), updatedAt: new Date() } });
+      await new AuditRepository(this.prisma).append({organizationId:org.id,actorUserId:userId,action:'DEPARTMENT_CREATED',subjectType:'DEPARTMENT',subjectId:department.id,resourceType:'DEPARTMENT',resourceId:department.id,after:{id:department.id,name:department.name,status:department.status},source:'ADMIN_API'},tx);
+      return toDepartment(department);
     }, { isolationLevel: 'RepeatableRead' });
   }
   async updateDepartment(userId: string, departmentId: string, input: { name?: string; status?: 'ACTIVE' | 'DISABLED' }): Promise<DepartmentContract | OrganizationAccess> {
@@ -52,6 +55,7 @@ export class OrganizationRepository {
       ]);
       if (!department || !target) return 'NOT_FOUND';
       if (!(await allowed(tx, actor.id, userId, 'DEPARTMENT', department.id, 'DEPARTMENT', 'ASSIGN'))) return 'FORBIDDEN';
+      const before=await tx.departmentMembership.findUnique({where:{organizationId_userId:{organizationId:actor.id,userId:targetUserId}}});
       const now = new Date();
       const row = await tx.departmentMembership.upsert({
         where: { organizationId_userId: { organizationId: actor.id, userId: targetUserId } },
@@ -59,6 +63,7 @@ export class OrganizationRepository {
         update: { departmentId: department.id, role, status: 'ACTIVE', updatedAt: now },
         include: { organizationMembership: { include: { user: true } } }
       });
+      if(!before||before.departmentId!==department.id||before.role!==role||before.status!=='ACTIVE')await new AuditRepository(this.prisma).append({organizationId:actor.id,actorUserId:userId,action:'EMPLOYEE_DEPARTMENT_ASSIGNED',subjectType:'USER',subjectId:targetUserId,resourceType:'DEPARTMENT_MEMBERSHIP',resourceId:row.id,before:before?{departmentId:before.departmentId,departmentRole:before.role}:undefined,after:{departmentId:department.id,departmentRole:role},source:'ADMIN_API'},tx);
       return { userId: row.userId, name: row.organizationMembership.user.name, role: row.role, status: row.status };
     }, { isolationLevel: 'RepeatableRead' });
   }

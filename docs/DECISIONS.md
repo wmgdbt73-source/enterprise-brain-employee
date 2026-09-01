@@ -389,3 +389,6 @@ Before changing any ADR above:
 2. list affected UI / API / Domain / Agent behavior;
 3. update relevant docs;
 4. record a new ADR or amendment instead of silently changing code.
+## ADR-029 — Control Plane mutation audit is transactional
+
+EB-019 records successful Admin API Department, employee Department assignment, Permission Override, Agent Definition, and Agent Assignment mutations as append-only `AuditEvent` rows in the same RepeatableRead transaction as the formal mutation. Events use server-derived actor and organization identity and retain only minimal, redacted before/after metadata. No-op updates and rejected requests do not generate audit events. The Admin Console provides a read-only, cursor-paginated Audit Logs view; it cannot modify or delete audit records. Retention, export, and cryptographic signing are production-hardening work deferred beyond EB-019.

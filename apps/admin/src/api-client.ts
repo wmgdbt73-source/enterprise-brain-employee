@@ -5,6 +5,9 @@ import type {
   AgentAssignmentScopeType,
   AgentDefinitionContract,
   AgentRuntimeProfile,
+  AccountStatus,
+  AccountStatusChangeContract,
+  AuditEventListContract,
   CurrentUserContract,
   DepartmentContract,
   DepartmentMemberContract,
@@ -65,4 +68,6 @@ export class AdminApiClient {
   assignments(agentId: string) { return this.request<AgentAssignmentContract[]>(`/agents/${encodeURIComponent(agentId)}/assignments`); }
   assignAgent(agentId: string, scopeType: AgentAssignmentScopeType, scopeId: string) { return this.request<AgentAssignmentContract>(`/agents/${encodeURIComponent(agentId)}/assignments`, { method: 'PUT', body: JSON.stringify({ scopeType, scopeId }) }); }
   deleteAssignment(agentId: string, assignmentId: string) { return this.request<void>(`/agents/${encodeURIComponent(agentId)}/assignments/${encodeURIComponent(assignmentId)}`, { method: 'DELETE' }); }
+  changeAccountStatus(userId:string,status:AccountStatus,reason:string){return this.request<AccountStatusChangeContract>(`/employees/${encodeURIComponent(userId)}/account-status`,{method:'PATCH',body:JSON.stringify({status,reason})});}
+  auditEvents(input:{cursor?:string;limit?:number;action?:string;actorUserId?:string;subjectId?:string}={}){const q=new URLSearchParams(Object.entries(input).filter(([,v])=>v!==undefined) as Array<[string,string]>);return this.request<AuditEventListContract>(`/audit-events${q.size?`?${q}`:''}`);}
 }

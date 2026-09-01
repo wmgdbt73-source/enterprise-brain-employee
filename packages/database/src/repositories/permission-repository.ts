@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { EffectivePermissionContract, PermissionAction, PermissionEffect, PermissionOverrideContract, PermissionResource, PermissionScopeType } from '@enterprise-brain/contracts';
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { AuditRepository } from './audit-repository.js';
 
 export type PermissionDbClient = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$use' | '$extends' | '$transaction'>;
 export type PermissionInput = { organizationId: string; userId: string; scopeType: PermissionScopeType; scopeId: string; resource: PermissionResource; action: PermissionAction; roleAllowed?: boolean };
@@ -32,10 +33,11 @@ export class PermissionRepository {
       if (!actor.admin) return 'FORBIDDEN';
       if (input.scopeType === 'ORGANIZATION' && input.scopeId !== actor.organizationId) return 'NOT_FOUND';
       if (input.scopeType === 'DEPARTMENT' && !(await tx.department.findFirst({ where: { id: input.scopeId, organizationId: actor.organizationId, status: 'ACTIVE' } }))) return 'NOT_FOUND';
+      const existing=await tx.permissionOverride.findUnique({where:{organizationId_userId_scopeType_scopeId_resource_action:{organizationId:actor.organizationId,userId,scopeType:input.scopeType,scopeId:input.scopeId,resource:input.resource,action:input.action}}});
       const now = new Date(); const row = await tx.permissionOverride.upsert({
         where: { organizationId_userId_scopeType_scopeId_resource_action: { organizationId: actor.organizationId, userId, scopeType: input.scopeType, scopeId: input.scopeId, resource: input.resource, action: input.action } },
         create: { id: randomUUID(), organizationId: actor.organizationId, userId, ...input, createdAt: now, updatedAt: now }, update: { effect: input.effect, updatedAt: now }
-      }); return toContract(row);
+      }); if(!existing||existing.effect!==input.effect)await new AuditRepository(this.prisma).append({organizationId:actor.organizationId,actorUserId:actorId,action:'PERMISSION_OVERRIDE_UPSERTED',subjectType:'USER',subjectId:userId,resourceType:'PERMISSION_OVERRIDE',resourceId:row.id,before:existing?overrideSnapshot(existing):undefined,after:overrideSnapshot(row),source:'ADMIN_API'},tx); return toContract(row);
     }, { isolationLevel: 'RepeatableRead' });
   }
   async removeForAdmin(actorId: string, userId: string, overrideId: string): Promise<boolean | 'NOT_FOUND' | 'FORBIDDEN'> {
@@ -43,7 +45,7 @@ export class PermissionRepository {
       const actor = await activeActor(tx, actorId); if (!actor) return 'NOT_FOUND';
       const target = await tx.organizationMembership.findFirst({ where: { userId, status: 'ACTIVE' } }); if (!target || target.organizationId !== actor.organizationId) return 'NOT_FOUND';
       if (!actor.admin) return 'FORBIDDEN';
-      const deleted = await tx.permissionOverride.deleteMany({ where: { id: overrideId, organizationId: actor.organizationId, userId } }); return deleted.count === 1 ? true : 'NOT_FOUND';
+      const existing=await tx.permissionOverride.findFirst({where:{id:overrideId,organizationId:actor.organizationId,userId}});if(!existing)return 'NOT_FOUND';await tx.permissionOverride.delete({where:{id:existing.id}});await new AuditRepository(this.prisma).append({organizationId:actor.organizationId,actorUserId:actorId,action:'PERMISSION_OVERRIDE_DELETED',subjectType:'USER',subjectId:userId,resourceType:'PERMISSION_OVERRIDE',resourceId:existing.id,before:overrideSnapshot(existing),source:'ADMIN_API'},tx);return true;
     }, { isolationLevel: 'RepeatableRead' });
   }
 }
@@ -70,3 +72,4 @@ export async function evaluatePermission(db: PermissionDbClient, input: Permissi
 
 async function activeActor(db: PermissionDbClient, userId: string): Promise<{ organizationId: string; admin: boolean } | undefined> { const member = await db.organizationMembership.findFirst({ where: { userId, status: 'ACTIVE', organization: { status: 'ACTIVE' } } }); return member ? { organizationId: member.organizationId, admin: member.role === 'OWNER' || member.role === 'ADMIN' } : undefined; }
 function toContract(row: { id:string; organizationId:string; userId:string; scopeType: PermissionScopeType; scopeId:string; resource: PermissionResource; action: PermissionAction; effect: PermissionEffect; createdAt:Date; updatedAt:Date }): PermissionOverrideContract { return { id:row.id,organizationId:row.organizationId,userId:row.userId,scopeType:row.scopeType,scopeId:row.scopeId,resource:row.resource,action:row.action,effect:row.effect,createdAt:row.createdAt.toISOString(),updatedAt:row.updatedAt.toISOString() }; }
+function overrideSnapshot(row:{resource:PermissionResource;action:PermissionAction;scopeType:PermissionScopeType;scopeId:string;effect:PermissionEffect}){return {resource:row.resource,action:row.action,scopeType:row.scopeType,scopeId:row.scopeId,effect:row.effect};}

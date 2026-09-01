@@ -320,3 +320,6 @@ or caller-supplied Organization scope.
 Browser Admin requests may use the configured `ADMIN_ORIGIN` only. The API allows
 `Authorization` and `Content-Type` and supports OPTIONS preflight; it does not use
 wildcard origins or credential cookies.
+### Audit events
+
+`GET /audit-events` is available to the current active Organization OWNER or ADMIN. It returns newest-first, cursor-paginated immutable AuditEvent contracts and supports `action`, `actorUserId`, and `subjectId` filters. EB-019 records successful control-plane mutations with server-derived actor/organization provenance. `PATCH /employees/:userId/account-status` remains the explicit account-revocation mutation.

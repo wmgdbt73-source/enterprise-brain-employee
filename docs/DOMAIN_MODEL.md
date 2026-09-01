@@ -306,3 +306,6 @@ Organization, User, scope type/id, resource, and action. Effective evaluation is
 The Admin Console is a Web React/Vite control plane over the same backend contracts.
 It displays Organization-scoped Departments, Employees, PermissionOverrides and
 Agent Catalog assignments; it is not a separate business source of truth.
+## AuditEvent
+
+AuditEvent is append-only application persistence for successful control-plane operations. It is scoped to an Organization and server-derived actor, with minimal redacted `before`/`after` metadata. Password material, bearer/session tokens, local workspace paths, write payloads, and file content are never recorded. There is no AuditEvent update or delete API.
