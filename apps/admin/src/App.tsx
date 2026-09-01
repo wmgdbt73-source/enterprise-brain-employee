@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment, @typescript-eslint/no-explicit-any */
 // @ts-nocheck -- scaffold is committed separately before typed API client implementation.
 import { useEffect, useRef, useState } from 'react';
 type User={id:string;name:string;systemRole:string;organization?:{name:string;role:string}}; const api=import.meta.env.VITE_EMPLOYEE_API_BASE_URL??'http://127.0.0.1:3000';
