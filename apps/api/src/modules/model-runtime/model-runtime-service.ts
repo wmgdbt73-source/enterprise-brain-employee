@@ -54,7 +54,7 @@ export class ModelRuntimeService {
           if ('AUTHORIZATION_REVOKED' === result || 'INVALID' === result) return this.failToolRun(begun.invocation.id, result === 'AUTHORIZATION_REVOKED' ? 'MODEL_TOOL_AUTHORIZATION_REVOKED' : 'MODEL_TOOL_INVALID');
           outputs.push({ type: 'function_call_output', call_id: call.callId, output: JSON.stringify(result.output) });
         }
-        replayItems = [...(generated.replayItems ?? []), ...outputs];
+        replayItems = [...replayItems, ...(generated.replayItems ?? []), ...outputs];
         continue;
       }
       let finalized;
