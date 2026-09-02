@@ -223,3 +223,10 @@ never receive workspace paths, file content, tools, or prior response IDs.
 ## Audit boundary
 
 Control-plane repositories append AuditEvent in the same RepeatableRead transaction as the business mutation. Failed or rejected mutations do not produce a success audit event. Account disable revokes sessions in that same transaction; already-started concurrent requests have no deterministic winner defined in EB-019.
+
+## 17. Read-only Model Tool Loop
+
+`MODEL AgentRun → provider step → fixed server tool → function_call_output →
+provider step → final text` is bounded to four tools/five steps. The provider
+call is external to PostgreSQL; every tool execution re-authorizes and reads in
+one RepeatableRead transaction. Replay data is request-memory-only.

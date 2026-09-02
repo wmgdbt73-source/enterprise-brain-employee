@@ -401,3 +401,14 @@ transactions open during network I/O and prevents a replay from issuing a second
 provider request. The OpenAI Responses implementation uses `store: false`; CI
 injects a Fake ModelProvider and never calls OpenAI. Provider credentials remain
 server-only and raw provider data is not persisted or returned.
+
+## ADR-031 — Bounded Server-Owned Read-Only Model Tools
+
+EB-021 fixes the server Tool Registry to `get_task_snapshot` and
+`list_task_artifacts`. Route Task and Session identity bind scope; model/client
+arguments cannot select another Task. Each tool read and provenance write uses a
+RepeatableRead transaction with live authorization. Provider calls remain outside
+transactions. With `store:false`, opaque replay/reasoning items are held only in
+the active request memory and never persisted or sent over HTTP. Runs permit at
+most four ToolCalls and five provider steps. Local Workspace, writes, Browser,
+and Terminal are out of scope.
