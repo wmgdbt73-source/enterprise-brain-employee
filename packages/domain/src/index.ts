@@ -57,6 +57,7 @@ export {
   type AgentRun
 } from './agent-run.js';
 export { createArtifact, type Artifact } from './artifact.js';
+export { normalizeModelPrompt, modelInputHash, modelRequestFingerprint } from './model-invocation.js';
 export { createResultCandidate, rehydrateResult, submitResultForHumanReview, decideResultReview, type Result } from './result.js';
 export {
   createWorkspaceBinding,

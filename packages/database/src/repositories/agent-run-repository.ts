@@ -24,6 +24,7 @@ export class AgentRunRepository {
           projectId: run.projectId,
           taskId: run.taskId,
           agentDefinitionKey: run.agentDefinitionKey,
+          kind: run.kind ?? 'TOOL',
           intent: { name: request.name, relativePath: request.relativePath },
           status: 'RUNNING',
           createdAt: new Date(run.createdAt),
@@ -54,7 +55,7 @@ export class AgentRunRepository {
       const permission=await evaluatePermission(tx,{organizationId:member.organizationId,userId:input.userId,scopeType:member.departmentMembership?.status==='ACTIVE'?'DEPARTMENT':'ORGANIZATION',scopeId:member.departmentMembership?.status==='ACTIVE'?member.departmentMembership.departmentId:member.organizationId,resource:'AGENT',action:'EXECUTE'});if(!permission.allowed)return 'FORBIDDEN';
       const supported=version.runtimeProfile==='READ_ONLY_WORK'?input.intent.name!=='write_file':input.intent.name==='write_file';if(!supported)return 'TOOL_NOT_ALLOWED';
       const now=new Date();const status=input.intent.name==='write_file'?'WAITING_HUMAN':'RUNNING';const run:AgentRunContract={id:input.id as any,userId:input.userId as any,projectId:task.projectId as any,taskId:task.id as any,agentDefinitionKey:definition.key,agentVersion:version.version,status,createdAt:now.toISOString(),...(status==='RUNNING'?{startedAt:now.toISOString()}:{}),updatedAt:now.toISOString()};const request:any={id:input.toolCallId,runId:run.id,userId:run.userId,projectId:run.projectId,...input.intent};
-      await tx.agentRun.create({data:{id:run.id,userId:run.userId,projectId:run.projectId,taskId:run.taskId,agentDefinitionKey:run.agentDefinitionKey,agentVersion:run.agentVersion,intent:{name:request.name,relativePath:request.relativePath},status,createdAt:now,updatedAt:now,...(status==='RUNNING'?{startedAt:now}:{})}});
+      await tx.agentRun.create({data:{id:run.id,userId:run.userId,projectId:run.projectId,taskId:run.taskId,agentDefinitionKey:run.agentDefinitionKey,agentVersion:run.agentVersion,kind:'TOOL',intent:{name:request.name,relativePath:request.relativePath},status,createdAt:now,updatedAt:now,...(status==='RUNNING'?{startedAt:now}:{})}});
       await tx.agentToolCall.create({data:{id:request.id,agentRunId:run.id,sequence:1,name:request.name,deviceId:request.deviceId,request,status:'PENDING',createdAt:now}});
       if(status==='WAITING_HUMAN'){const confirmation={id:randomUUID(),agentRunId:run.id,toolCallId:request.id,userId:run.userId,projectId:run.projectId,taskId:run.taskId,status:'PENDING' as const,createdAt:now.toISOString()};await tx.humanConfirmation.create({data:{...confirmation,deviceId:request.deviceId,createdAt:now}} as any);return {run,toolRequest:request,humanConfirmation:confirmation};}return {run,toolRequest:request};
     },{isolationLevel:'RepeatableRead'});
@@ -66,7 +67,7 @@ export class AgentRunRepository {
         normalizedRequest.projectId !== run.projectId || normalizedRequest.id !== confirmation.toolCallId)
       throw new Error('write confirmation requires a valid write_file request');
     await this.prisma.$transaction(async tx => {
-      await tx.agentRun.create({ data: { id: run.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, agentDefinitionKey: run.agentDefinitionKey, intent: { name: normalizedRequest.name, relativePath: normalizedRequest.relativePath, payloadSize: normalizedRequest.payloadSize, payloadSha256: normalizedRequest.payloadSha256, effect: normalizedRequest.effect, ...(normalizedRequest.expectedCurrentSha256 ? { expectedCurrentSha256: normalizedRequest.expectedCurrentSha256 } : {}) }, status: 'WAITING_HUMAN', createdAt: new Date(run.createdAt), updatedAt: new Date(run.updatedAt) } });
+      await tx.agentRun.create({ data: { id: run.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, agentDefinitionKey: run.agentDefinitionKey, kind: 'TOOL', intent: { name: normalizedRequest.name, relativePath: normalizedRequest.relativePath, payloadSize: normalizedRequest.payloadSize, payloadSha256: normalizedRequest.payloadSha256, effect: normalizedRequest.effect, ...(normalizedRequest.expectedCurrentSha256 ? { expectedCurrentSha256: normalizedRequest.expectedCurrentSha256 } : {}) }, status: 'WAITING_HUMAN', createdAt: new Date(run.createdAt), updatedAt: new Date(run.updatedAt) } });
       await tx.agentToolCall.create({ data: { id: request.id, agentRunId: run.id, sequence: 1, name: 'write_file', deviceId: normalizedRequest.deviceId, request, status: 'PENDING', createdAt: new Date(run.createdAt) } });
       await tx.humanConfirmation.create({ data: { id: confirmation.id, agentRunId: run.id, toolCallId: request.id, userId: run.userId, projectId: run.projectId, taskId: run.taskId, deviceId: normalizedRequest.deviceId, status: 'PENDING', createdAt: new Date(confirmation.createdAt) } });
     });
@@ -177,6 +178,7 @@ function toContract(run: {
   taskId: string;
   agentDefinitionKey: string;
   agentVersion?: number;
+  kind?: 'TOOL' | 'MODEL';
   status: AgentRunContract['status'];
   createdAt: Date;
   startedAt: Date | null;
@@ -190,6 +192,7 @@ function toContract(run: {
     taskId: run.taskId,
     agentDefinitionKey: asAgentDefinitionKey(run.agentDefinitionKey),
     agentVersion: run.agentVersion ?? 1,
+    kind: run.kind ?? 'TOOL',
     status: run.status,
     createdAt: run.createdAt.toISOString(),
     ...(run.startedAt ? { startedAt: run.startedAt.toISOString() } : {}),

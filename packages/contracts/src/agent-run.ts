@@ -8,6 +8,7 @@ import type {
 
 export type AgentRunStatus =
   'QUEUED' | 'RUNNING' | 'WAITING_HUMAN' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+export type AgentRunKind = 'TOOL' | 'MODEL';
 export type AgentToolName = 'list_directory' | 'read_file' | 'write_file';
 export type AgentToolCallStatus = 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
 /** A persisted catalog key is server-owned; clients select by AgentDefinition id. */
@@ -62,6 +63,8 @@ export interface AgentRunContract {
   taskId: TaskId;
   agentDefinitionKey: AgentDefinitionKey;
   agentVersion: number;
+  /** TOOL is retained as the compatibility default for pre-EB-020 run records. */
+  kind?: AgentRunKind;
   status: AgentRunStatus;
   createdAt: string;
   startedAt?: string;
