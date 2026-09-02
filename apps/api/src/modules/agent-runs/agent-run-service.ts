@@ -57,4 +57,4 @@ export class AgentRunService {
     return run;
   }
 }
-function legacyContract(run: any): AgentRunContract { return { id:run.id,userId:run.userId,projectId:run.projectId,taskId:run.taskId,agentDefinitionKey:run.agentDefinitionKey,agentVersion:run.agentVersion ?? 1,status:run.status,createdAt:run.createdAt.toISOString(),...(run.startedAt?{startedAt:run.startedAt.toISOString()}:{}),updatedAt:run.updatedAt.toISOString() }; }
+function legacyContract(run: any): AgentRunContract { return { id:run.id,userId:run.userId,projectId:run.projectId,taskId:run.taskId,agentDefinitionKey:run.agentDefinitionKey,agentVersion:run.agentVersion ?? 1,kind:run.kind ?? 'TOOL',status:run.status,createdAt:run.createdAt.toISOString(),...(run.startedAt?{startedAt:run.startedAt.toISOString()}:{}),updatedAt:run.updatedAt.toISOString() }; }

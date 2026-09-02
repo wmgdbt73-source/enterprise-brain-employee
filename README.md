@@ -19,6 +19,17 @@ Demo accounts: `admin@example.test` / `DemoAdmin!2026`,
 `employee@example.test` / `DemoEmployee!2026`, and
 `reviewer@example.test` / `DemoReviewer!2026`.
 
+## Optional Task model responses
+
+The Desktop Task Detail can request a text-only model suggestion from an
+assigned Agent. Configure `OPENAI_API_KEY` and `OPENAI_MODEL` only in the API
+process; the Desktop never receives either value. The provider uses the
+Responses API with `store: false`, without tools or streaming. If either
+setting is absent, asking an Agent shows a local “provider unavailable” error
+and the rest of the workspace remains usable. A network-uncertain retry keeps
+the same idempotency key; retrying a persisted failed invocation creates a new
+attempt.
+
 ## Admin demo
 
 1. Sign in as `admin@example.test` and inspect Dashboard totals.

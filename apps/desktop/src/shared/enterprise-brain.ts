@@ -1,5 +1,6 @@
 import type {
   AgentRunContract,
+  ModelInvocationContract,
   AvailableAgentContract,
   CurrentUserContract,
   ReadOnlyAgentToolIntent,
@@ -112,6 +113,10 @@ export interface EnterpriseBrainBridge {
       intent: ReadOnlyAgentToolIntent
     ): Promise<DesktopResult<{ run: AgentRunContract; localResult?: unknown }>>;
   };
+  modelResponses: {
+    create(taskId: string, agentId: string, prompt: string, idempotencyKey: string): Promise<DesktopResult<ModelInvocationContract>>;
+    listForTask(taskId: string, limit?: number): Promise<DesktopResult<ModelInvocationContract[]>>;
+  };
   artifacts: {
     register(agentRunId: string): Promise<DesktopResult<ArtifactContract>>;
     listForTask(taskId: string): Promise<DesktopResult<ArtifactContract[]>>;
@@ -202,6 +207,10 @@ export function createEnterpriseBrainBridge(
         invoke('agent-runs:run', { taskId, agentId, intent }) as Promise<
           DesktopResult<{ run: AgentRunContract; localResult?: unknown }>
         >
+    },
+    modelResponses: {
+      create: (taskId, agentId, prompt, idempotencyKey) => invoke('model-responses:create', { taskId, agentId, prompt, idempotencyKey }) as Promise<DesktopResult<ModelInvocationContract>>,
+      listForTask: (taskId, limit = 20) => invoke('model-responses:list-for-task', { taskId, limit }) as Promise<DesktopResult<ModelInvocationContract[]>>
     },
     artifacts: {
       register: (agentRunId) =>

@@ -151,6 +151,7 @@ describe('Desktop Work Runtime gateway', () => {
       'artifacts',
       'auth',
       'confirmedWrites',
+      'modelResponses',
       'projects',
       'results',
       'runtime',
@@ -158,6 +159,7 @@ describe('Desktop Work Runtime gateway', () => {
       'workspace'
     ]);
     expect(Object.keys(bridge.agents).sort()).toEqual(['list', 'run']);
+    expect(Object.keys(bridge.modelResponses).sort()).toEqual(['create', 'listForTask']);
     expect(Object.keys(bridge.confirmedWrites).sort()).toEqual(['approve', 'prepare', 'reject']);
     expect(Object.keys(bridge.artifacts).sort()).toEqual([
       'listForTask',
@@ -185,6 +187,24 @@ describe('Desktop Work Runtime gateway', () => {
     expect(bridge).not.toHaveProperty('invoke');
     void bridge.runtime.getInfo();
     expect(invoke).toHaveBeenCalledWith('runtime:get-info');
+  });
+  it('uses the Main-process bearer token and a caller supplied idempotency key for model responses', async () => {
+    const fetchImplementation = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'desktop-session-token', user: { id: 'employee', name: 'Employee', systemRole: 'EMPLOYEE' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 201, json: async () => ({ invocation: { id: 'invocation', agentRunId: 'run', initiatedByUserId: 'employee', provider: 'FAKE', model: 'fake', status: 'COMPLETED', inputText: 'Plan', outputText: 'Suggestion', createdAt: '2026-01-01T00:00:00.000Z' } }) });
+    const gateway = new DesktopApiGateway({ baseUrl: 'http://api.test', fetchImplementation });
+    await gateway.login({ login: 'employee@example.test', password: 'password' });
+    await gateway.createTaskAgentResponse('task-1', 'agent-1', 'Plan', 'attempt-key');
+    expect(fetchImplementation.mock.calls[1]).toEqual([
+      'http://api.test/tasks/task-1/agent-responses',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({ authorization: 'Bearer desktop-session-token', 'idempotency-key': 'attempt-key' }),
+        body: JSON.stringify({ agentId: 'agent-1', prompt: 'Plan' })
+      })
+    ]);
+    expect(JSON.stringify(fetchImplementation.mock.calls[1])).not.toContain('provider');
+    expect(JSON.stringify(fetchImplementation.mock.calls[1])).not.toContain('organizationId');
   });
   it('clears a recoverable error after a successful retry result', () => {
     expect(resolveOperation({ ok: true, data: ['project-1'] })).toEqual({

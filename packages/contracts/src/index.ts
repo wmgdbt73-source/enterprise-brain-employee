@@ -10,6 +10,7 @@ export type {
 } from './ids.js';
 export type {
   AgentRunContract,
+  AgentRunKind,
   AgentRunStatus,
   AgentToolCallStatus,
   AgentToolCompletionReceipt,
@@ -27,6 +28,7 @@ export type {
   AgentAssignmentContract,
   WriteFileEffect
 } from './agent-run.js';
+export type { ModelInvocationContract, ModelInvocationStatus, BeginModelRunDisposition, ModelRunContext } from './model-invocation.js';
 export type { HumanConfirmationContract, HumanConfirmationDetailContract, HumanConfirmationStatus, ApprovedWriteExecutionGrant } from './human-confirmation.js';
 export type {
   ArtifactContract,

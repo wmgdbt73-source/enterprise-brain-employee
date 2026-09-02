@@ -392,3 +392,12 @@ Before changing any ADR above:
 ## ADR-029 — Control Plane mutation audit is transactional
 
 EB-019 records successful Admin API Department, employee Department assignment, Permission Override, Agent Definition, and Agent Assignment mutations as append-only `AuditEvent` rows in the same RepeatableRead transaction as the formal mutation. Events use server-derived actor and organization identity and retain only minimal, redacted before/after metadata. No-op updates and rejected requests do not generate audit events. The Admin Console provides a read-only, cursor-paginated Audit Logs view; it cannot modify or delete audit records. Retention, export, and cryptographic signing are production-hardening work deferred beyond EB-019.
+
+## ADR-030 — Model Provider Calls Are Outside Persistence Transactions
+
+EB-020 persists and idempotently reserves a MODEL AgentRun/ModelInvocation before
+calling a provider, then finalizes it separately. This avoids holding PostgreSQL
+transactions open during network I/O and prevents a replay from issuing a second
+provider request. The OpenAI Responses implementation uses `store: false`; CI
+injects a Fake ModelProvider and never calls OpenAI. Provider credentials remain
+server-only and raw provider data is not persisted or returned.

@@ -6,6 +6,7 @@ import type {
 } from '@enterprise-brain/contracts';
 import type { DesktopApiError, DesktopResult } from '../../../../shared/enterprise-brain.js';
 import { resultConfirmationAttempt, type ResultConfirmationAttempt } from './result-confirmation.js';
+import { ModelResponsePanel } from './ModelResponsePanel.js';
 
 export function TaskDetail({
   task,
@@ -22,6 +23,7 @@ export function TaskDetail({
   ,onListReviews
   ,onDecideReview
   ,agents, selectedAgentId, onSelectAgent, agentError, agentsLoading, onRefreshAgents
+  ,onCreateModelResponse, onListModelResponses
 }: {
   task?: TaskContract;
   onStart: (task: TaskContract) => Promise<DesktopResult<TaskContract> | void>;
@@ -40,6 +42,8 @@ export function TaskDetail({
   onListReviews?: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract[]>>;
   onDecideReview?: (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract>>;
   agents?: import('@enterprise-brain/contracts').AvailableAgentContract[]; selectedAgentId?: string; onSelectAgent?: (id:string)=>void; agentError?: DesktopApiError; agentsLoading?: boolean; onRefreshAgents?: () => void;
+  onCreateModelResponse?: (task: TaskContract, agentId: string, prompt: string, idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ModelInvocationContract>>;
+  onListModelResponses?: (task: TaskContract) => Promise<DesktopResult<import('@enterprise-brain/contracts').ModelInvocationContract[]>>;
 }) {
   const [relativePath, setRelativePath] = useState('');
   const [eligibleRun, setEligibleRun] = useState<AgentRunContract>();
@@ -176,6 +180,7 @@ export function TaskDetail({
               Start Task
             </button>
           )}
+          {onCreateModelResponse && onListModelResponses && <ModelResponsePanel task={task} agents={agents ?? []} selectedAgentId={selectedAgentId} onSelectAgent={id => onSelectAgent?.(id)} create={onCreateModelResponse} list={onListModelResponses} />}
           <section className="artifact-panel">
             <p className="eyebrow">LOCAL ARTIFACTS · READ ONLY</p>
             <label>

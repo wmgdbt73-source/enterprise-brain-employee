@@ -11,6 +11,7 @@ import {
   OrganizationRepository,
   PermissionRepository,
   AgentCatalogRepository,
+  ModelInvocationRepository,
   AuditRepository,
   createPrismaClient,
   ensureUser,
@@ -59,10 +60,14 @@ import { registerAgentRoutes } from './modules/agents/agent-routes.js';
 import { AgentForbiddenError, AgentNotFoundError, AgentService } from './modules/agents/agent-service.js';
 import { registerAuditRoutes } from './modules/audit/audit-routes.js';
 import { AuditForbiddenError, AuditNotFoundError, AuditService, CannotModifySelfError, InvalidReasonError, LastActiveOwnerError } from './modules/audit/audit-service.js';
+import { registerModelRuntimeRoutes } from './modules/model-runtime/model-runtime-routes.js';
+import { ModelFinalizeError, ModelIdempotencyConflictError, ModelInvocationForbiddenError, ModelInvocationNotFoundError, ModelPromptValidationError, ModelProviderFailureError, ModelProviderNotConfiguredError, ModelRuntimeService } from './modules/model-runtime/model-runtime-service.js';
+import type { ModelProvider } from './providers/model-provider.js';
 
 export interface CreateAppOptions {
   prisma?: PrismaClient;
   identityProvider?: IdentityProvider;
+  modelProvider?: ModelProvider;
 }
 
 export async function createApp(
@@ -123,6 +128,7 @@ export async function createApp(
   registerOrganizationRoutes(app, new OrganizationService(new OrganizationRepository(prisma)));
   registerPermissionRoutes(app, new PermissionService(new PermissionRepository(prisma)));
   registerAgentRoutes(app, new AgentService(new AgentCatalogRepository(prisma)));
+  registerModelRuntimeRoutes(app, new ModelRuntimeService(new ModelInvocationRepository(prisma), options.modelProvider));
   registerAuditRoutes(app, new AuditService(new AuditRepository(prisma)));
 
   app.setErrorHandler((error, _request, reply) => {
@@ -169,6 +175,13 @@ export async function createApp(
       });
     }
     if (error instanceof AuditForbiddenError) return reply.code(403).send({error:{code:'FORBIDDEN',message:'Current user is not authorized',details:{}}});
+    if (error instanceof ModelInvocationNotFoundError) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Task not found', details: {} } });
+    if (error instanceof ModelInvocationForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot execute this Agent', details: {} } });
+    if (error instanceof ModelIdempotencyConflictError) return reply.code(409).send({ error: { code: 'IDEMPOTENCY_KEY_CONFLICT', message: 'Idempotency key was previously used for a different model request', details: {} } });
+    if (error instanceof ModelPromptValidationError) return reply.code(400).send({ error: { code: 'VALIDATION_ERROR', message: error.message, details: {} } });
+    if (error instanceof ModelProviderNotConfiguredError) return reply.code(503).send({ error: { code: 'MODEL_PROVIDER_NOT_CONFIGURED', message: 'Model provider is not configured', details: {} } });
+    if (error instanceof ModelProviderFailureError) return reply.code(error.statusCode).send({ error: { code: error.statusCode === 429 ? 'MODEL_PROVIDER_RATE_LIMITED' : error.statusCode === 504 ? 'MODEL_PROVIDER_TIMEOUT' : 'MODEL_PROVIDER_FAILED', message: 'Model provider failed', details: {} } });
+    if (error instanceof ModelFinalizeError) return reply.code(502).send({ error: { code: 'MODEL_FINALIZE_FAILED', message: 'Model invocation could not be finalized', details: {} } });
     if (error instanceof CannotModifySelfError) return reply.code(409).send({error:{code:'CANNOT_MODIFY_SELF',message:'Current user cannot modify their own account',details:{}}});
     if (error instanceof LastActiveOwnerError) return reply.code(409).send({error:{code:'LAST_ACTIVE_OWNER',message:'Cannot disable the last active owner',details:{}}});
     if (error instanceof InvalidReasonError) return reply.code(400).send({error:{code:'INVALID_REASON',message:'Reason must be 3 to 500 characters',details:{}}});

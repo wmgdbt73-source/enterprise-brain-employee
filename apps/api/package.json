@@ -13,7 +13,8 @@
     "@enterprise-brain/contracts": "workspace:*",
     "@enterprise-brain/database": "workspace:*",
     "@enterprise-brain/domain": "workspace:*",
-    "fastify": "^5.0.0"
+    "fastify": "^5.0.0",
+    "openai": "^7.8.0"
   },
   "devDependencies": {
     "tsx": "^4.0.0"
