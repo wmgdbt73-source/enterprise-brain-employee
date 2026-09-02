@@ -17,6 +17,8 @@ export interface ModelInvocationContract {
   errorCode?: string;
   createdAt: string;
   completedAt?: string;
+  /** Safe summary only; arguments, results, replay items, and reasoning stay server-side. */
+  toolCalls?: Array<{ sequence: number; name: string; status: 'PENDING' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED'; errorCode?: string; startedAt: string; completedAt?: string }>;
 }
 export type BeginModelRunDisposition = 'CREATED' | 'EXISTING_RUNNING' | 'EXISTING_COMPLETED' | 'EXISTING_FAILED';
 export interface ModelRunContext {

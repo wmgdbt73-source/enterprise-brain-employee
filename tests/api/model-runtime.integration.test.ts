@@ -27,6 +27,10 @@ describe('Model runtime API', () => {
     await fixture(); let resolve!: (value:ModelGeneration) => void; let started!: () => void; const pending = new Promise<ModelGeneration>(done => { resolve = done; }); const entered = new Promise<void>(done => { started = done; }); const fake = new FakeModelProvider(async () => { started(); return pending; }); const app = await createApp({ prisma: db(), modelProvider: fake }); const auth = await headers();
     const first = app.inject(request(auth)); await entered; const retry = await app.inject(request(auth)); expect(retry.statusCode).toBe(202); expect(fake.calls).toHaveLength(1); resolve({ outputText: 'Done' }); expect((await first).statusCode).toBe(201); await app.close();
   });
+  it('executes one read-only tool and completes the MODEL run with final text', async () => {
+    await fixture(); let step=0; const fake=new FakeModelProvider(async()=>++step===1?{kind:'tool_calls',calls:[{callId:'provider-call-1',name:'get_task_snapshot',argumentsJson:'{}'}],replayItems:[{type:'function_call',call_id:'provider-call-1',name:'get_task_snapshot',arguments:'{}'}]}:{kind:'final',outputText:'Grounded suggestion',providerResponseId:'final',replayItems:[]}); const app=await createApp({prisma:db(),modelProvider:fake});const auth=await headers();
+    const response=await app.inject(request(auth));expect(response.statusCode).toBe(201);expect(fake.calls).toHaveLength(2);expect(await db().agentToolCall.findMany({where:{agentRunId:response.json().invocation.agentRunId}})).toMatchObject([{sequence:1,name:'get_task_snapshot',status:'SUCCEEDED',providerCallId:'provider-call-1'}]);expect(response.json().invocation.toolCalls).toEqual([expect.objectContaining({sequence:1,name:'get_task_snapshot',status:'SUCCEEDED'})]);await app.close();
+  });
   it('coordinates concurrent HTTP requests with one provider invocation and one durable MODEL run', async () => {
     await fixture(); let release!: (value: ModelGeneration) => void; let entered!: () => void;
     const enteredProvider = new Promise<void>(resolve => { entered = resolve; }); const pending = new Promise<ModelGeneration>(resolve => { release = resolve; });
