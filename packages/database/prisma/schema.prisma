@@ -467,6 +467,7 @@ model AgentToolCall {
   agentRunId  String              @map("agent_run_id")
   sequence    Int
   name        String
+  providerCallId String?           @map("provider_call_id")
   deviceId    String?             @map("device_id")
   request     Json
   status      AgentToolCallStatus
@@ -480,6 +481,7 @@ model AgentToolCall {
   @@unique([id, agentRunId], map: "agent_tool_calls_agent_tool_call_id_agent_run_id_key")
   @@unique([id, agentRunId, deviceId], map: "agent_tool_calls_agent_tool_call_id_agent_run_id_device_id_key")
   @@unique([agentRunId, sequence], map: "agent_tool_calls_agent_run_id_sequence_key")
+  @@unique([agentRunId, providerCallId], map: "agent_tool_calls_agent_run_id_provider_call_id_key")
   @@map("agent_tool_calls")
 }
 

@@ -330,6 +330,11 @@ provider/model, Agent version, organization/task context, and provenance on the
 server. `GET /tasks/:taskId/agent-responses?limit=20` is Task-member scoped,
 newest first, and caps `limit` at 50. Provider failures are redacted and never
 expose credentials, provider headers, or raw provider payloads.
+
+Model responses may include safe ToolCall summaries only: sequence, name,
+status, errorCode, startedAt, and completedAt. Tool arguments, tool outputs,
+provider replay items, reasoning, and provider request bodies are never HTTP
+fields. EB-021 registers only `get_task_snapshot` and `list_task_artifacts`.
 ### Audit events
 
 `GET /audit-events` is available to the current active Organization OWNER or ADMIN. It returns newest-first, cursor-paginated immutable AuditEvent contracts and supports `action`, `actorUserId`, and `subjectId` filters. EB-019 records successful control-plane mutations with server-derived actor/organization provenance. `PATCH /employees/:userId/account-status` remains the explicit account-revocation mutation.

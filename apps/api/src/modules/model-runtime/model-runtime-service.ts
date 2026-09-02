@@ -5,6 +5,7 @@ import type { ModelInvocationRepository } from '@enterprise-brain/database';
 import type { RequestContext } from '../../context/request-context.js';
 import { ModelProviderError, type ModelProvider } from '../../providers/model-provider.js';
 import { OpenAIResponsesProvider } from '../../providers/openai-responses-provider.js';
+import { isReadOnlyToolName, readOnlyToolDefinitions, validEmptyArguments } from './read-only-tool-registry.js';
 
 export class ModelInvocationNotFoundError extends Error {}
 export class ModelInvocationForbiddenError extends Error {}
@@ -40,7 +41,27 @@ export class ModelRuntimeService {
       ...(begun.context.agentDescription ? [`Agent description: ${begun.context.agentDescription}`] : [])
     ].join('\n');
     try {
-      const generated = await provider.generate({ instructions, input: prompt });
+      let replayItems: import('../../providers/model-provider.js').ProviderReplayItem[] = [];
+      let toolCalls = 0;
+      for (let step = 0; step < 5; step += 1) {
+      const generated = await provider.generate({ instructions, input: prompt, tools: readOnlyToolDefinitions, replayItems });
+      if (generated.kind === 'tool_calls') {
+        if (!generated.calls.length || generated.calls.length + toolCalls > 4 || new Set(generated.calls.map(call => call.callId)).size !== generated.calls.length) return this.failToolRun(begun.invocation.id, 'MODEL_TOOL_LIMIT_EXCEEDED');
+        const outputs: import('../../providers/model-provider.js').ProviderReplayItem[] = [];
+        for (const call of generated.calls) {
+          if (!call.callId || !isReadOnlyToolName(call.name) || !validEmptyArguments(call.argumentsJson)) return this.failToolRun(begun.invocation.id, 'MODEL_TOOL_INVALID');
+          let result;
+          try {
+            result = await this.invocations.executeReadTool({ invocationId: begun.invocation.id, userId: context.currentUser.id, name: call.name, callId: call.callId, argumentsJson: call.argumentsJson, sequence: ++toolCalls });
+          } catch {
+            return this.failToolRun(begun.invocation.id, 'MODEL_TOOL_EXECUTION_FAILED');
+          }
+          if ('AUTHORIZATION_REVOKED' === result || 'INVALID' === result) return this.failToolRun(begun.invocation.id, result === 'AUTHORIZATION_REVOKED' ? 'MODEL_TOOL_AUTHORIZATION_REVOKED' : 'MODEL_TOOL_INVALID');
+          outputs.push({ type: 'function_call_output', call_id: call.callId, output: JSON.stringify(result.output) });
+        }
+        replayItems = [...replayItems, ...(generated.replayItems ?? []), ...outputs];
+        continue;
+      }
       let finalized;
       try {
         finalized = await this.invocations.complete({ invocationId: begun.invocation.id, providerResponseId: generated.providerResponseId, outputText: generated.outputText, model: provider.model, inputTokens: generated.inputTokens, outputTokens: generated.outputTokens, totalTokens: generated.totalTokens, completedAt: new Date() });
@@ -51,6 +72,8 @@ export class ModelRuntimeService {
       }
       if (typeof finalized === 'string') throw new ModelFinalizeError();
       return { invocation: finalized, created: true, running: false };
+      }
+      return this.failToolRun(begun.invocation.id, 'MODEL_TOOL_LIMIT_EXCEEDED');
     } catch (error) {
       if (!(error instanceof ModelProviderError)) throw error;
       let failed;
@@ -63,6 +86,8 @@ export class ModelRuntimeService {
       throw new ModelProviderFailureError(error.code === 'MODEL_PROVIDER_RATE_LIMITED' ? 429 : error.code === 'MODEL_PROVIDER_TIMEOUT' ? 504 : 502);
     }
   }
+
+  private async failToolRun(invocationId:string,errorCode:string):Promise<never>{const failed=await this.invocations.fail({invocationId,errorCode,completedAt:new Date()});if(typeof failed==='string')throw new ModelFinalizeError();throw new ModelProviderFailureError(502);}
 
   async list(context: RequestContext, taskId: string, limit?: number): Promise<ModelInvocationContract[]> {
     const rows = await this.invocations.listForTaskForMember({ userId: context.currentUser.id, taskId, limit });

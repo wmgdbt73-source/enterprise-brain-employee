@@ -30,6 +30,14 @@ and the rest of the workspace remains usable. A network-uncertain retry keeps
 the same idempotency key; retrying a persisted failed invocation creates a new
 attempt.
 
+## Read-only model tools
+
+EB-021 permits a model response to request only the server-owned
+`get_task_snapshot` and `list_task_artifacts` functions. They are bound to the
+route Task and re-authorized before every read. Tool outputs and opaque
+Responses replay items are bounded and retained only for the active request;
+they are never written to ordinary logs or returned to Desktop.
+
 ## Admin demo
 
 1. Sign in as `admin@example.test` and inspect Dashboard totals.
