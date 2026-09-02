@@ -6,6 +6,7 @@ import type {
   AvailableAgentContract,
   ArtifactContract,
   ResultContract, ReviewContract, ReviewDecision,
+  ModelInvocationContract,
   CurrentUserContract,
   LoginRequest,
   HumanConfirmationContract,
@@ -125,6 +126,12 @@ export class DesktopApiGateway {
     >;
   }
   listAvailableAgents(): Promise<DesktopResult<AvailableAgentContract[]>> { return this.request('/me/agents').then(r=>r.ok?{ok:true,data:(r.data as {agents:AvailableAgentContract[]}).agents}:r); }
+  createTaskAgentResponse(taskId: string, agentId: string, prompt: string, idempotencyKey: string): Promise<DesktopResult<ModelInvocationContract>> {
+    return this.request(`/tasks/${encodeURIComponent(taskId)}/agent-responses`, { method: 'POST', body: { agentId, prompt }, headers: { 'idempotency-key': idempotencyKey } }).then(result => result.ok ? { ok: true, data: (result.data as { invocation: ModelInvocationContract }).invocation } : result) as Promise<DesktopResult<ModelInvocationContract>>;
+  }
+  listTaskAgentResponses(taskId: string, limit = 20): Promise<DesktopResult<ModelInvocationContract[]>> {
+    return this.request(`/tasks/${encodeURIComponent(taskId)}/agent-responses?limit=${Math.min(50, Math.max(1, limit))}`).then(result => result.ok ? { ok: true, data: (result.data as { items: ModelInvocationContract[] }).items } : result) as Promise<DesktopResult<ModelInvocationContract[]>>;
+  }
   getHumanConfirmation(id: string): Promise<DesktopResult<HumanConfirmationDetailContract>> {
     return this.request(`/human-confirmations/${encodeURIComponent(id)}`) as Promise<DesktopResult<HumanConfirmationDetailContract>>;
   }

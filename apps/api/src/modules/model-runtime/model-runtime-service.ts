@@ -41,12 +41,24 @@ export class ModelRuntimeService {
     ].join('\n');
     try {
       const generated = await provider.generate({ instructions, input: prompt });
-      const finalized = await this.invocations.complete({ invocationId: begun.invocation.id, providerResponseId: generated.providerResponseId, outputText: generated.outputText, model: provider.model, inputTokens: generated.inputTokens, outputTokens: generated.outputTokens, totalTokens: generated.totalTokens, completedAt: new Date() });
+      let finalized;
+      try {
+        finalized = await this.invocations.complete({ invocationId: begun.invocation.id, providerResponseId: generated.providerResponseId, outputText: generated.outputText, model: provider.model, inputTokens: generated.inputTokens, outputTokens: generated.outputTokens, totalTokens: generated.totalTokens, completedAt: new Date() });
+      } catch {
+        // The provider already ran. Do not retry it or leak an infrastructure
+        // error if the terminal persistence transaction cannot commit.
+        throw new ModelFinalizeError();
+      }
       if (typeof finalized === 'string') throw new ModelFinalizeError();
       return { invocation: finalized, created: true, running: false };
     } catch (error) {
       if (!(error instanceof ModelProviderError)) throw error;
-      const failed = await this.invocations.fail({ invocationId: begun.invocation.id, errorCode: error.code, completedAt: new Date() });
+      let failed;
+      try {
+        failed = await this.invocations.fail({ invocationId: begun.invocation.id, errorCode: error.code, completedAt: new Date() });
+      } catch {
+        throw new ModelFinalizeError();
+      }
       if (typeof failed === 'string') throw new ModelFinalizeError();
       throw new ModelProviderFailureError(error.code === 'MODEL_PROVIDER_RATE_LIMITED' ? 429 : error.code === 'MODEL_PROVIDER_TIMEOUT' ? 504 : 502);
     }

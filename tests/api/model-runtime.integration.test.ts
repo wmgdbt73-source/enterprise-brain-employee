@@ -27,6 +27,38 @@ describe('Model runtime API', () => {
     await fixture(); let resolve!: (value:ModelGeneration) => void; let started!: () => void; const pending = new Promise<ModelGeneration>(done => { resolve = done; }); const entered = new Promise<void>(done => { started = done; }); const fake = new FakeModelProvider(async () => { started(); return pending; }); const app = await createApp({ prisma: db(), modelProvider: fake }); const auth = await headers();
     const first = app.inject(request(auth)); await entered; const retry = await app.inject(request(auth)); expect(retry.statusCode).toBe(202); expect(fake.calls).toHaveLength(1); resolve({ outputText: 'Done' }); expect((await first).statusCode).toBe(201); await app.close();
   });
+  it('coordinates concurrent HTTP requests with one provider invocation and one durable MODEL run', async () => {
+    await fixture(); let release!: (value: ModelGeneration) => void; let entered!: () => void;
+    const enteredProvider = new Promise<void>(resolve => { entered = resolve; }); const pending = new Promise<ModelGeneration>(resolve => { release = resolve; });
+    const fake = new FakeModelProvider(async () => { entered(); return pending; }); const app = await createApp({ prisma: db(), modelProvider: fake }); const auth = await headers();
+    const first = app.inject(request(auth)); await enteredProvider;
+    const second = await app.inject(request(auth)); expect([200, 202]).toContain(second.statusCode); expect(fake.calls).toHaveLength(1);
+    release({ outputText: 'Done', providerResponseId: 'single-provider-response' }); const created = await first;
+    expect(created.statusCode).toBe(201); expect(await db().modelInvocation.count()).toBe(1); expect(await db().agentRun.count({ where: { kind: 'MODEL' } })).toBe(1);
+    expect(await db().modelInvocation.findFirstOrThrow()).toMatchObject({ status: 'COMPLETED' }); expect(await db().agentRun.findFirstOrThrow({ where: { kind: 'MODEL' } })).toMatchObject({ status: 'SUCCEEDED' }); await app.close();
+  });
+  it('does not retry a provider after the production finalize transaction fails', async () => {
+    await fixture(); const fake = new FakeModelProvider(async () => ({ outputText: 'Only once', providerResponseId: 'response' }));
+    const prisma = finalizeFailurePrisma(); const app = await createApp({ prisma, modelProvider: fake }); const auth = await headers();
+    const response = await app.inject(request(auth)); expect(response.statusCode).toBe(502); expect(response.json().error.code).toBe('MODEL_FINALIZE_FAILED'); expect(JSON.stringify(response.json())).not.toContain('forced finalize failure'); expect(fake.calls).toHaveLength(1);
+    expect(await db().modelInvocation.findFirstOrThrow()).toMatchObject({ status: 'RUNNING' }); expect(await db().agentRun.findFirstOrThrow({ where: { kind: 'MODEL' } })).toMatchObject({ status: 'RUNNING' }); await app.close();
+  });
+  it('never calls the provider or persists a MODEL run for live authorization failures', async () => {
+    const scenarios: Array<{ name: string; arrange: () => Promise<void>; identity?: 'employee' | 'outsider' }> = [
+      { name: 'project nonmember', arrange: async () => {}, identity: 'outsider' },
+      { name: 'inactive account', arrange: async () => { await db().account.update({ where: { id: 'account-employee' }, data: { status: 'DISABLED' } }); } },
+      { name: 'inactive organization membership', arrange: async () => { await db().organizationMembership.update({ where: { id: 'employee-org' }, data: { status: 'DISABLED' } }); } },
+      { name: 'missing assignment', arrange: async () => { await db().agentAssignment.deleteMany(); } },
+      { name: 'disabled definition', arrange: async () => { await db().agentDefinition.update({ where: { id: 'agent' }, data: { status: 'DISABLED' } }); } },
+      { name: 'disabled version', arrange: async () => { await db().agentVersion.update({ where: { id: 'agent-version' }, data: { status: 'DISABLED' } }); } },
+      { name: 'AGENT EXECUTE deny', arrange: async () => { await db().permissionOverride.create({ data: { id: 'deny', organizationId: 'org', userId: 'employee', scopeType: 'ORGANIZATION', scopeId: 'org', resource: 'AGENT', action: 'EXECUTE', effect: 'DENY', createdAt: now, updatedAt: now } }); } }
+    ];
+    for (const scenario of scenarios) { await clean(); await fixture(); const fake = new FakeModelProvider(async () => ({ outputText: 'must not run' })); const app = await createApp({ prisma: db(), modelProvider: fake }); const auth = await headers(scenario.identity ?? 'employee'); await scenario.arrange(); const response = await app.inject(request({ ...auth, 'idempotency-key': `denied-${scenario.name}` })); expect([401, 403, 404], scenario.name).toContain(response.statusCode); expect(fake.calls, scenario.name).toHaveLength(0); expect(await db().modelInvocation.count(), scenario.name).toBe(0); expect(await db().agentRun.count({ where: { kind: 'MODEL' } }), scenario.name).toBe(0); await app.close(); }
+  });
+  it('returns an already persisted failed invocation without another provider call', async () => {
+    await fixture(); const fake = new FakeModelProvider(async () => { throw new ModelProviderError('MODEL_PROVIDER_FAILED'); }); const app = await createApp({ prisma: db(), modelProvider: fake }); const auth = await headers();
+    expect((await app.inject(request(auth))).statusCode).toBe(502); const retry = await app.inject(request(auth)); expect(retry.statusCode).toBe(200); expect(retry.json().invocation.status).toBe('FAILED'); expect(fake.calls).toHaveLength(1); await app.close();
+  });
   it('maps unavailable and failed providers safely without unauthorized writes', async () => {
     await fixture(); const auth = await headers(); const unavailable = await createApp({ prisma: db() }); const previousKey = process.env.OPENAI_API_KEY; const previousModel = process.env.OPENAI_MODEL; delete process.env.OPENAI_API_KEY; delete process.env.OPENAI_MODEL; expect((await unavailable.inject(request(auth))).statusCode).toBe(503); expect(await db().modelInvocation.count()).toBe(0); await unavailable.close(); if (previousKey) process.env.OPENAI_API_KEY = previousKey; if (previousModel) process.env.OPENAI_MODEL = previousModel;
     const rate = new FakeModelProvider(async () => { throw new ModelProviderError('MODEL_PROVIDER_RATE_LIMITED'); }); const app = await createApp({ prisma: db(), modelProvider: rate }); const response = await app.inject(request({ ...auth, 'idempotency-key': 'rate-key' })); expect(response.statusCode).toBe(429); expect(await db().modelInvocation.findFirstOrThrow()).toMatchObject({ status: 'FAILED', errorCode: 'MODEL_PROVIDER_RATE_LIMITED' }); await db().agentAssignment.deleteMany(); expect((await app.inject(request({ ...auth, 'idempotency-key': 'denied-key' }))).statusCode).toBe(403); expect(rate.calls).toHaveLength(1); await app.close();
@@ -35,3 +67,14 @@ describe('Model runtime API', () => {
     await fixture(); const fake = new FakeModelProvider(async () => ({ outputText: 'ok' })); const app = await createApp({ prisma: db(), modelProvider: fake }); const auth = await headers(); const forged = await app.inject(request(auth, { agentId: 'agent', prompt: 'x', model: 'forged', provider: 'forged', instructions: 'forged', tools: [], userId: 'outsider', organizationId: 'other-org', projectId: 'x', agentVersionId: 'x' })); expect(forged.statusCode).toBe(400); expect(fake.calls).toHaveLength(0); expect(await db().modelInvocation.count()).toBe(0); const outsider = await headers('outsider'); expect((await app.inject({ method: 'GET', url: '/tasks/task/agent-responses', headers: outsider })).statusCode).toBe(404); await app.close();
   });
 });
+
+function finalizeFailurePrisma() {
+  const base = db();
+  return new Proxy(base, { get(target, property, receiver) {
+    if (property !== '$transaction') { const value = Reflect.get(target, property, receiver); return typeof value === 'function' ? value.bind(target) : value; }
+    return async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => target.$transaction(async tx => callback(new Proxy(tx, { get(transactionTarget, transactionProperty, transactionReceiver) {
+      if (transactionProperty !== 'agentRun') { const value = Reflect.get(transactionTarget, transactionProperty, transactionReceiver); return typeof value === 'function' ? value.bind(transactionTarget) : value; }
+      return new Proxy(tx.agentRun, { get(delegate, delegateProperty, delegateReceiver) { if (delegateProperty === 'updateMany') return async () => { throw new Error('forced finalize failure'); }; const value = Reflect.get(delegate, delegateProperty, delegateReceiver); return typeof value === 'function' ? value.bind(delegate) : value; } });
+    } })), options as never);
+  } }) as typeof base;
+}

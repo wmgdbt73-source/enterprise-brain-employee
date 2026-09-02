@@ -28,6 +28,8 @@ export function registerRuntimeHandlers(
     return gateway.logout();
   });
   ipc.handle('agents:list', () => gateway.listAvailableAgents());
+  ipc.handle('model-responses:create', (_event, payload: { taskId: string; agentId: string; prompt: string; idempotencyKey: string }) => gateway.createTaskAgentResponse(payload.taskId, payload.agentId, payload.prompt, payload.idempotencyKey));
+  ipc.handle('model-responses:list-for-task', (_event, payload: { taskId: string; limit?: number }) => gateway.listTaskAgentResponses(payload.taskId, payload.limit));
   ipc.handle('projects:list', () => gateway.listProjects());
   ipc.handle('projects:get', (_event, payload: { id: string }) =>
     gateway.getProject(payload.id)

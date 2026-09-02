@@ -43,6 +43,9 @@ export function App() {
   const selectedProjectIdRef = useRef<string | undefined>(undefined);
   const authGenerationRef = useRef(0);
   const agentsLoadingRef = useRef(false);
+  // Older bridge fixtures and a staged desktop update may not expose this
+  // capability yet. The preloaded production bridge always does.
+  const supportsModelResponses = Boolean(window.enterpriseBrain.modelResponses);
   selectedTaskIdRef.current = task?.id;
   selectedProjectIdRef.current = project?.id;
 
@@ -194,6 +197,22 @@ export function App() {
     setError(undefined);
     return operation.data?.run;
   }
+  async function createModelResponse(value: TaskContract, agentId: string, prompt: string, idempotencyKey: string) {
+    const generation = authGenerationRef.current;
+    if (!window.enterpriseBrain.modelResponses) return { ok: false as const, error: { code: 'MODEL_PROVIDER_NOT_CONFIGURED', message: 'Model responses are unavailable', details: {} } };
+    const response = await window.enterpriseBrain.modelResponses.create(value.id, agentId, prompt, idempotencyKey);
+    if (generation !== authGenerationRef.current || selectedTaskIdRef.current !== value.id) return { ok: false as const, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } };
+    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED') clearAuthenticatedState();
+    return response;
+  }
+  async function listModelResponses(value: TaskContract) {
+    const generation = authGenerationRef.current;
+    if (!window.enterpriseBrain.modelResponses) return { ok: false as const, error: { code: 'MODEL_PROVIDER_NOT_CONFIGURED', message: 'Model responses are unavailable', details: {} } };
+    const response = await window.enterpriseBrain.modelResponses.listForTask(value.id);
+    if (generation !== authGenerationRef.current || selectedTaskIdRef.current !== value.id) return { ok: false as const, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } };
+    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED') clearAuthenticatedState();
+    return response;
+  }
   async function registerArtifact(agentRunId: string) {
     const generation = authGenerationRef.current;
     const operation = resolveOperation(
@@ -335,6 +354,8 @@ export function App() {
             agentError={agentError}
             agentsLoading={agentsLoading}
             onRefreshAgents={() => void loadAgents()}
+            onCreateModelResponse={supportsModelResponses ? createModelResponse : undefined}
+            onListModelResponses={supportsModelResponses ? listModelResponses : undefined}
           />
         )}
         {currentUser && <button className="logout" onClick={() => void logout()}>Sign out · {currentUser.name}{currentUser.organization ? ` · ${currentUser.organization.name}${currentUser.department ? ` · ${currentUser.department.name}` : ''}` : ''}</button>}
