@@ -320,6 +320,16 @@ or caller-supplied Organization scope.
 Browser Admin requests may use the configured `ADMIN_ORIGIN` only. The API allows
 `Authorization` and `Content-Type` and supports OPTIONS preflight; it does not use
 wildcard origins or credential cookies.
+
+## 16. Model Runtime
+
+`POST /tasks/:taskId/agent-responses` accepts only `agentId` and `prompt`, with a
+required `Idempotency-Key` bearer-authenticated header. A new invocation returns
+201, an in-flight retry 202, and a completed/failed replay 200. The API derives
+provider/model, Agent version, organization/task context, and provenance on the
+server. `GET /tasks/:taskId/agent-responses?limit=20` is Task-member scoped,
+newest first, and caps `limit` at 50. Provider failures are redacted and never
+expose credentials, provider headers, or raw provider payloads.
 ### Audit events
 
 `GET /audit-events` is available to the current active Organization OWNER or ADMIN. It returns newest-first, cursor-paginated immutable AuditEvent contracts and supports `action`, `actorUserId`, and `subjectId` filters. EB-019 records successful control-plane mutations with server-derived actor/organization provenance. `PATCH /employees/:userId/account-status` remains the explicit account-revocation mutation.

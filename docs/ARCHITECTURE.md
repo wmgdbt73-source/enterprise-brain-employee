@@ -212,6 +212,14 @@ The Admin Console is a React/Vite Web control plane using the same typed contrac
 and Employee API as Desktop. Its bearer token is held in browser `sessionStorage`
 for the demo only; production authentication will move to secure HttpOnly cookies.
 The frontend renders server decisions and never evaluates authorization itself.
+
+## 16. Model Runtime Boundary
+
+The API creates a durable MODEL AgentRun and ModelInvocation in a short
+RepeatableRead transaction before any model request. The external Responses API
+call happens only after that transaction commits; finalization is a separate
+CAS-protected transaction. Model requests are text-only, use `store: false`, and
+never receive workspace paths, file content, tools, or prior response IDs.
 ## Audit boundary
 
 Control-plane repositories append AuditEvent in the same RepeatableRead transaction as the business mutation. Failed or rejected mutations do not produce a success audit event. Account disable revokes sessions in that same transaction; already-started concurrent requests have no deterministic winner defined in EB-019.
