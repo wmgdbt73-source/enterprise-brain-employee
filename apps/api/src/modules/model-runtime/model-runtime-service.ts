@@ -50,7 +50,12 @@ export class ModelRuntimeService {
         const outputs: import('../../providers/model-provider.js').ProviderReplayItem[] = [];
         for (const call of generated.calls) {
           if (!call.callId || !isReadOnlyToolName(call.name) || !validEmptyArguments(call.argumentsJson)) return this.failToolRun(begun.invocation.id, 'MODEL_TOOL_INVALID');
-          const result = await this.invocations.executeReadTool({ invocationId: begun.invocation.id, userId: context.currentUser.id, name: call.name, callId: call.callId, argumentsJson: call.argumentsJson, sequence: ++toolCalls });
+          let result;
+          try {
+            result = await this.invocations.executeReadTool({ invocationId: begun.invocation.id, userId: context.currentUser.id, name: call.name, callId: call.callId, argumentsJson: call.argumentsJson, sequence: ++toolCalls });
+          } catch {
+            return this.failToolRun(begun.invocation.id, 'MODEL_TOOL_EXECUTION_FAILED');
+          }
           if ('AUTHORIZATION_REVOKED' === result || 'INVALID' === result) return this.failToolRun(begun.invocation.id, result === 'AUTHORIZATION_REVOKED' ? 'MODEL_TOOL_AUTHORIZATION_REVOKED' : 'MODEL_TOOL_INVALID');
           outputs.push({ type: 'function_call_output', call_id: call.callId, output: JSON.stringify(result.output) });
         }

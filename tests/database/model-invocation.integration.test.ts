@@ -2,6 +2,9 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { ModelInvocationRepository, createPrismaClient } from '../../packages/database/src/index.js';
 import { modelRequestFingerprint, normalizeModelPrompt } from '../../packages/domain/src/index.js';
+import { createApp } from '../../apps/api/src/app.js';
+import { hashSessionToken } from '../../packages/database/src/index.js';
+import type { ModelGeneration, ModelGenerationRequest, ModelProvider } from '../../apps/api/src/providers/model-provider.js';
 
 const database = process.env.DATABASE_URL ? createPrismaClient(process.env.DATABASE_URL) : undefined;
 const db = () => { if (!database) throw new Error('DATABASE_URL is required for database integration tests'); return database; };
@@ -89,6 +92,43 @@ describe('ModelInvocationRepository PostgreSQL integration', () => {
     await fixture(); const repo = new ModelInvocationRepository(db()); for (const [suffix, taskId] of [['one', 'task-a'], ['two', 'task-a'], ['other', 'task-b']] as const) { const value = await repo.beginForTask(input({ agentRunId: `run-${suffix}`, invocationId: `invocation-${suffix}`, taskId, idempotencyKey: `key-${suffix}` })); if (typeof value === 'string') throw new Error(value); }
     const rows = await repo.listForTaskForMember({ userId: 'member', taskId: 'task-a', limit: 1 }); expect(Array.isArray(rows) && rows).toHaveLength(1); expect(Array.isArray(rows) && rows[0]?.agentRunId).toBe('run-two'); expect(await repo.listForTaskForMember({ userId: 'outsider', taskId: 'task-a' })).toBe('NOT_FOUND');
   });
+
+  it('persists ordered MODEL ToolCall provenance and enforces per-run identities', async () => {
+    await fixture(); const repo = new ModelInvocationRepository(db());
+    const first = await repo.beginForTask(input()); const second = await repo.beginForTask(input({ agentRunId: 'run-b', invocationId: 'invocation-b', idempotencyKey: 'key-b' }));
+    if (typeof first === 'string' || typeof second === 'string') throw new Error('unexpected begin rejection');
+    const c = db();
+    await c.agentToolCall.createMany({ data: [
+      { id: 'tool-1', agentRunId: 'run-a', sequence: 1, name: 'get_task_snapshot', providerCallId: 'provider-1', request: {}, status: 'SUCCEEDED', createdAt: now, completedAt: now },
+      { id: 'tool-2', agentRunId: 'run-a', sequence: 2, name: 'list_task_artifacts', providerCallId: 'provider-2', request: {}, status: 'SUCCEEDED', createdAt: now, completedAt: now },
+      { id: 'tool-3', agentRunId: 'run-a', sequence: 3, name: 'get_task_snapshot', providerCallId: 'provider-3', request: {}, status: 'SUCCEEDED', createdAt: now, completedAt: now },
+      { id: 'tool-other-run', agentRunId: 'run-b', sequence: 1, name: 'get_task_snapshot', providerCallId: 'provider-1', request: {}, status: 'SUCCEEDED', createdAt: now, completedAt: now }
+    ] });
+    expect((await c.agentToolCall.findMany({ where: { agentRunId: 'run-a' }, orderBy: { sequence: 'asc' } })).map(row => row.sequence)).toEqual([1, 2, 3]);
+    await expect(c.agentToolCall.create({ data: { id: 'duplicate-sequence', agentRunId: 'run-a', sequence: 1, name: 'get_task_snapshot', request: {}, status: 'SUCCEEDED', createdAt: now } })).rejects.toMatchObject({ code: 'P2002' });
+    await expect(c.agentToolCall.create({ data: { id: 'duplicate-provider', agentRunId: 'run-a', sequence: 4, name: 'get_task_snapshot', providerCallId: 'provider-1', request: {}, status: 'SUCCEEDED', createdAt: now } })).rejects.toMatchObject({ code: 'P2002' });
+    await c.agentRun.create({ data: { id: 'legacy-tool-run', userId: 'member', projectId: 'project-a', taskId: 'task-a', agentDefinitionKey: 'read-only-work-agent-v1', agentVersion: 1, kind: 'TOOL', status: 'SUCCEEDED', intent: { name: 'list_directory', relativePath: '' }, createdAt: now, startedAt: now, finishedAt: now, updatedAt: now } });
+    await c.agentToolCall.create({ data: { id: 'legacy-tool-call', agentRunId: 'legacy-tool-run', sequence: 1, name: 'list_directory', request: {}, status: 'SUCCEEDED', createdAt: now, completedAt: now } });
+    expect(await c.agentToolCall.findUniqueOrThrow({ where: { id: 'legacy-tool-call' } })).toMatchObject({ agentRunId: 'legacy-tool-run', providerCallId: null, sequence: 1 });
+  });
+
+  it('rolls back a failed read-tool transaction without returning tool data', async () => {
+    await fixture(); const failing = toolWriteFailurePrisma(); const provider = new FixedToolProvider(); const app = await createApp({ prisma: failing, modelProvider: provider });
+    const token = `token-${'x'.repeat(40)}`; await db().session.create({ data: { id: 'session-member', accountId: 'account-member', tokenHash: hashSessionToken(token), createdAt: now, expiresAt: new Date(now.getTime() + 86_400_000) } });
+    const before = await toolTransactionBusinessState();
+    const response = await app.inject({ method: 'POST', url: '/tasks/task-a/agent-responses', headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'tool-write-failure' }, payload: { agentId: 'agent-a', prompt: 'read safely' } });
+    expect(response.statusCode).toBe(502); expect(JSON.stringify(response.json())).not.toContain('forced tool provenance failure');
+    expect(provider.calls).toHaveLength(1); expect(await db().agentToolCall.count()).toBe(0); expect(await db().modelInvocation.findFirstOrThrow()).toMatchObject({ status: 'FAILED' }); expect(await db().agentRun.findFirstOrThrow({ where: { kind: 'MODEL' } })).toMatchObject({ status: 'FAILED' });
+    expect(await toolTransactionBusinessState()).toEqual(before); await app.close();
+  });
 });
+
+class FixedToolProvider implements ModelProvider {
+  readonly providerName = 'FAKE'; readonly model = 'fake-model'; calls: ModelGenerationRequest[] = [];
+  async generate(input: ModelGenerationRequest): Promise<ModelGeneration> { this.calls.push(input); return { kind: 'tool_calls', calls: [{ callId: 'failing-tool-call', name: 'get_task_snapshot', argumentsJson: '{}' }], replayItems: [] }; }
+}
+
+async function toolTransactionBusinessState() { const c = db(); return { task: await c.task.findMany({ orderBy: { id: 'asc' } }), dependencies: await c.taskDependency.findMany(), artifacts: await c.artifact.findMany(), results: await c.result.findMany(), reviews: await c.review.findMany() }; }
+function toolWriteFailurePrisma() { const base = db(); return new Proxy(base, { get(target, property, receiver) { if (property !== '$transaction') { const value = Reflect.get(target, property, receiver); return typeof value === 'function' ? value.bind(target) : value; } return async (callback: (tx: unknown) => Promise<unknown>, options: unknown) => target.$transaction(async tx => callback(new Proxy(tx, { get(transactionTarget, transactionProperty, transactionReceiver) { if (transactionProperty !== 'agentToolCall') { const value = Reflect.get(transactionTarget, transactionProperty, transactionReceiver); return typeof value === 'function' ? value.bind(transactionTarget) : value; } return new Proxy(tx.agentToolCall, { get(delegate, delegateProperty, delegateReceiver) { if (delegateProperty === 'create') return async () => { throw new Error('forced tool provenance failure'); }; const value = Reflect.get(delegate, delegateProperty, delegateReceiver); return typeof value === 'function' ? value.bind(delegate) : value; } }); } })), options as never); } }) as typeof base; }
 
 function barrier(parties:number) { let count = 0; let release!: () => void; let timeout: ReturnType<typeof setTimeout> | undefined; let reject!: (error: Error) => void; const ready = new Promise<void>((resolve, fail) => { release = resolve; reject = fail; timeout = setTimeout(() => reject(new Error('concurrency barrier timed out')), 10_000); }); return { async arrive() { count += 1; if (count === parties) { if (timeout) clearTimeout(timeout); release(); } await ready; } }; }
