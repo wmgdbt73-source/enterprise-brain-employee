@@ -20,6 +20,44 @@ enum AuditSource {
   ADMIN_API
   SYSTEM
 }
+enum ConversationType {
+  AI_THREAD
+  PROJECT
+  TASK
+  HUMAN_GROUP
+  HUMAN_DM
+}
+enum ConversationScopeType {
+  USER
+  PROJECT
+  TASK
+  DEPARTMENT
+}
+enum MessageAuthorType {
+  USER
+  AGENT
+  SYSTEM
+}
+enum ReminderStatus {
+  SCHEDULED
+  SNOOZED
+  COMPLETED
+  CANCELLED
+}
+enum ReminderType {
+  TASK_DEADLINE
+  MEETING
+  REVIEW
+  CUSTOM
+}
+enum SwarmScopeType {
+  DEPARTMENT
+  PROJECT
+}
+enum SwarmEventType {
+  WORK_EVENT
+  GROUP_MESSAGE
+}
 
 enum OrganizationStatus {
   ACTIVE
@@ -186,6 +224,12 @@ model User {
   reviews        Review[]
   account        Account?
   auditEvents AuditEvent[]
+  createdConversations Conversation[] @relation("ConversationCreator")
+  conversationParticipants ConversationParticipant[]
+  messages Message[]
+  notifications Notification[]
+  reminders Reminder[]
+  swarmEvents SwarmEvent[]
   organizationMembership OrganizationMembership?
 
   @@map("users")
@@ -201,6 +245,10 @@ model Organization {
   departments Department[]
   agentDefinitions AgentDefinition[]
   auditEvents AuditEvent[]
+  conversations Conversation[]
+  notifications Notification[]
+  reminders Reminder[]
+  swarmEvents SwarmEvent[]
   @@map("organizations")
 }
 
@@ -600,4 +648,105 @@ model TaskDependency {
 
   @@id([taskId, dependsOnTaskId])
   @@map("task_dependencies")
+}
+
+model Conversation {
+  id String @id @map("conversation_id")
+  organizationId String @map("organization_id")
+  type ConversationType
+  scopeType ConversationScopeType @map("scope_type")
+  scopeId String @map("scope_id")
+  title String
+  createdByUserId String @map("created_by_user_id")
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  creator User @relation("ConversationCreator",fields:[createdByUserId],references:[id],onDelete:Restrict)
+  participants ConversationParticipant[]
+  messages Message[]
+  @@index([organizationId, updatedAt, id],map:"conversations_organization_updated_id_idx")
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  conversationId String @map("conversation_id")
+  userId String @map("user_id")
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  conversation Conversation @relation(fields:[conversationId],references:[id],onDelete:Cascade)
+  user User @relation(fields:[userId],references:[id],onDelete:Restrict)
+  @@id([conversationId,userId])
+  @@index([userId,conversationId],map:"conversation_participants_user_conversation_idx")
+  @@map("conversation_participants")
+}
+
+model Message {
+  id String @id @map("message_id")
+  conversationId String @map("conversation_id")
+  authorType MessageAuthorType @map("author_type")
+  authorUserId String? @map("author_user_id")
+  authorAgentId String? @map("author_agent_id")
+  content String
+  replyToMessageId String? @map("reply_to_message_id")
+  mentionedUserIds String[] @map("mentioned_user_ids")
+  mentionedAgentIds String[] @map("mentioned_agent_ids")
+  idempotencyKey String? @map("idempotency_key")
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  editedAt DateTime? @map("edited_at") @db.Timestamptz(3)
+  conversation Conversation @relation(fields:[conversationId],references:[id],onDelete:Cascade)
+  authorUser User? @relation(fields:[authorUserId],references:[id],onDelete:Restrict)
+  replyTo Message? @relation("MessageReplies",fields:[replyToMessageId],references:[id],onDelete:Restrict)
+  replies Message[] @relation("MessageReplies")
+  @@unique([conversationId,authorUserId,idempotencyKey],map:"messages_conversation_author_idempotency_key")
+  @@index([conversationId,createdAt,id],map:"messages_conversation_created_id_idx")
+  @@map("messages")
+}
+
+model Notification {
+  id String @id @map("notification_id")
+  organizationId String @map("organization_id")
+  recipientUserId String @map("recipient_user_id")
+  type String
+  title String
+  body String
+  deepLink String
+  readAt DateTime? @map("read_at") @db.Timestamptz(3)
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  recipient User @relation(fields:[recipientUserId],references:[id],onDelete:Restrict)
+  @@index([recipientUserId,createdAt,id],map:"notifications_recipient_created_id_idx")
+  @@map("notifications")
+}
+
+model Reminder {
+  id String @id @map("reminder_id")
+  organizationId String @map("organization_id")
+  userId String @map("user_id")
+  type ReminderType
+  title String
+  dueAt DateTime @map("due_at") @db.Timestamptz(3)
+  status ReminderStatus
+  deepLink String
+  createdAt DateTime @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  user User @relation(fields:[userId],references:[id],onDelete:Restrict)
+  @@index([userId,status,dueAt,id],map:"reminders_user_status_due_id_idx")
+  @@map("reminders")
+}
+
+model SwarmEvent {
+  id String @id @map("swarm_event_id")
+  organizationId String @map("organization_id")
+  scopeType SwarmScopeType @map("scope_type")
+  scopeId String @map("scope_id")
+  type SwarmEventType
+  actorUserId String? @map("actor_user_id")
+  title String
+  summary String
+  deepLink String
+  occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
+  organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
+  actor User? @relation(fields:[actorUserId],references:[id],onDelete:Restrict)
+  @@index([organizationId,occurredAt,id],map:"swarm_events_organization_occurred_id_idx")
+  @@map("swarm_events")
 }
