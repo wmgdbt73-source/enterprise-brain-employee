@@ -708,7 +708,7 @@ model Notification {
   type String
   title String
   body String
-  deepLink String
+  deepLink String @map("deep_link")
   readAt DateTime? @map("read_at") @db.Timestamptz(3)
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
   organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
@@ -725,7 +725,7 @@ model Reminder {
   title String
   dueAt DateTime @map("due_at") @db.Timestamptz(3)
   status ReminderStatus
-  deepLink String
+  deepLink String @map("deep_link")
   createdAt DateTime @map("created_at") @db.Timestamptz(3)
   updatedAt DateTime @map("updated_at") @db.Timestamptz(3)
   organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
@@ -743,7 +743,7 @@ model SwarmEvent {
   actorUserId String? @map("actor_user_id")
   title String
   summary String
-  deepLink String
+  deepLink String @map("deep_link")
   occurredAt DateTime @map("occurred_at") @db.Timestamptz(3)
   organization Organization @relation(fields:[organizationId],references:[id],onDelete:Restrict)
   actor User? @relation(fields:[actorUserId],references:[id],onDelete:Restrict)
