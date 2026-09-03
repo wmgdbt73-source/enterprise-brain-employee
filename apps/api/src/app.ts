@@ -64,7 +64,7 @@ import { AuditForbiddenError, AuditNotFoundError, AuditService, CannotModifySelf
 import { registerModelRuntimeRoutes } from './modules/model-runtime/model-runtime-routes.js';
 import { ModelFinalizeError, ModelIdempotencyConflictError, ModelInvocationForbiddenError, ModelInvocationNotFoundError, ModelPromptValidationError, ModelProviderFailureError, ModelProviderNotConfiguredError, ModelRuntimeService } from './modules/model-runtime/model-runtime-service.js';
 import { registerCollaborationRoutes } from './modules/collaboration/collaboration-routes.js';
-import { CollaborationForbiddenError, CollaborationNotFoundError, CollaborationService, CollaborationValidationError } from './modules/collaboration/collaboration-service.js';
+import { CollaborationForbiddenError, CollaborationIdempotencyConflictError, CollaborationNotFoundError, CollaborationService, CollaborationValidationError } from './modules/collaboration/collaboration-service.js';
 import type { ModelProvider } from './providers/model-provider.js';
 
 export interface CreateAppOptions {
@@ -182,6 +182,7 @@ export async function createApp(
     if (error instanceof AuditForbiddenError) return reply.code(403).send({error:{code:'FORBIDDEN',message:'Current user is not authorized',details:{}}});
     if (error instanceof CollaborationForbiddenError) return reply.code(403).send({error:{code:'FORBIDDEN',message:'Current user is not authorized',details:{}}});
     if (error instanceof CollaborationValidationError) return reply.code(400).send({error:{code:'VALIDATION_ERROR',message:'Invalid collaboration request',details:{}}});
+    if (error instanceof CollaborationIdempotencyConflictError) return reply.code(409).send({error:{code:'IDEMPOTENCY_KEY_CONFLICT',message:'Idempotency key was previously used for a different message request',details:{}}});
     if (error instanceof ModelInvocationNotFoundError) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Task not found', details: {} } });
     if (error instanceof ModelInvocationForbiddenError) return reply.code(403).send({ error: { code: 'PERMISSION_DENIED', message: 'Current user cannot execute this Agent', details: {} } });
     if (error instanceof ModelIdempotencyConflictError) return reply.code(409).send({ error: { code: 'IDEMPOTENCY_KEY_CONFLICT', message: 'Idempotency key was previously used for a different model request', details: {} } });

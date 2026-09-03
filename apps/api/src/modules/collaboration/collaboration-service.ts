@@ -4,6 +4,7 @@ import type { RequestContext } from '../../context/request-context.js';
 export class CollaborationNotFoundError extends Error {}
 export class CollaborationForbiddenError extends Error {}
 export class CollaborationValidationError extends Error {}
+export class CollaborationIdempotencyConflictError extends Error {}
 export class CollaborationService {
   constructor(private readonly repository: CollaborationRepository) {}
   async createConversation(c:RequestContext,input:Parameters<CollaborationRepository['createConversation']>[1]){return this.unwrap(await this.repository.createConversation(c.currentUser.id,input));}
@@ -20,5 +21,5 @@ export class CollaborationService {
   async library(c:RequestContext,input:Parameters<CollaborationRepository['library']>[1]){return this.unwrap(await this.repository.library(c.currentUser.id,input));}
   async libraryItem(c:RequestContext,id:string){return this.unwrap(await this.repository.libraryItem(c.currentUser.id,id));}
   async swarmEvents(c:RequestContext,input:Parameters<CollaborationRepository['swarmEvents']>[1]){return this.unwrap(await this.repository.swarmEvents(c.currentUser.id,input));}
-  private unwrap<T>(value:T|'NOT_FOUND'|'FORBIDDEN'|'INVALID'):T{if(value==='NOT_FOUND')throw new CollaborationNotFoundError();if(value==='FORBIDDEN')throw new CollaborationForbiddenError();if(value==='INVALID')throw new CollaborationValidationError();return value;}
+  private unwrap<T>(value:T|'NOT_FOUND'|'FORBIDDEN'|'INVALID'|'CONFLICT'):T{if(value==='NOT_FOUND')throw new CollaborationNotFoundError();if(value==='FORBIDDEN')throw new CollaborationForbiddenError();if(value==='INVALID')throw new CollaborationValidationError();if(value==='CONFLICT')throw new CollaborationIdempotencyConflictError();return value;}
 }
