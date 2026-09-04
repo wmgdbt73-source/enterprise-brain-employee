@@ -114,7 +114,7 @@ describe('ModelInvocationRepository PostgreSQL integration', () => {
 
   it('rolls back a failed read-tool transaction without returning tool data', async () => {
     await fixture(); const failing = toolWriteFailurePrisma(); const provider = new FixedToolProvider(); const app = await createApp({ prisma: failing, modelProvider: provider });
-    const token = `token-${'x'.repeat(40)}`; await db().session.create({ data: { id: 'session-member', accountId: 'account-member', tokenHash: hashSessionToken(token), createdAt: now, expiresAt: new Date(now.getTime() + 86_400_000) } });
+    const token = `token-${'x'.repeat(40)}`; await db().session.create({ data: { id: 'session-member', accountId: 'account-member', tokenHash: hashSessionToken(token), createdAt: now, expiresAt: new Date('2100-01-01T00:00:00.000Z') } });
     const before = await toolTransactionBusinessState();
     const response = await app.inject({ method: 'POST', url: '/tasks/task-a/agent-responses', headers: { authorization: `Bearer ${token}`, 'idempotency-key': 'tool-write-failure' }, payload: { agentId: 'agent-a', prompt: 'read safely' } });
     expect(response.statusCode).toBe(502); expect(JSON.stringify(response.json())).not.toContain('forced tool provenance failure');
