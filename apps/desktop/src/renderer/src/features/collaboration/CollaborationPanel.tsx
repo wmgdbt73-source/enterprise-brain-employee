@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { DesktopApiError } from '../../../../shared/enterprise-brain.js';
 import { ErrorState, State } from '../../components/State.js';
 import type {
@@ -14,6 +14,8 @@ import type {
 type Mode = 'dynamic' | 'notifications' | 'library';
 type FeedItem =
   ConversationContract | NotificationContract | LibraryItemContract;
+const denied = (error: DesktopApiError) =>
+  error.code === 'FORBIDDEN' || error.code === 'NOT_FOUND';
 
 export function CollaborationPanel({
   mode,
@@ -22,15 +24,19 @@ export function CollaborationPanel({
   mode: Mode;
   projectId?: string;
 }) {
+  const request = useRef(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DesktopApiError>();
   const [items, setItems] = useState<FeedItem[]>([]);
   const [conversationId, setConversationId] = useState<string>();
   const [messages, setMessages] = useState<MessageContract[]>([]);
   const [draft, setDraft] = useState('');
-  const load = async () => {
+  async function load() {
+    const identity = ++request.current;
     setLoading(true);
     setError(undefined);
+    setConversationId(undefined);
+    setMessages([]);
     const result = await (mode === 'notifications'
       ? window.enterpriseBrain.collaboration.notifications()
       : mode === 'library'
@@ -40,33 +46,54 @@ export function CollaborationPanel({
         : window.enterpriseBrain.collaboration.conversations(
             projectId ? { scopeType: 'PROJECT', scopeId: projectId } : {}
           ));
+    if (identity !== request.current) return;
     if (result.ok) setItems(result.data.items);
     else setError(result.error);
     setLoading(false);
-  };
+  }
   useEffect(() => {
     void load();
-    setConversationId(undefined);
-    setMessages([]);
   }, [mode, projectId]);
   async function openConversation(id: string) {
+    const identity = ++request.current;
     setConversationId(id);
+    setMessages([]);
+    setError(undefined);
     setLoading(true);
     const result = await window.enterpriseBrain.collaboration.messages(id);
+    if (identity !== request.current) return;
     if (result.ok) setMessages(result.data.items);
     else setError(result.error);
     setLoading(false);
   }
   async function send() {
     if (!conversationId || !draft.trim()) return;
-    const result = await window.enterpriseBrain.collaboration.sendMessage(
-      conversationId,
-      { content: draft.trim(), idempotencyKey: crypto.randomUUID() }
-    );
+    const identity = request.current;
+    const id = conversationId;
+    const result = await window.enterpriseBrain.collaboration.sendMessage(id, {
+      content: draft.trim(),
+      idempotencyKey: crypto.randomUUID()
+    });
+    if (identity !== request.current || id !== conversationId) return;
     if (result.ok) {
       setMessages((old) => [...old, result.data]);
       setDraft('');
     } else setError(result.error);
+  }
+  async function markRead(notificationId: string) {
+    const identity = request.current;
+    setError(undefined);
+    const result =
+      await window.enterpriseBrain.collaboration.markNotificationRead(
+        notificationId,
+        true
+      );
+    if (identity !== request.current) return;
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    await load();
   }
   if (loading)
     return (
@@ -76,7 +103,7 @@ export function CollaborationPanel({
       />
     );
   if (error)
-    return error.code === 'FORBIDDEN' || error.code === 'NOT_FOUND' ? (
+    return denied(error) ? (
       <State title="没有访问权限" text="此协作内容不可用，或你的权限已变更。" />
     ) : (
       <ErrorState error={error} retry={() => void load()} />
@@ -91,11 +118,7 @@ export function CollaborationPanel({
             <article className="feed-item" key={item.notificationId}>
               <button
                 className="text-button"
-                onClick={() =>
-                  void window.enterpriseBrain.collaboration
-                    .markNotificationRead(item.notificationId, true)
-                    .then(load)
-                }
+                onClick={() => void markRead(item.notificationId)}
               >
                 <strong>{item.title}</strong>
                 <p>{item.body}</p>
@@ -137,12 +160,11 @@ export function CollaborationPanel({
   if (conversationId)
     return (
       <section className="collaboration">
-        <button className="back" onClick={() => setConversationId(undefined)}>
+        <button className="back" onClick={() => void load()}>
           ← 返回
         </button>
         <p className="breadcrumb">
-          <button onClick={() => setConversationId(undefined)}>动态</button> /
-          对话
+          <button onClick={() => void load()}>动态</button> / 对话
         </p>
         <h1>群聊</h1>
         <div className="message-list">
@@ -206,21 +228,42 @@ export function CollaborationPanel({
 }
 
 function Activity({ projectId }: { projectId?: string }) {
+  const request = useRef(0);
+  const [loading, setLoading] = useState(true);
   const [data, setData] = useState<SwarmEventContract[]>([]);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<DesktopApiError>();
+  async function load() {
+    const identity = ++request.current;
+    setLoading(true);
+    setError(undefined);
+    if (!projectId) {
+      setData([]);
+      setLoading(false);
+      return;
+    }
+    const result = await window.enterpriseBrain.collaboration.swarmEvents(
+      'PROJECT',
+      projectId
+    );
+    if (identity !== request.current) return;
+    if (result.ok) setData(result.data.items);
+    else setError(result.error);
+    setLoading(false);
+  }
   useEffect(() => {
-    if (!projectId) return;
-    void window.enterpriseBrain.collaboration
-      .swarmEvents('PROJECT', projectId)
-      .then((result) =>
-        result.ok ? setData(result.data.items) : setError(true)
-      );
+    void load();
   }, [projectId]);
   return (
     <section>
       <h2>蜂群 / 项目活动</h2>
-      {error ? (
-        <p>活动暂不可用。</p>
+      {loading ? (
+        <State title="正在加载项目活动…" text="正在读取蜂群动态。" />
+      ) : error ? (
+        denied(error) ? (
+          <State title="没有活动访问权限" text="你无权查看此项目活动。" />
+        ) : (
+          <ErrorState error={error} retry={() => void load()} />
+        )
       ) : data.length ? (
         data.map((event) => (
           <article className="feed-item" key={event.swarmEventId}>
@@ -236,45 +279,65 @@ function Activity({ projectId }: { projectId?: string }) {
 }
 
 function WorkQueue() {
+  const request = useRef(0);
+  const [loading, setLoading] = useState(true);
   const [actions, setActions] = useState<ActionItemContract[]>([]);
   const [reminders, setReminders] = useState<ReminderContract[]>([]);
-  useEffect(() => {
-    void Promise.all([
+  const [actionError, setActionError] = useState<DesktopApiError>();
+  const [reminderError, setReminderError] = useState<DesktopApiError>();
+  async function load() {
+    const identity = ++request.current;
+    setLoading(true);
+    setActionError(undefined);
+    setReminderError(undefined);
+    const [actionResult, reminderResult] = await Promise.all([
       window.enterpriseBrain.collaboration.actionItems(),
       window.enterpriseBrain.collaboration.reminders()
-    ]).then(([actionResult, reminderResult]) => {
-      if (actionResult.ok) setActions(actionResult.data);
-      if (reminderResult.ok) setReminders(reminderResult.data.items);
-    });
+    ]);
+    if (identity !== request.current) return;
+    if (actionResult.ok) setActions(actionResult.data);
+    else setActionError(actionResult.error);
+    if (reminderResult.ok) setReminders(reminderResult.data.items);
+    else setReminderError(reminderResult.error);
+    setLoading(false);
+  }
+  useEffect(() => {
+    void load();
   }, []);
+  const column = <T extends { title: string; type?: string; dueAt?: string | null }>(
+    title: string,
+    values: T[],
+    error?: DesktopApiError
+  ) => (
+    <section>
+      <h2>{title}</h2>
+      {loading ? (
+        <State title="正在加载…" text="正在读取待办信息。" />
+      ) : error ? (
+        denied(error) ? (
+          <State title="没有访问权限" text="此待办内容不可用。" />
+        ) : (
+          <ErrorState error={error} retry={() => void load()} />
+        )
+      ) : values.length ? (
+        values.map((item, index) => (
+          <article className="feed-item" key={`${item.title}-${index}`}>
+            <strong>{item.title}</strong>
+            <p>
+              {item.type ||
+                (item.dueAt ? new Date(item.dueAt).toLocaleString() : '')}
+            </p>
+          </article>
+        ))
+      ) : (
+        <p className="empty-inline">没有待处理事项。</p>
+      )}
+    </section>
+  );
   return (
     <div className="dynamic-grid">
-      <section>
-        <h2>行动队列</h2>
-        {actions.length ? (
-          actions.map((item) => (
-            <article className="feed-item" key={item.actionItemId}>
-              <strong>{item.title}</strong>
-              <p>{item.type}</p>
-            </article>
-          ))
-        ) : (
-          <p className="empty-inline">没有待处理事项。</p>
-        )}
-      </section>
-      <section>
-        <h2>提醒</h2>
-        {reminders.length ? (
-          reminders.map((item) => (
-            <article className="feed-item" key={item.reminderId}>
-              <strong>{item.title}</strong>
-              <p>{new Date(item.dueAt).toLocaleString()}</p>
-            </article>
-          ))
-        ) : (
-          <p className="empty-inline">没有待办提醒。</p>
-        )}
-      </section>
+      {column('行动队列', actions, actionError)}
+      {column('提醒', reminders, reminderError)}
     </div>
   );
 }
