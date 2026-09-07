@@ -5,13 +5,23 @@ import type {
   CurrentUserContract,
   ReadOnlyAgentToolIntent,
   ArtifactContract,
-  ResultContract, ReviewContract, ReviewDecision,
+  ResultContract,
+  ReviewContract,
+  ReviewDecision,
   HumanConfirmationContract,
   HumanConfirmationDetailContract,
   LocalPermission,
   ProjectContract,
   TaskContract,
-  TaskPriority
+  TaskPriority,
+  ActionItemContract,
+  ConversationContract,
+  CursorPage,
+  LibraryItemContract,
+  MessageContract,
+  NotificationContract,
+  ReminderContract,
+  SwarmEventContract
 } from '@enterprise-brain/contracts';
 
 export interface RuntimeInfo {
@@ -70,7 +80,10 @@ export interface EnterpriseBrainBridge {
   runtime: { getInfo(): Promise<DesktopResult<RuntimeInfo>> };
   auth: {
     currentUser(): Promise<DesktopResult<CurrentUserContract>>;
-    login(input: { login: string; password: string }): Promise<DesktopResult<CurrentUserContract>>;
+    login(input: {
+      login: string;
+      password: string;
+    }): Promise<DesktopResult<CurrentUserContract>>;
     logout(): Promise<DesktopResult<void>>;
     onAuthenticationLost?(listener: () => void): () => void;
   };
@@ -114,24 +127,85 @@ export interface EnterpriseBrainBridge {
     ): Promise<DesktopResult<{ run: AgentRunContract; localResult?: unknown }>>;
   };
   modelResponses: {
-    create(taskId: string, agentId: string, prompt: string, idempotencyKey: string): Promise<DesktopResult<ModelInvocationContract>>;
-    listForTask(taskId: string, limit?: number): Promise<DesktopResult<ModelInvocationContract[]>>;
+    create(
+      taskId: string,
+      agentId: string,
+      prompt: string,
+      idempotencyKey: string
+    ): Promise<DesktopResult<ModelInvocationContract>>;
+    listForTask(
+      taskId: string,
+      limit?: number
+    ): Promise<DesktopResult<ModelInvocationContract[]>>;
   };
   artifacts: {
     register(agentRunId: string): Promise<DesktopResult<ArtifactContract>>;
     listForTask(taskId: string): Promise<DesktopResult<ArtifactContract[]>>;
   };
   results: {
-    create(taskId: string, artifactIds: string[], idempotencyKey: string): Promise<DesktopResult<ResultContract>>;
+    create(
+      taskId: string,
+      artifactIds: string[],
+      idempotencyKey: string
+    ): Promise<DesktopResult<ResultContract>>;
     get(id: string): Promise<DesktopResult<ResultContract>>;
     submitReview(id: string): Promise<DesktopResult<ResultContract>>;
-    decide(id: string, decision: ReviewDecision, comment?: string): Promise<DesktopResult<ReviewContract>>;
+    decide(
+      id: string,
+      decision: ReviewDecision,
+      comment?: string
+    ): Promise<DesktopResult<ReviewContract>>;
     listReviews(id: string): Promise<DesktopResult<ReviewContract[]>>;
   };
   confirmedWrites: {
-    prepare(taskId: string, input: { relativePath: string; content: string }): Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>;
-    approve(confirmationId: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>>;
-    reject(confirmationId: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>;
+    prepare(
+      taskId: string,
+      input: { relativePath: string; content: string }
+    ): Promise<
+      DesktopResult<{
+        run: AgentRunContract;
+        confirmation: HumanConfirmationDetailContract;
+      }>
+    >;
+    approve(
+      confirmationId: string
+    ): Promise<
+      DesktopResult<{
+        confirmation: HumanConfirmationContract;
+        run?: AgentRunContract;
+      }>
+    >;
+    reject(
+      confirmationId: string
+    ): Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>;
+  };
+  collaboration: {
+    conversations(query?: {
+      scopeType?: 'PROJECT';
+      scopeId?: string;
+    }): Promise<DesktopResult<CursorPage<ConversationContract>>>;
+    messages(
+      conversationId: string
+    ): Promise<DesktopResult<CursorPage<MessageContract>>>;
+    sendMessage(
+      conversationId: string,
+      input: { content: string; idempotencyKey: string }
+    ): Promise<DesktopResult<MessageContract>>;
+    notifications(): Promise<DesktopResult<CursorPage<NotificationContract>>>;
+    markNotificationRead(
+      notificationId: string,
+      read: boolean
+    ): Promise<DesktopResult<NotificationContract>>;
+    reminders(): Promise<DesktopResult<CursorPage<ReminderContract>>>;
+    actionItems(): Promise<DesktopResult<ActionItemContract[]>>;
+    library(query?: {
+      scopeType?: 'PROJECT';
+      scopeId?: string;
+    }): Promise<DesktopResult<CursorPage<LibraryItemContract>>>;
+    swarmEvents(
+      scopeType: 'PROJECT',
+      scopeId: string
+    ): Promise<DesktopResult<CursorPage<SwarmEventContract>>>;
   };
 }
 
@@ -147,10 +221,16 @@ export function createEnterpriseBrainBridge(
         invoke('runtime:get-info') as Promise<DesktopResult<RuntimeInfo>>
     },
     auth: {
-      currentUser: () => invoke('auth:current-user') as Promise<DesktopResult<CurrentUserContract>>,
-      login: (input) => invoke('auth:login', input) as Promise<DesktopResult<CurrentUserContract>>,
-      logout: () => invoke('auth:logout') as Promise<DesktopResult<void>>
-      ,onAuthenticationLost: subscribeToAuthenticationLost
+      currentUser: () =>
+        invoke('auth:current-user') as Promise<
+          DesktopResult<CurrentUserContract>
+        >,
+      login: (input) =>
+        invoke('auth:login', input) as Promise<
+          DesktopResult<CurrentUserContract>
+        >,
+      logout: () => invoke('auth:logout') as Promise<DesktopResult<void>>,
+      onAuthenticationLost: subscribeToAuthenticationLost
     },
     projects: {
       list: () =>
@@ -202,15 +282,27 @@ export function createEnterpriseBrainBridge(
         >
     },
     agents: {
-      list: () => invoke('agents:list') as Promise<DesktopResult<AvailableAgentContract[]>>,
+      list: () =>
+        invoke('agents:list') as Promise<
+          DesktopResult<AvailableAgentContract[]>
+        >,
       run: (taskId, agentId, intent) =>
         invoke('agent-runs:run', { taskId, agentId, intent }) as Promise<
           DesktopResult<{ run: AgentRunContract; localResult?: unknown }>
         >
     },
     modelResponses: {
-      create: (taskId, agentId, prompt, idempotencyKey) => invoke('model-responses:create', { taskId, agentId, prompt, idempotencyKey }) as Promise<DesktopResult<ModelInvocationContract>>,
-      listForTask: (taskId, limit = 20) => invoke('model-responses:list-for-task', { taskId, limit }) as Promise<DesktopResult<ModelInvocationContract[]>>
+      create: (taskId, agentId, prompt, idempotencyKey) =>
+        invoke('model-responses:create', {
+          taskId,
+          agentId,
+          prompt,
+          idempotencyKey
+        }) as Promise<DesktopResult<ModelInvocationContract>>,
+      listForTask: (taskId, limit = 20) =>
+        invoke('model-responses:list-for-task', { taskId, limit }) as Promise<
+          DesktopResult<ModelInvocationContract[]>
+        >
     },
     artifacts: {
       register: (agentRunId) =>
@@ -221,21 +313,98 @@ export function createEnterpriseBrainBridge(
         invoke('artifacts:list-for-task', { taskId }) as Promise<
           DesktopResult<ArtifactContract[]>
         >
-    }
-    ,results: {
-      create: (taskId, artifactIds, idempotencyKey) => invoke('results:create', { taskId, artifactIds, idempotencyKey }) as Promise<DesktopResult<ResultContract>>,
-      get: (id) => invoke('results:get', { id }) as Promise<DesktopResult<ResultContract>>,
-      submitReview: (id) => invoke('results:submit-review', { id }) as Promise<DesktopResult<ResultContract>>,
-      decide: (id, decision, comment) => invoke('results:decide', { id, decision, comment }) as Promise<DesktopResult<ReviewContract>>,
-      listReviews: (id) => invoke('results:list-reviews', { id }) as Promise<DesktopResult<ReviewContract[]>>
-    }
-    ,confirmedWrites: {
-      prepare: (taskId, input) => invoke('confirmed-writes:prepare', { taskId, input }) as Promise<DesktopResult<{ run: AgentRunContract; confirmation: HumanConfirmationDetailContract }>>,
+    },
+    results: {
+      create: (taskId, artifactIds, idempotencyKey) =>
+        invoke('results:create', {
+          taskId,
+          artifactIds,
+          idempotencyKey
+        }) as Promise<DesktopResult<ResultContract>>,
+      get: (id) =>
+        invoke('results:get', { id }) as Promise<DesktopResult<ResultContract>>,
+      submitReview: (id) =>
+        invoke('results:submit-review', { id }) as Promise<
+          DesktopResult<ResultContract>
+        >,
+      decide: (id, decision, comment) =>
+        invoke('results:decide', { id, decision, comment }) as Promise<
+          DesktopResult<ReviewContract>
+        >,
+      listReviews: (id) =>
+        invoke('results:list-reviews', { id }) as Promise<
+          DesktopResult<ReviewContract[]>
+        >
+    },
+    confirmedWrites: {
+      prepare: (taskId, input) =>
+        invoke('confirmed-writes:prepare', { taskId, input }) as Promise<
+          DesktopResult<{
+            run: AgentRunContract;
+            confirmation: HumanConfirmationDetailContract;
+          }>
+        >,
       approve: async (confirmationId) => {
-        const result = await invoke('confirmed-writes:approve', { confirmationId }) as DesktopResult<{ confirmation: HumanConfirmationContract; run?: AgentRunContract }>;
-        return result.ok ? { ok: true as const, data: { confirmation: result.data.confirmation, ...(result.data.run ? { run: result.data.run } : {}) } } : result;
+        const result = (await invoke('confirmed-writes:approve', {
+          confirmationId
+        })) as DesktopResult<{
+          confirmation: HumanConfirmationContract;
+          run?: AgentRunContract;
+        }>;
+        return result.ok
+          ? {
+              ok: true as const,
+              data: {
+                confirmation: result.data.confirmation,
+                ...(result.data.run ? { run: result.data.run } : {})
+              }
+            }
+          : result;
       },
-      reject: (confirmationId) => invoke('confirmed-writes:reject', { confirmationId }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>
+      reject: (confirmationId) =>
+        invoke('confirmed-writes:reject', { confirmationId }) as Promise<
+          DesktopResult<{ confirmation: HumanConfirmationContract }>
+        >
+    },
+    collaboration: {
+      conversations: (query = {}) =>
+        invoke('collaboration:conversations', query) as Promise<
+          DesktopResult<CursorPage<ConversationContract>>
+        >,
+      messages: (conversationId) =>
+        invoke('collaboration:messages', { conversationId }) as Promise<
+          DesktopResult<CursorPage<MessageContract>>
+        >,
+      sendMessage: (conversationId, input) =>
+        invoke('collaboration:send-message', {
+          conversationId,
+          ...input
+        }) as Promise<DesktopResult<MessageContract>>,
+      notifications: () =>
+        invoke('collaboration:notifications') as Promise<
+          DesktopResult<CursorPage<NotificationContract>>
+        >,
+      markNotificationRead: (notificationId, read) =>
+        invoke('collaboration:notification-read', {
+          notificationId,
+          read
+        }) as Promise<DesktopResult<NotificationContract>>,
+      reminders: () =>
+        invoke('collaboration:reminders') as Promise<
+          DesktopResult<CursorPage<ReminderContract>>
+        >,
+      actionItems: () =>
+        invoke('collaboration:action-items') as Promise<
+          DesktopResult<ActionItemContract[]>
+        >,
+      library: (query = {}) =>
+        invoke('collaboration:library', query) as Promise<
+          DesktopResult<CursorPage<LibraryItemContract>>
+        >,
+      swarmEvents: (scopeType, scopeId) =>
+        invoke('collaboration:swarm-events', { scopeType, scopeId }) as Promise<
+          DesktopResult<CursorPage<SwarmEventContract>>
+        >
     }
   };
 }

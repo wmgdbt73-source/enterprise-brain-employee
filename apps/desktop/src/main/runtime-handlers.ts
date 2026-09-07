@@ -28,8 +28,29 @@ export function registerRuntimeHandlers(
     return gateway.logout();
   });
   ipc.handle('agents:list', () => gateway.listAvailableAgents());
-  ipc.handle('model-responses:create', (_event, payload: { taskId: string; agentId: string; prompt: string; idempotencyKey: string }) => gateway.createTaskAgentResponse(payload.taskId, payload.agentId, payload.prompt, payload.idempotencyKey));
-  ipc.handle('model-responses:list-for-task', (_event, payload: { taskId: string; limit?: number }) => gateway.listTaskAgentResponses(payload.taskId, payload.limit));
+  ipc.handle(
+    'model-responses:create',
+    (
+      _event,
+      payload: {
+        taskId: string;
+        agentId: string;
+        prompt: string;
+        idempotencyKey: string;
+      }
+    ) =>
+      gateway.createTaskAgentResponse(
+        payload.taskId,
+        payload.agentId,
+        payload.prompt,
+        payload.idempotencyKey
+      )
+  );
+  ipc.handle(
+    'model-responses:list-for-task',
+    (_event, payload: { taskId: string; limit?: number }) =>
+      gateway.listTaskAgentResponses(payload.taskId, payload.limit)
+  );
   ipc.handle('projects:list', () => gateway.listProjects());
   ipc.handle('projects:get', (_event, payload: { id: string }) =>
     gateway.getProject(payload.id)
@@ -82,9 +103,15 @@ export function registerRuntimeHandlers(
     );
   }
   if (confirmedWrites) {
-    ipc.handle('confirmed-writes:prepare', (_event, payload) => confirmedWrites.prepare(payload.taskId, payload.input));
-    ipc.handle('confirmed-writes:approve', (_event, payload) => confirmedWrites.approve(payload.confirmationId));
-    ipc.handle('confirmed-writes:reject', (_event, payload) => confirmedWrites.reject(payload.confirmationId));
+    ipc.handle('confirmed-writes:prepare', (_event, payload) =>
+      confirmedWrites.prepare(payload.taskId, payload.input)
+    );
+    ipc.handle('confirmed-writes:approve', (_event, payload) =>
+      confirmedWrites.approve(payload.confirmationId)
+    );
+    ipc.handle('confirmed-writes:reject', (_event, payload) =>
+      confirmedWrites.reject(payload.confirmationId)
+    );
   }
   ipc.handle('artifacts:register', (_event, payload: { agentRunId: string }) =>
     gateway.registerArtifact(payload.agentRunId)
@@ -92,13 +119,63 @@ export function registerRuntimeHandlers(
   ipc.handle('artifacts:list-for-task', (_event, payload: { taskId: string }) =>
     gateway.listArtifactsForTask(payload.taskId)
   );
-  ipc.handle('results:create', (_event, payload: { taskId: string; artifactIds: string[]; idempotencyKey: string }) =>
-    gateway.createResult(payload.taskId, payload.artifactIds, payload.idempotencyKey)
+  ipc.handle(
+    'results:create',
+    (
+      _event,
+      payload: { taskId: string; artifactIds: string[]; idempotencyKey: string }
+    ) =>
+      gateway.createResult(
+        payload.taskId,
+        payload.artifactIds,
+        payload.idempotencyKey
+      )
   );
-  ipc.handle('results:get', (_event, payload: { id: string }) => gateway.getResult(payload.id));
-  ipc.handle('results:submit-review', (_event, payload: { id: string }) => gateway.submitResultForReview(payload.id));
-  ipc.handle('results:decide', (_event, payload: { id: string; decision: import('@enterprise-brain/contracts').ReviewDecision; comment?: string }) => gateway.createReview(payload.id, payload.decision, payload.comment));
-  ipc.handle('results:list-reviews', (_event, payload: { id: string }) => gateway.listReviews(payload.id));
+  ipc.handle('results:get', (_event, payload: { id: string }) =>
+    gateway.getResult(payload.id)
+  );
+  ipc.handle('results:submit-review', (_event, payload: { id: string }) =>
+    gateway.submitResultForReview(payload.id)
+  );
+  ipc.handle(
+    'results:decide',
+    (
+      _event,
+      payload: {
+        id: string;
+        decision: import('@enterprise-brain/contracts').ReviewDecision;
+        comment?: string;
+      }
+    ) => gateway.createReview(payload.id, payload.decision, payload.comment)
+  );
+  ipc.handle('results:list-reviews', (_event, payload: { id: string }) =>
+    gateway.listReviews(payload.id)
+  );
+  ipc.handle('collaboration:conversations', (_event, query) =>
+    gateway.listConversations(query)
+  );
+  ipc.handle('collaboration:messages', (_event, payload) =>
+    gateway.listMessages(payload.conversationId)
+  );
+  ipc.handle('collaboration:send-message', (_event, payload) =>
+    gateway.sendMessage(
+      payload.conversationId,
+      payload.content,
+      payload.idempotencyKey
+    )
+  );
+  ipc.handle('collaboration:notifications', () => gateway.listNotifications());
+  ipc.handle('collaboration:notification-read', (_event, payload) =>
+    gateway.markNotificationRead(payload.notificationId, payload.read)
+  );
+  ipc.handle('collaboration:reminders', () => gateway.listReminders());
+  ipc.handle('collaboration:action-items', () => gateway.listActionItems());
+  ipc.handle('collaboration:library', (_event, query) =>
+    gateway.listLibrary(query)
+  );
+  ipc.handle('collaboration:swarm-events', (_event, payload) =>
+    gateway.listSwarmEvents(payload.scopeType, payload.scopeId)
+  );
 }
 
 async function handleWorkspace<T>(operation: () => Promise<T>) {

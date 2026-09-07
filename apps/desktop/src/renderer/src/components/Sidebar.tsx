@@ -13,12 +13,16 @@ export function Sidebar({
   projects,
   selectedProject,
   runtimeLabel,
-  onSelectProject
+  onSelectProject,
+  onOpenNotifications,
+  onOpenLibrary
 }: {
   projects: ProjectContract[];
   selectedProject?: ProjectContract;
   runtimeLabel: string;
   onSelectProject: (project: ProjectContract) => void;
+  onOpenNotifications: () => void;
+  onOpenLibrary: () => void;
 }) {
   return (
     <aside className="sidebar">
@@ -31,7 +35,11 @@ export function Sidebar({
       <div className="runtime">{runtimeLabel}</div>
       <nav>
         {disabledNavigation.map((item) => (
-          <button key={item} disabled>
+          <button
+            key={item}
+            disabled={item !== '资料库'}
+            onClick={item === '资料库' ? onOpenLibrary : undefined}
+          >
             {item}
             <small>后续实现</small>
           </button>
@@ -60,7 +68,13 @@ export function Sidebar({
       <div className="bottom">
         {['Profile', 'Notification', 'Settings', 'Daily Dashboard'].map(
           (item) => (
-            <button key={item} disabled>
+            <button
+              key={item}
+              disabled={item !== 'Notification'}
+              onClick={
+                item === 'Notification' ? onOpenNotifications : undefined
+              }
+            >
               {item}
               <small>后续实现</small>
             </button>

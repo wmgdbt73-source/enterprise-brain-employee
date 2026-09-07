@@ -5,7 +5,9 @@ import type {
   AgentToolRequest,
   AvailableAgentContract,
   ArtifactContract,
-  ResultContract, ReviewContract, ReviewDecision,
+  ResultContract,
+  ReviewContract,
+  ReviewDecision,
   ModelInvocationContract,
   CurrentUserContract,
   LoginRequest,
@@ -13,8 +15,17 @@ import type {
   HumanConfirmationDetailContract,
   ApprovedWriteExecutionGrant,
   ProjectContract,
-  TaskContract
+  TaskContract,
+  ActionItemContract,
+  ConversationContract,
+  CursorPage,
+  LibraryItemContract,
+  MessageContract,
+  NotificationContract,
+  ReminderContract,
+  SwarmEventContract
 } from '@enterprise-brain/contracts';
+import { demoRoutes } from '@enterprise-brain/contracts';
 import type {
   DesktopApiError,
   DesktopResult,
@@ -52,14 +63,39 @@ export class DesktopApiGateway {
         : result
     );
   }
-  async login(input: LoginRequest): Promise<DesktopResult<CurrentUserContract>> {
+  async login(
+    input: LoginRequest
+  ): Promise<DesktopResult<CurrentUserContract>> {
     const generation = ++this.authGeneration;
-    const result = await this.request('/auth/login', { method: 'POST', body: input, includeAuthorization: false });
+    const result = await this.request('/auth/login', {
+      method: 'POST',
+      body: input,
+      includeAuthorization: false
+    });
     if (!result.ok) return result;
-    const payload = result.data as { token?: unknown; user?: CurrentUserContract };
-    if (typeof payload.token !== 'string' || !payload.user) return { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Invalid login response', details: {} } };
+    const payload = result.data as {
+      token?: unknown;
+      user?: CurrentUserContract;
+    };
+    if (typeof payload.token !== 'string' || !payload.user)
+      return {
+        ok: false,
+        error: {
+          code: 'INTERNAL_ERROR',
+          message: 'Invalid login response',
+          details: {}
+        }
+      };
     // An earlier login response must never replace a newer session.
-    if (generation !== this.authGeneration) return { ok: false, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } };
+    if (generation !== this.authGeneration)
+      return {
+        ok: false,
+        error: {
+          code: 'AUTHENTICATION_REQUIRED',
+          message: 'Authentication is required',
+          details: {}
+        }
+      };
     this.bearerToken = payload.token;
     return { ok: true, data: payload.user };
   }
@@ -68,7 +104,11 @@ export class DesktopApiGateway {
     // Invalidate synchronously: late requests/logouts cannot affect a later login.
     ++this.authGeneration;
     this.bearerToken = undefined;
-    const result = await this.request('/auth/logout', { method: 'POST', includeAuthorization: false, authorizationToken: token });
+    const result = await this.request('/auth/logout', {
+      method: 'POST',
+      includeAuthorization: false,
+      authorizationToken: token
+    });
     return result.ok ? { ok: true, data: undefined } : result;
   }
   getCurrentUser(): Promise<DesktopResult<CurrentUserContract>> {
@@ -117,29 +157,105 @@ export class DesktopApiGateway {
     taskId: string,
     agentId: string | AgentToolIntent,
     maybeIntent?: AgentToolIntent
-  ): Promise<DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest; humanConfirmation?: HumanConfirmationContract }>> {
+  ): Promise<
+    DesktopResult<{
+      run: AgentRunContract;
+      toolRequest: AgentToolRequest;
+      humanConfirmation?: HumanConfirmationContract;
+    }>
+  > {
     return this.request(`/tasks/${encodeURIComponent(taskId)}/agent-runs`, {
       method: 'POST',
-      body: typeof agentId === 'string' ? { agentId, intent: maybeIntent } : agentId
+      body:
+        typeof agentId === 'string' ? { agentId, intent: maybeIntent } : agentId
     }) as Promise<
-      DesktopResult<{ run: AgentRunContract; toolRequest: AgentToolRequest; humanConfirmation?: HumanConfirmationContract }>
+      DesktopResult<{
+        run: AgentRunContract;
+        toolRequest: AgentToolRequest;
+        humanConfirmation?: HumanConfirmationContract;
+      }>
     >;
   }
-  listAvailableAgents(): Promise<DesktopResult<AvailableAgentContract[]>> { return this.request('/me/agents').then(r=>r.ok?{ok:true,data:(r.data as {agents:AvailableAgentContract[]}).agents}:r); }
-  createTaskAgentResponse(taskId: string, agentId: string, prompt: string, idempotencyKey: string): Promise<DesktopResult<ModelInvocationContract>> {
-    return this.request(`/tasks/${encodeURIComponent(taskId)}/agent-responses`, { method: 'POST', body: { agentId, prompt }, headers: { 'idempotency-key': idempotencyKey } }).then(result => result.ok ? { ok: true, data: (result.data as { invocation: ModelInvocationContract }).invocation } : result) as Promise<DesktopResult<ModelInvocationContract>>;
+  listAvailableAgents(): Promise<DesktopResult<AvailableAgentContract[]>> {
+    return this.request('/me/agents').then((r) =>
+      r.ok
+        ? {
+            ok: true,
+            data: (r.data as { agents: AvailableAgentContract[] }).agents
+          }
+        : r
+    );
   }
-  listTaskAgentResponses(taskId: string, limit = 20): Promise<DesktopResult<ModelInvocationContract[]>> {
-    return this.request(`/tasks/${encodeURIComponent(taskId)}/agent-responses?limit=${Math.min(50, Math.max(1, limit))}`).then(result => result.ok ? { ok: true, data: (result.data as { items: ModelInvocationContract[] }).items } : result) as Promise<DesktopResult<ModelInvocationContract[]>>;
+  createTaskAgentResponse(
+    taskId: string,
+    agentId: string,
+    prompt: string,
+    idempotencyKey: string
+  ): Promise<DesktopResult<ModelInvocationContract>> {
+    return this.request(
+      `/tasks/${encodeURIComponent(taskId)}/agent-responses`,
+      {
+        method: 'POST',
+        body: { agentId, prompt },
+        headers: { 'idempotency-key': idempotencyKey }
+      }
+    ).then((result) =>
+      result.ok
+        ? {
+            ok: true,
+            data: (result.data as { invocation: ModelInvocationContract })
+              .invocation
+          }
+        : result
+    ) as Promise<DesktopResult<ModelInvocationContract>>;
   }
-  getHumanConfirmation(id: string): Promise<DesktopResult<HumanConfirmationDetailContract>> {
-    return this.request(`/human-confirmations/${encodeURIComponent(id)}`) as Promise<DesktopResult<HumanConfirmationDetailContract>>;
+  listTaskAgentResponses(
+    taskId: string,
+    limit = 20
+  ): Promise<DesktopResult<ModelInvocationContract[]>> {
+    return this.request(
+      `/tasks/${encodeURIComponent(taskId)}/agent-responses?limit=${Math.min(50, Math.max(1, limit))}`
+    ).then((result) =>
+      result.ok
+        ? {
+            ok: true,
+            data: (result.data as { items: ModelInvocationContract[] }).items
+          }
+        : result
+    ) as Promise<DesktopResult<ModelInvocationContract[]>>;
   }
-  approveHumanConfirmation(id: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract; executionGrant?: ApprovedWriteExecutionGrant }>> {
-    return this.request(`/human-confirmations/${encodeURIComponent(id)}/approve`, { method: 'POST' }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract; executionGrant?: ApprovedWriteExecutionGrant }>>;
+  getHumanConfirmation(
+    id: string
+  ): Promise<DesktopResult<HumanConfirmationDetailContract>> {
+    return this.request(
+      `/human-confirmations/${encodeURIComponent(id)}`
+    ) as Promise<DesktopResult<HumanConfirmationDetailContract>>;
   }
-  rejectHumanConfirmation(id: string): Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>> {
-    return this.request(`/human-confirmations/${encodeURIComponent(id)}/reject`, { method: 'POST' }) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>;
+  approveHumanConfirmation(
+    id: string
+  ): Promise<
+    DesktopResult<{
+      confirmation: HumanConfirmationContract;
+      executionGrant?: ApprovedWriteExecutionGrant;
+    }>
+  > {
+    return this.request(
+      `/human-confirmations/${encodeURIComponent(id)}/approve`,
+      { method: 'POST' }
+    ) as Promise<
+      DesktopResult<{
+        confirmation: HumanConfirmationContract;
+        executionGrant?: ApprovedWriteExecutionGrant;
+      }>
+    >;
+  }
+  rejectHumanConfirmation(
+    id: string
+  ): Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>> {
+    return this.request(
+      `/human-confirmations/${encodeURIComponent(id)}/reject`,
+      { method: 'POST' }
+    ) as Promise<DesktopResult<{ confirmation: HumanConfirmationContract }>>;
   }
   completeAgentRun(
     runId: string,
@@ -174,24 +290,127 @@ export class DesktopApiGateway {
           : result
     );
   }
-  createResult(taskId: string, artifactIds: string[], idempotencyKey: string): Promise<DesktopResult<ResultContract>> {
-    return this.request(`/tasks/${encodeURIComponent(taskId)}/results`, { method: 'POST', body: { artifactIds }, headers: { 'idempotency-key': idempotencyKey } }) as Promise<DesktopResult<ResultContract>>;
+  createResult(
+    taskId: string,
+    artifactIds: string[],
+    idempotencyKey: string
+  ): Promise<DesktopResult<ResultContract>> {
+    return this.request(`/tasks/${encodeURIComponent(taskId)}/results`, {
+      method: 'POST',
+      body: { artifactIds },
+      headers: { 'idempotency-key': idempotencyKey }
+    }) as Promise<DesktopResult<ResultContract>>;
   }
   getResult(id: string): Promise<DesktopResult<ResultContract>> {
-    return this.request(`/results/${encodeURIComponent(id)}`) as Promise<DesktopResult<ResultContract>>;
+    return this.request(`/results/${encodeURIComponent(id)}`) as Promise<
+      DesktopResult<ResultContract>
+    >;
   }
   submitResultForReview(id: string): Promise<DesktopResult<ResultContract>> {
-    return this.request(`/results/${encodeURIComponent(id)}/submit-review`, { method: 'POST', body: {} }) as Promise<DesktopResult<ResultContract>>;
+    return this.request(`/results/${encodeURIComponent(id)}/submit-review`, {
+      method: 'POST',
+      body: {}
+    }) as Promise<DesktopResult<ResultContract>>;
   }
-  createReview(id: string, decision: ReviewDecision, comment?: string): Promise<DesktopResult<ReviewContract>> {
-    return this.request(`/results/${encodeURIComponent(id)}/reviews`, { method: 'POST', body: { decision, ...(comment ? { comment } : {}) } }) as Promise<DesktopResult<ReviewContract>>;
+  createReview(
+    id: string,
+    decision: ReviewDecision,
+    comment?: string
+  ): Promise<DesktopResult<ReviewContract>> {
+    return this.request(`/results/${encodeURIComponent(id)}/reviews`, {
+      method: 'POST',
+      body: { decision, ...(comment ? { comment } : {}) }
+    }) as Promise<DesktopResult<ReviewContract>>;
   }
   listReviews(id: string): Promise<DesktopResult<ReviewContract[]>> {
-    return this.request(`/results/${encodeURIComponent(id)}/reviews`).then((result) => result.ok ? { ok: true, data: (result.data as { reviews: ReviewContract[] }).reviews } : result);
+    return this.request(`/results/${encodeURIComponent(id)}/reviews`).then(
+      (result) =>
+        result.ok
+          ? {
+              ok: true,
+              data: (result.data as { reviews: ReviewContract[] }).reviews
+            }
+          : result
+    );
+  }
+  listConversations(
+    query: { scopeType?: 'PROJECT'; scopeId?: string } = {}
+  ): Promise<DesktopResult<CursorPage<ConversationContract>>> {
+    return this.request(withQuery(demoRoutes.conversations, query)) as Promise<
+      DesktopResult<CursorPage<ConversationContract>>
+    >;
+  }
+  listMessages(
+    id: string
+  ): Promise<DesktopResult<CursorPage<MessageContract>>> {
+    return this.request(
+      demoRoutes.conversationMessages(encodeURIComponent(id))
+    ) as Promise<DesktopResult<CursorPage<MessageContract>>>;
+  }
+  sendMessage(
+    id: string,
+    content: string,
+    idempotencyKey: string
+  ): Promise<DesktopResult<MessageContract>> {
+    return this.request(
+      demoRoutes.conversationMessages(encodeURIComponent(id)),
+      {
+        method: 'POST',
+        body: { content },
+        headers: { 'idempotency-key': idempotencyKey }
+      }
+    ) as Promise<DesktopResult<MessageContract>>;
+  }
+  listNotifications(): Promise<
+    DesktopResult<CursorPage<NotificationContract>>
+  > {
+    return this.request(demoRoutes.notifications) as Promise<
+      DesktopResult<CursorPage<NotificationContract>>
+    >;
+  }
+  markNotificationRead(
+    id: string,
+    read: boolean
+  ): Promise<DesktopResult<NotificationContract>> {
+    return this.request(demoRoutes.notificationRead(encodeURIComponent(id)), {
+      method: 'PATCH',
+      body: { read }
+    }) as Promise<DesktopResult<NotificationContract>>;
+  }
+  listReminders(): Promise<DesktopResult<CursorPage<ReminderContract>>> {
+    return this.request(demoRoutes.reminders) as Promise<
+      DesktopResult<CursorPage<ReminderContract>>
+    >;
+  }
+  listActionItems(): Promise<DesktopResult<ActionItemContract[]>> {
+    return this.request(demoRoutes.actionItems) as Promise<
+      DesktopResult<ActionItemContract[]>
+    >;
+  }
+  listLibrary(
+    query: { scopeType?: 'PROJECT'; scopeId?: string } = {}
+  ): Promise<DesktopResult<CursorPage<LibraryItemContract>>> {
+    return this.request(withQuery(demoRoutes.libraryItems, query)) as Promise<
+      DesktopResult<CursorPage<LibraryItemContract>>
+    >;
+  }
+  listSwarmEvents(
+    scopeType: 'PROJECT',
+    scopeId: string
+  ): Promise<DesktopResult<CursorPage<SwarmEventContract>>> {
+    return this.request(
+      withQuery(demoRoutes.swarmEvents, { scopeType, scopeId })
+    ) as Promise<DesktopResult<CursorPage<SwarmEventContract>>>;
   }
   private async request(
     path: string,
-    options: { method?: 'POST'; body?: unknown; headers?: Record<string, string>; includeAuthorization?: boolean; authorizationToken?: string } = {}
+    options: {
+      method?: 'POST' | 'PATCH';
+      body?: unknown;
+      headers?: Record<string, string>;
+      includeAuthorization?: boolean;
+      authorizationToken?: string;
+    } = {}
   ): Promise<DesktopResult<unknown>> {
     const generation = this.authGeneration;
     const token = options.authorizationToken ?? this.bearerToken;
@@ -202,7 +421,11 @@ export class DesktopApiGateway {
           method: options.method ?? 'GET',
           headers: {
             ...(options.body ? { 'content-type': 'application/json' } : {}),
-            ...((options.includeAuthorization !== false || options.authorizationToken !== undefined) && token ? { authorization: `Bearer ${token}` } : {}),
+            ...((options.includeAuthorization !== false ||
+              options.authorizationToken !== undefined) &&
+            token
+              ? { authorization: `Bearer ${token}` }
+              : {}),
             ...options.headers
           },
           body: options.body ? JSON.stringify(options.body) : undefined
@@ -210,7 +433,11 @@ export class DesktopApiGateway {
       );
       const payload = await response.json();
       if (response.ok) return { ok: true, data: payload };
-      if (response.status === 401 && generation === this.authGeneration && token === this.bearerToken) {
+      if (
+        response.status === 401 &&
+        generation === this.authGeneration &&
+        token === this.bearerToken
+      ) {
         this.bearerToken = undefined;
         ++this.authGeneration;
         this.options.onAuthenticationLost?.();
@@ -228,6 +455,18 @@ export class DesktopApiGateway {
       };
     }
   }
+}
+
+function withQuery(
+  path: string,
+  query: Record<string, string | undefined>
+): string {
+  const params = new URLSearchParams(
+    Object.entries(query).filter((entry): entry is [string, string] =>
+      Boolean(entry[1])
+    )
+  );
+  return params.size ? `${path}?${params}` : path;
 }
 function toApiError(payload: unknown, status: number): DesktopApiError {
   if (typeof payload === 'object' && payload !== null && 'error' in payload) {
