@@ -4,7 +4,7 @@ import { createPrismaClient, encodePassword, hashSessionToken } from '../../pack
 const url = process.env.DATABASE_URL; const database = url ? createPrismaClient(url) : undefined;
 const db = () => { if (!database) throw new Error('DATABASE_URL is required'); return database; };
 const now = new Date('2026-09-03T00:00:00.000Z');
-async function token(userId: string) { const raw = `token-${userId}-${'x'.repeat(40)}`; await db().account.create({ data: { id: `account-${userId}`, userId, login: `${userId}@test.local`, passwordHash: await encodePassword('Password!2026'), status: 'ACTIVE', createdAt: now, updatedAt: now } }); await db().session.create({ data: { id: `session-${userId}`, accountId: `account-${userId}`, tokenHash: hashSessionToken(raw), createdAt: now, expiresAt: new Date(now.getTime() + 86400000) } }); return { authorization: `Bearer ${raw}` }; }
+async function token(userId: string) { const raw = `token-${userId}-${'x'.repeat(40)}`; await db().account.create({ data: { id: `account-${userId}`, userId, login: `${userId}@test.local`, passwordHash: await encodePassword('Password!2026'), status: 'ACTIVE', createdAt: now, updatedAt: now } }); await db().session.create({ data: { id: `session-${userId}`, accountId: `account-${userId}`, tokenHash: hashSessionToken(raw), createdAt: now, expiresAt: new Date('2100-01-01T00:00:00.000Z') } }); return { authorization: `Bearer ${raw}` }; }
 async function fixture() {
   await db().organization.create({ data: { id: 'org-a', name: 'Enterprise Brain Demo', status: 'ACTIVE', createdAt: now, updatedAt: now } });
   await db().organization.create({ data: { id: 'org-b', name: 'Other', status: 'ACTIVE', createdAt: now, updatedAt: now } });
