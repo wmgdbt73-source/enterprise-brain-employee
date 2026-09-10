@@ -4,8 +4,8 @@ import type {
   TaskContract,
   ArtifactContract,
   AgentRunContract,
-  ResultContract
-  ,AvailableAgentContract
+  ResultContract,
+  AvailableAgentContract
 } from '@enterprise-brain/contracts';
 import type {
   DesktopApiError,
@@ -22,6 +22,7 @@ import {
 } from './features/projects/ProjectWorkspace.js';
 import { resolveOperation } from './features/runtime/operation-state.js';
 import { LoginScreen } from './features/auth/LoginScreen.js';
+import { CollaborationPanel } from './features/collaboration/CollaborationPanel.js';
 import './styles.css';
 
 export function App() {
@@ -35,9 +36,11 @@ export function App() {
   const [agentError, setAgentError] = useState<DesktopApiError>();
   const [agentsLoading, setAgentsLoading] = useState(false);
   const [tab, setTab] = useState<ProjectTab>('任务');
+  const [globalView, setGlobalView] = useState<'notifications' | 'library'>();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<DesktopApiError>();
-  const [currentUser, setCurrentUser] = useState<import('@enterprise-brain/contracts').CurrentUserContract>();
+  const [currentUser, setCurrentUser] =
+    useState<import('@enterprise-brain/contracts').CurrentUserContract>();
   const [runtimeLabel, setRuntimeLabel] = useState('Work · Desktop Runtime');
   const selectedTaskIdRef = useRef<string | undefined>(undefined);
   const selectedProjectIdRef = useRef<string | undefined>(undefined);
@@ -52,39 +55,94 @@ export function App() {
   const clearAuthenticatedState = useCallback(() => {
     ++authGenerationRef.current;
     agentsLoadingRef.current = false;
-    setCurrentUser(undefined); setProjects([]); setProject(undefined); setTasks([]); setTask(undefined); setArtifacts([]); setAgents([]); setSelectedAgentId(undefined); setAgentError(undefined); setError(undefined); setLoading(false);
+    setCurrentUser(undefined);
+    setProjects([]);
+    setProject(undefined);
+    setTasks([]);
+    setTask(undefined);
+    setArtifacts([]);
+    setAgents([]);
+    setSelectedAgentId(undefined);
+    setAgentError(undefined);
+    setError(undefined);
+    setLoading(false);
   }, []);
-  const loadProjects = useCallback(async (generation = authGenerationRef.current) => {
-    setLoading(true);
-    const operation = resolveOperation(
-      await window.enterpriseBrain.projects.list()
-    );
-    if (generation !== authGenerationRef.current) return;
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
-    if (operation.data) setProjects(operation.data);
-    setError(operation.error); setLoading(false);
-  }, [clearAuthenticatedState]);
-  const loadTasks = useCallback(async (projectId: string, generation = authGenerationRef.current) => {
-    setLoading(true);
-    const operation = resolveOperation(
-      await window.enterpriseBrain.tasks.list(projectId)
-    );
-    if (generation !== authGenerationRef.current) return;
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
-    if (operation.data) setTasks(operation.data);
-    setError(operation.error); setLoading(false);
-  }, [clearAuthenticatedState]);
+  const loadProjects = useCallback(
+    async (generation = authGenerationRef.current) => {
+      setLoading(true);
+      const operation = resolveOperation(
+        await window.enterpriseBrain.projects.list()
+      );
+      if (generation !== authGenerationRef.current) return;
+      if (operation.error?.code === 'AUTHENTICATION_REQUIRED')
+        return clearAuthenticatedState();
+      if (operation.data) setProjects(operation.data);
+      setError(operation.error);
+      setLoading(false);
+    },
+    [clearAuthenticatedState]
+  );
+  const loadTasks = useCallback(
+    async (projectId: string, generation = authGenerationRef.current) => {
+      setLoading(true);
+      const operation = resolveOperation(
+        await window.enterpriseBrain.tasks.list(projectId)
+      );
+      if (generation !== authGenerationRef.current) return;
+      if (operation.error?.code === 'AUTHENTICATION_REQUIRED')
+        return clearAuthenticatedState();
+      if (operation.data) setTasks(operation.data);
+      setError(operation.error);
+      setLoading(false);
+    },
+    [clearAuthenticatedState]
+  );
   useEffect(() => {
     const generation = authGenerationRef.current;
     void window.enterpriseBrain.auth.currentUser().then((result) => {
       if (generation !== authGenerationRef.current) return;
       const operation = resolveOperation(result);
-      if (operation.data) { setCurrentUser(operation.data); void loadProjects(generation); void loadAgents(generation); }
-      else setLoading(false);
+      if (operation.data) {
+        setCurrentUser(operation.data);
+        void loadProjects(generation);
+        void loadAgents(generation);
+      } else setLoading(false);
     });
   }, [loadProjects]);
-  const loadAgents = useCallback(async (generation = authGenerationRef.current) => { const list=window.enterpriseBrain.agents.list; if (!list || agentsLoadingRef.current) return; agentsLoadingRef.current=true; setAgentsLoading(true); const result=await list(); if(generation!==authGenerationRef.current){agentsLoadingRef.current=false;return;} agentsLoadingRef.current=false;setAgentsLoading(false);if(!result.ok){if(result.error.code==='AUTHENTICATION_REQUIRED')return clearAuthenticatedState();setAgentError(result.error);return;} setAgentError(undefined);setAgents(result.data);setSelectedAgentId(old=>old&&result.data.some(a=>a.id===old)?old:undefined); },[clearAuthenticatedState]);
-  useEffect(() => window.enterpriseBrain.auth.onAuthenticationLost?.(clearAuthenticatedState), [clearAuthenticatedState]);
+  const loadAgents = useCallback(
+    async (generation = authGenerationRef.current) => {
+      const list = window.enterpriseBrain.agents.list;
+      if (!list || agentsLoadingRef.current) return;
+      agentsLoadingRef.current = true;
+      setAgentsLoading(true);
+      const result = await list();
+      if (generation !== authGenerationRef.current) {
+        agentsLoadingRef.current = false;
+        return;
+      }
+      agentsLoadingRef.current = false;
+      setAgentsLoading(false);
+      if (!result.ok) {
+        if (result.error.code === 'AUTHENTICATION_REQUIRED')
+          return clearAuthenticatedState();
+        setAgentError(result.error);
+        return;
+      }
+      setAgentError(undefined);
+      setAgents(result.data);
+      setSelectedAgentId((old) =>
+        old && result.data.some((a) => a.id === old) ? old : undefined
+      );
+    },
+    [clearAuthenticatedState]
+  );
+  useEffect(
+    () =>
+      window.enterpriseBrain.auth.onAuthenticationLost?.(
+        clearAuthenticatedState
+      ),
+    [clearAuthenticatedState]
+  );
   useEffect(() => {
     if (error?.code !== 'AUTHENTICATION_REQUIRED') return;
     clearAuthenticatedState();
@@ -100,7 +158,8 @@ export function App() {
       .then((result) => {
         const operation = resolveOperation(result);
         if (generation !== authGenerationRef.current) return;
-        if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
+        if (operation.error?.code === 'AUTHENTICATION_REQUIRED')
+          return clearAuthenticatedState();
         if (operation.data) setArtifacts(operation.data);
       });
   }, [task, clearAuthenticatedState]);
@@ -117,6 +176,7 @@ export function App() {
     project ? void loadTasks(project.id) : void loadProjects();
   function selectProject(value: ProjectContract) {
     setProject(value);
+    setGlobalView(undefined);
     setTask(undefined);
     setError(undefined);
   }
@@ -124,7 +184,11 @@ export function App() {
     const generation = ++authGenerationRef.current;
     const result = await window.enterpriseBrain.auth.login(input);
     if (generation !== authGenerationRef.current) return result;
-    if (result.ok) { setCurrentUser(result.data); setError(undefined); await Promise.all([loadProjects(generation),loadAgents(generation)]); }
+    if (result.ok) {
+      setCurrentUser(result.data);
+      setError(undefined);
+      await Promise.all([loadProjects(generation), loadAgents(generation)]);
+    }
     return result;
   }
   async function logout() {
@@ -137,11 +201,13 @@ export function App() {
       await window.enterpriseBrain.projects.create(input)
     );
     if (generation !== authGenerationRef.current) return;
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED')
+      return clearAuthenticatedState();
     if (operation.error) return setError(operation.error);
     setError(undefined);
     await loadProjects(generation);
-    if (operation.data && generation === authGenerationRef.current) setProject(operation.data);
+    if (operation.data && generation === authGenerationRef.current)
+      setProject(operation.data);
   }
   async function createTask(input: TaskInput) {
     if (!project) return;
@@ -150,19 +216,34 @@ export function App() {
       await window.enterpriseBrain.tasks.create(project.id, input)
     );
     if (generation !== authGenerationRef.current) return;
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED')
+      return clearAuthenticatedState();
     if (operation.error) return setError(operation.error);
     setError(undefined);
     await loadTasks(project.id, generation);
-    if (operation.data && generation === authGenerationRef.current) setTask(operation.data);
+    if (operation.data && generation === authGenerationRef.current)
+      setTask(operation.data);
   }
-  async function startTask(value: TaskContract): Promise<DesktopResult<TaskContract>> {
+  async function startTask(
+    value: TaskContract
+  ): Promise<DesktopResult<TaskContract>> {
     const generation = authGenerationRef.current;
     const operation = resolveOperation(
       await window.enterpriseBrain.tasks.start(value.id)
     );
-    if (generation !== authGenerationRef.current) return { ok: false, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } };
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') { clearAuthenticatedState(); return { ok: false, error: operation.error }; }
+    if (generation !== authGenerationRef.current)
+      return {
+        ok: false,
+        error: {
+          code: 'AUTHENTICATION_REQUIRED',
+          message: 'Authentication is required',
+          details: {}
+        }
+      };
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') {
+      clearAuthenticatedState();
+      return { ok: false, error: operation.error };
+    }
     if (operation.error) return { ok: false, error: operation.error };
     setError(undefined);
     if (operation.data) {
@@ -171,7 +252,14 @@ export function App() {
     }
     return operation.data
       ? { ok: true, data: operation.data }
-      : { ok: false, error: { code: 'INTERNAL_ERROR', message: 'Task start returned no data', details: {} } };
+      : {
+          ok: false,
+          error: {
+            code: 'INTERNAL_ERROR',
+            message: 'Task start returned no data',
+            details: {}
+          }
+        };
   }
   async function readFile(
     value: TaskContract,
@@ -197,20 +285,72 @@ export function App() {
     setError(undefined);
     return operation.data?.run;
   }
-  async function createModelResponse(value: TaskContract, agentId: string, prompt: string, idempotencyKey: string) {
+  async function createModelResponse(
+    value: TaskContract,
+    agentId: string,
+    prompt: string,
+    idempotencyKey: string
+  ) {
     const generation = authGenerationRef.current;
-    if (!window.enterpriseBrain.modelResponses) return { ok: false as const, error: { code: 'MODEL_PROVIDER_NOT_CONFIGURED', message: 'Model responses are unavailable', details: {} } };
-    const response = await window.enterpriseBrain.modelResponses.create(value.id, agentId, prompt, idempotencyKey);
-    if (generation !== authGenerationRef.current || selectedTaskIdRef.current !== value.id) return { ok: false as const, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } };
-    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED') clearAuthenticatedState();
+    if (!window.enterpriseBrain.modelResponses)
+      return {
+        ok: false as const,
+        error: {
+          code: 'MODEL_PROVIDER_NOT_CONFIGURED',
+          message: 'Model responses are unavailable',
+          details: {}
+        }
+      };
+    const response = await window.enterpriseBrain.modelResponses.create(
+      value.id,
+      agentId,
+      prompt,
+      idempotencyKey
+    );
+    if (
+      generation !== authGenerationRef.current ||
+      selectedTaskIdRef.current !== value.id
+    )
+      return {
+        ok: false as const,
+        error: {
+          code: 'AUTHENTICATION_REQUIRED',
+          message: 'Authentication is required',
+          details: {}
+        }
+      };
+    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED')
+      clearAuthenticatedState();
     return response;
   }
   async function listModelResponses(value: TaskContract) {
     const generation = authGenerationRef.current;
-    if (!window.enterpriseBrain.modelResponses) return { ok: false as const, error: { code: 'MODEL_PROVIDER_NOT_CONFIGURED', message: 'Model responses are unavailable', details: {} } };
-    const response = await window.enterpriseBrain.modelResponses.listForTask(value.id);
-    if (generation !== authGenerationRef.current || selectedTaskIdRef.current !== value.id) return { ok: false as const, error: { code: 'AUTHENTICATION_REQUIRED', message: 'Authentication is required', details: {} } };
-    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED') clearAuthenticatedState();
+    if (!window.enterpriseBrain.modelResponses)
+      return {
+        ok: false as const,
+        error: {
+          code: 'MODEL_PROVIDER_NOT_CONFIGURED',
+          message: 'Model responses are unavailable',
+          details: {}
+        }
+      };
+    const response = await window.enterpriseBrain.modelResponses.listForTask(
+      value.id
+    );
+    if (
+      generation !== authGenerationRef.current ||
+      selectedTaskIdRef.current !== value.id
+    )
+      return {
+        ok: false as const,
+        error: {
+          code: 'AUTHENTICATION_REQUIRED',
+          message: 'Authentication is required',
+          details: {}
+        }
+      };
+    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED')
+      clearAuthenticatedState();
     return response;
   }
   async function registerArtifact(agentRunId: string) {
@@ -219,7 +359,8 @@ export function App() {
       await window.enterpriseBrain.artifacts.register(agentRunId)
     );
     if (generation !== authGenerationRef.current) return;
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED')
+      return clearAuthenticatedState();
     if (operation.error) return setError(operation.error);
     setError(undefined);
     if (task) {
@@ -227,33 +368,51 @@ export function App() {
         await window.enterpriseBrain.artifacts.listForTask(task.id)
       );
       if (generation === authGenerationRef.current) {
-        if (listed.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
+        if (listed.error?.code === 'AUTHENTICATION_REQUIRED')
+          return clearAuthenticatedState();
         if (listed.data) setArtifacts(listed.data);
       }
     }
   }
-  async function prepareWrite(value: TaskContract, input: { relativePath: string; content: string }) {
+  async function prepareWrite(
+    value: TaskContract,
+    input: { relativePath: string; content: string }
+  ) {
     const generation = authGenerationRef.current;
-    const operation = resolveOperation(await window.enterpriseBrain.confirmedWrites.prepare(value.id, input));
+    const operation = resolveOperation(
+      await window.enterpriseBrain.confirmedWrites.prepare(value.id, input)
+    );
     if (generation !== authGenerationRef.current) return undefined;
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') { clearAuthenticatedState(); return undefined; }
-    if (operation.error) { setError(operation.error); return undefined; }
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') {
+      clearAuthenticatedState();
+      return undefined;
+    }
+    if (operation.error) {
+      setError(operation.error);
+      return undefined;
+    }
     setError(undefined);
     return operation.data?.confirmation;
   }
   async function approveWrite(confirmationId: string) {
     const generation = authGenerationRef.current;
-    const operation = resolveOperation(await window.enterpriseBrain.confirmedWrites.approve(confirmationId));
+    const operation = resolveOperation(
+      await window.enterpriseBrain.confirmedWrites.approve(confirmationId)
+    );
     if (generation !== authGenerationRef.current) return;
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED')
+      return clearAuthenticatedState();
     if (operation.error) return setError(operation.error);
     setError(undefined);
   }
   async function rejectWrite(confirmationId: string) {
     const generation = authGenerationRef.current;
-    const operation = resolveOperation(await window.enterpriseBrain.confirmedWrites.reject(confirmationId));
+    const operation = resolveOperation(
+      await window.enterpriseBrain.confirmedWrites.reject(confirmationId)
+    );
     if (generation !== authGenerationRef.current) return;
-    if (operation.error?.code === 'AUTHENTICATION_REQUIRED') return clearAuthenticatedState();
+    if (operation.error?.code === 'AUTHENTICATION_REQUIRED')
+      return clearAuthenticatedState();
     if (operation.error) return setError(operation.error);
     setError(undefined);
   }
@@ -264,39 +423,79 @@ export function App() {
   ): Promise<DesktopResult<ResultContract>> {
     // Candidate creation owns a recoverable, attempt-scoped error in TaskDetail.
     // Do not replace the workspace and discard its idempotency identity.
-    return window.enterpriseBrain.results.create(value.id, artifactIds, idempotencyKey);
+    return window.enterpriseBrain.results.create(
+      value.id,
+      artifactIds,
+      idempotencyKey
+    );
   }
-  async function submitResult(resultId: string): Promise<DesktopResult<ResultContract>> {
+  async function submitResult(
+    resultId: string
+  ): Promise<DesktopResult<ResultContract>> {
     const generation = authGenerationRef.current;
     const selectedTask = task;
-    const response = await window.enterpriseBrain.results.submitReview(resultId);
+    const response =
+      await window.enterpriseBrain.results.submitReview(resultId);
     if (generation !== authGenerationRef.current) return response;
-    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED') clearAuthenticatedState();
-    if (response.ok && selectedTask && selectedTaskIdRef.current === selectedTask.id) {
-      const refreshed = resolveOperation(await window.enterpriseBrain.tasks.get(selectedTask.id));
-      if (refreshed.data && generation === authGenerationRef.current && selectedTaskIdRef.current === selectedTask.id) {
+    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED')
+      clearAuthenticatedState();
+    if (
+      response.ok &&
+      selectedTask &&
+      selectedTaskIdRef.current === selectedTask.id
+    ) {
+      const refreshed = resolveOperation(
+        await window.enterpriseBrain.tasks.get(selectedTask.id)
+      );
+      if (
+        refreshed.data &&
+        generation === authGenerationRef.current &&
+        selectedTaskIdRef.current === selectedTask.id
+      ) {
         setTask(refreshed.data);
         await loadTasks(refreshed.data.projectId);
       }
     }
     return response;
   }
-  const getResult = (resultId: string) => window.enterpriseBrain.results.get(resultId);
-  const listResultReviews = (resultId: string) => window.enterpriseBrain.results.listReviews(resultId);
-  const decideResult = async (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => {
+  const getResult = (resultId: string) =>
+    window.enterpriseBrain.results.get(resultId);
+  const listResultReviews = (resultId: string) =>
+    window.enterpriseBrain.results.listReviews(resultId);
+  const decideResult = async (
+    resultId: string,
+    decision: 'ACCEPT' | 'REWORK',
+    comment?: string
+  ) => {
     const generation = authGenerationRef.current;
-    const response = await window.enterpriseBrain.results.decide(resultId, decision, comment);
+    const response = await window.enterpriseBrain.results.decide(
+      resultId,
+      decision,
+      comment
+    );
     if (generation !== authGenerationRef.current) return response;
-    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED') { clearAuthenticatedState(); return response; }
+    if (!response.ok && response.error.code === 'AUTHENTICATION_REQUIRED') {
+      clearAuthenticatedState();
+      return response;
+    }
     if (response.ok) {
-      const decided = resolveOperation(await window.enterpriseBrain.results.get(resultId));
+      const decided = resolveOperation(
+        await window.enterpriseBrain.results.get(resultId)
+      );
       const taskId = decided.data?.taskId;
       const projectId = decided.data?.projectId;
-      if (taskId && generation === authGenerationRef.current && selectedTaskIdRef.current === taskId) {
-        const refreshed = resolveOperation(await window.enterpriseBrain.tasks.get(taskId));
+      if (
+        taskId &&
+        generation === authGenerationRef.current &&
+        selectedTaskIdRef.current === taskId
+      ) {
+        const refreshed = resolveOperation(
+          await window.enterpriseBrain.tasks.get(taskId)
+        );
         if (refreshed.data && selectedTaskIdRef.current === taskId) {
-        setTask(refreshed.data);
-        if (selectedProjectIdRef.current === projectId) await loadTasks(refreshed.data.projectId);
+          setTask(refreshed.data);
+          if (selectedProjectIdRef.current === projectId)
+            await loadTasks(refreshed.data.projectId);
         }
       }
     }
@@ -310,6 +509,8 @@ export function App() {
         selectedProject={project}
         runtimeLabel={runtimeLabel}
         onSelectProject={selectProject}
+        onOpenNotifications={() => setGlobalView('notifications')}
+        onOpenLibrary={() => setGlobalView('library')}
       />
       <main className="content">
         {!currentUser ? (
@@ -321,6 +522,8 @@ export function App() {
             title="正在连接 Work Runtime…"
             text="正在读取当前用户可访问的项目。"
           />
+        ) : globalView ? (
+          <CollaborationPanel mode={globalView} />
         ) : !project ? (
           <ProjectHome
             projects={projects}
@@ -354,11 +557,22 @@ export function App() {
             agentError={agentError}
             agentsLoading={agentsLoading}
             onRefreshAgents={() => void loadAgents()}
-            onCreateModelResponse={supportsModelResponses ? createModelResponse : undefined}
-            onListModelResponses={supportsModelResponses ? listModelResponses : undefined}
+            onCreateModelResponse={
+              supportsModelResponses ? createModelResponse : undefined
+            }
+            onListModelResponses={
+              supportsModelResponses ? listModelResponses : undefined
+            }
           />
         )}
-        {currentUser && <button className="logout" onClick={() => void logout()}>Sign out · {currentUser.name}{currentUser.organization ? ` · ${currentUser.organization.name}${currentUser.department ? ` · ${currentUser.department.name}` : ''}` : ''}</button>}
+        {currentUser && (
+          <button className="logout" onClick={() => void logout()}>
+            Sign out · {currentUser.name}
+            {currentUser.organization
+              ? ` · ${currentUser.organization.name}${currentUser.department ? ` · ${currentUser.department.name}` : ''}`
+              : ''}
+          </button>
+        )}
       </main>
     </div>
   );

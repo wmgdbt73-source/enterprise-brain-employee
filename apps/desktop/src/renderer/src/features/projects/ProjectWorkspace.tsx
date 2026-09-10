@@ -1,14 +1,19 @@
 import type {
   ProjectContract,
   ArtifactContract,
-  TaskContract, AvailableAgentContract
+  TaskContract,
+  AvailableAgentContract
 } from '@enterprise-brain/contracts';
-import type { DesktopResult, TaskInput } from '../../../../shared/enterprise-brain.js';
+import type {
+  DesktopResult,
+  TaskInput
+} from '../../../../shared/enterprise-brain.js';
 import { State } from '../../components/State.js';
 import { TaskDetail } from '../tasks/TaskDetail.js';
 import { TaskForm } from '../tasks/TaskForm.js';
 import { TaskList } from '../tasks/TaskList.js';
 import { WorkspacePanel } from '../workspace/WorkspacePanel.js';
+import { CollaborationPanel } from '../collaboration/CollaborationPanel.js';
 
 export const projectTabs = ['动态', '计划', '任务', '资产', '配置'] as const;
 export type ProjectTab = (typeof projectTabs)[number];
@@ -24,17 +29,23 @@ export function ProjectWorkspace({
   onStartTask,
   artifacts,
   onReadFile,
-  onRegisterArtifact
-  ,onPrepareWrite,
+  onRegisterArtifact,
+  onPrepareWrite,
   onApproveWrite,
-  onRejectWrite
-  ,onCreateResult
-  ,onSubmitResult
-  ,onGetResult
-  ,onListReviews
-  ,onDecideReview
-  ,agents, selectedAgentId, onSelectAgent, agentError, agentsLoading, onRefreshAgents
-  ,onCreateModelResponse, onListModelResponses
+  onRejectWrite,
+  onCreateResult,
+  onSubmitResult,
+  onGetResult,
+  onListReviews,
+  onDecideReview,
+  agents,
+  selectedAgentId,
+  onSelectAgent,
+  agentError,
+  agentsLoading,
+  onRefreshAgents,
+  onCreateModelResponse,
+  onListModelResponses
 }: {
   project: ProjectContract;
   tab: ProjectTab;
@@ -43,7 +54,9 @@ export function ProjectWorkspace({
   task?: TaskContract;
   onCreateTask: (input: TaskInput) => Promise<void>;
   onSelectTask: (task: TaskContract) => void;
-  onStartTask: (task: TaskContract) => Promise<DesktopResult<TaskContract> | void>;
+  onStartTask: (
+    task: TaskContract
+  ) => Promise<DesktopResult<TaskContract> | void>;
   artifacts: ArtifactContract[];
   onReadFile: (
     task: TaskContract,
@@ -52,17 +65,65 @@ export function ProjectWorkspace({
     import('@enterprise-brain/contracts').AgentRunContract | undefined
   >;
   onRegisterArtifact: (agentRunId: string) => Promise<void>;
-  onPrepareWrite: (task: TaskContract, input: { relativePath: string; content: string }) => Promise<import('@enterprise-brain/contracts').HumanConfirmationDetailContract | undefined>;
+  onPrepareWrite: (
+    task: TaskContract,
+    input: { relativePath: string; content: string }
+  ) => Promise<
+    | import('@enterprise-brain/contracts').HumanConfirmationDetailContract
+    | undefined
+  >;
   onApproveWrite: (confirmationId: string) => Promise<void>;
   onRejectWrite: (confirmationId: string) => Promise<void>;
-  onCreateResult: (task: TaskContract, artifactIds: string[], idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
-  onSubmitResult: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
-  onGetResult: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ResultContract>>;
-  onListReviews: (resultId: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract[]>>;
-  onDecideReview: (resultId: string, decision: 'ACCEPT' | 'REWORK', comment?: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ReviewContract>>;
-  agents: AvailableAgentContract[]; selectedAgentId?: string; onSelectAgent: (id:string)=>void; agentError?: import('../../../../shared/enterprise-brain.js').DesktopApiError; agentsLoading?: boolean; onRefreshAgents: () => void;
-  onCreateModelResponse?: (task: TaskContract, agentId: string, prompt: string, idempotencyKey: string) => Promise<DesktopResult<import('@enterprise-brain/contracts').ModelInvocationContract>>;
-  onListModelResponses?: (task: TaskContract) => Promise<DesktopResult<import('@enterprise-brain/contracts').ModelInvocationContract[]>>;
+  onCreateResult: (
+    task: TaskContract,
+    artifactIds: string[],
+    idempotencyKey: string
+  ) => Promise<
+    DesktopResult<import('@enterprise-brain/contracts').ResultContract>
+  >;
+  onSubmitResult: (
+    resultId: string
+  ) => Promise<
+    DesktopResult<import('@enterprise-brain/contracts').ResultContract>
+  >;
+  onGetResult: (
+    resultId: string
+  ) => Promise<
+    DesktopResult<import('@enterprise-brain/contracts').ResultContract>
+  >;
+  onListReviews: (
+    resultId: string
+  ) => Promise<
+    DesktopResult<import('@enterprise-brain/contracts').ReviewContract[]>
+  >;
+  onDecideReview: (
+    resultId: string,
+    decision: 'ACCEPT' | 'REWORK',
+    comment?: string
+  ) => Promise<
+    DesktopResult<import('@enterprise-brain/contracts').ReviewContract>
+  >;
+  agents: AvailableAgentContract[];
+  selectedAgentId?: string;
+  onSelectAgent: (id: string) => void;
+  agentError?: import('../../../../shared/enterprise-brain.js').DesktopApiError;
+  agentsLoading?: boolean;
+  onRefreshAgents: () => void;
+  onCreateModelResponse?: (
+    task: TaskContract,
+    agentId: string,
+    prompt: string,
+    idempotencyKey: string
+  ) => Promise<
+    DesktopResult<import('@enterprise-brain/contracts').ModelInvocationContract>
+  >;
+  onListModelResponses?: (
+    task: TaskContract
+  ) => Promise<
+    DesktopResult<
+      import('@enterprise-brain/contracts').ModelInvocationContract[]
+    >
+  >;
 }) {
   return (
     <section className="page">
@@ -80,7 +141,9 @@ export function ProjectWorkspace({
           </button>
         ))}
       </div>
-      {tab === '配置' ? (
+      {tab === '动态' ? (
+        <CollaborationPanel mode="dynamic" projectId={project.id} />
+      ) : tab === '配置' ? (
         <WorkspacePanel projectId={project.id} />
       ) : tab !== '任务' ? (
         <State
@@ -108,8 +171,14 @@ export function ProjectWorkspace({
             onGetResult={onGetResult}
             onListReviews={onListReviews}
             onDecideReview={onDecideReview}
-            agents={agents} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} agentError={agentError} agentsLoading={agentsLoading} onRefreshAgents={onRefreshAgents}
-            onCreateModelResponse={onCreateModelResponse} onListModelResponses={onListModelResponses}
+            agents={agents}
+            selectedAgentId={selectedAgentId}
+            onSelectAgent={onSelectAgent}
+            agentError={agentError}
+            agentsLoading={agentsLoading}
+            onRefreshAgents={onRefreshAgents}
+            onCreateModelResponse={onCreateModelResponse}
+            onListModelResponses={onListModelResponses}
           />
         </div>
       )}
