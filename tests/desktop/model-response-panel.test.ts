@@ -44,6 +44,19 @@ describe('Task model response panel', () => {
     expect(text()).toContain('Suggestion'); await click('[data-testid="refresh-model-responses"]');
     expect(document.querySelector('[data-testid="model-response-panel"]')).not.toBeNull(); expect(text()).toContain('API unavailable');
   });
+  it('renders a safe execution trace for running, completed, and failed model work', async () => {
+    mount(); await render(taskA, async () => success(invocation('COMPLETED')), async () => success([
+      { ...invocation('RUNNING', 'running'), toolCalls: [{ sequence: 1, name: 'get_task_snapshot', status: 'PENDING', startedAt: '2026-01-01T00:00:00.000Z' }] },
+      { ...invocation('COMPLETED', 'complete'), toolCalls: [{ sequence: 1, name: 'list_task_artifacts', status: 'SUCCEEDED', startedAt: '2026-01-01T00:00:00.000Z', completedAt: '2026-01-01T00:01:00.000Z' }] },
+      { ...invocation('FAILED', 'failed'), errorCode: 'MODEL_TOOL_AUTHORIZATION_REVOKED', toolCalls: [{ sequence: 1, name: 'get_task_snapshot', status: 'FAILED', startedAt: '2026-01-01T00:00:00.000Z', completedAt: '2026-01-01T00:01:00.000Z' }] }
+    ]));
+    expect(text()).toContain('Selected Agent: Task Assistant');
+    expect(text()).toContain('Model is preparing a response');
+    expect(text()).toContain('Read the current task details: requested');
+    expect(text()).toContain('List registered task artifacts: completed');
+    expect(text()).toContain('access changed');
+    expect(text()).not.toContain('MODEL_TOOL_AUTHORIZATION_REVOKED');
+  });
   it('clears model response state on logout or authentication loss', async () => {
     mount(); await render(taskA, async () => success(invocation('COMPLETED'))); await input('[data-testid="model-prompt"]', 'Plan'); await click('[data-testid="ask-agent"]');
     await act(async () => root?.unmount()); root = createRoot(document.getElementById('root')!); await render(taskB, async () => success(invocation('COMPLETED', 'task-b')));
