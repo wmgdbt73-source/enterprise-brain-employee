@@ -27,6 +27,13 @@ function requireDatabase() {
 describe('Project API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.message.deleteMany();
+    await db.conversationParticipant.deleteMany();
+    await db.conversation.deleteMany();
+    await db.notification.deleteMany();
+    await db.reminder.deleteMany();
+    await db.swarmEvent.deleteMany();
+    await db.modelInvocation.deleteMany();
     await db.auditEvent.deleteMany();
     await db.session.deleteMany();
     await db.account.deleteMany();
@@ -123,7 +130,10 @@ describe('Project API vertical slice', () => {
   });
 
   it('returns contract-safe validation errors for invalid project creation', async () => {
-    const app = await createApp({ prisma: requireDatabase(), identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: requireDatabase(),
+      identityProvider: new DevIdentityProvider()
+    });
 
     const blankName = await app.inject({
       method: 'POST',
@@ -197,7 +207,10 @@ describe('Project API vertical slice', () => {
       });
     });
 
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     for (const projectId of ['missing-project', 'foreign-project']) {
       const response = await app.inject({
         method: 'GET',

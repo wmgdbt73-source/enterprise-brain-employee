@@ -21,6 +21,13 @@ function requireDatabase() {
 describe('Task API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
+    await db.message.deleteMany();
+    await db.conversationParticipant.deleteMany();
+    await db.conversation.deleteMany();
+    await db.notification.deleteMany();
+    await db.reminder.deleteMany();
+    await db.swarmEvent.deleteMany();
+    await db.modelInvocation.deleteMany();
     await db.auditEvent.deleteMany();
     await db.session.deleteMany();
     await db.account.deleteMany();
@@ -49,7 +56,10 @@ describe('Task API vertical slice', () => {
   afterAll(async () => database?.$disconnect());
 
   it('creates, lists, reads and starts an unassigned Task persistently', async () => {
-    const app = await createApp({ prisma: requireDatabase(), identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: requireDatabase(),
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -121,7 +131,10 @@ describe('Task API vertical slice', () => {
   });
 
   it('persists TaskAssignment when creating an assigned Task', async () => {
-    const app = await createApp({ prisma: requireDatabase(), identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: requireDatabase(),
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -150,7 +163,10 @@ describe('Task API vertical slice', () => {
 
   it('rejects outsider assignment, invalid input, and hidden resources', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -198,7 +214,10 @@ describe('Task API vertical slice', () => {
   });
 
   it('creates a running AgentRun and completes its one pending ToolCall idempotently', async () => {
-    const app = await createApp({ prisma: requireDatabase(), identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: requireDatabase(),
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -259,7 +278,10 @@ describe('Task API vertical slice', () => {
 
   it('rejects receipts that do not match the original tool request without changing state', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -326,7 +348,10 @@ describe('Task API vertical slice', () => {
 
   it('rejects invalid list receipts, preserves pending state, and persists only intent', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -387,7 +412,10 @@ describe('Task API vertical slice', () => {
 
   it('hides and refuses completion after membership is revoked', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -446,7 +474,10 @@ describe('Task API vertical slice', () => {
 
   it('handles concurrent identical and conflicting completions without partial state', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -552,7 +583,10 @@ describe('Task API vertical slice', () => {
 
   it('rolls back ToolCall completion when AgentRun CAS cannot transition', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -599,7 +633,10 @@ describe('Task API vertical slice', () => {
 
   it('enforces the AgentRun Task and Project composite foreign key', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const a = (
       await app.inject({
         method: 'POST',
@@ -642,7 +679,10 @@ describe('Task API vertical slice', () => {
 
   it('registers a receipt-derived Artifact idempotently without changing Task or Run state', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -724,7 +764,10 @@ describe('Task API vertical slice', () => {
 
   it('preserves the receipt relativePath exactly when registering an Artifact', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -780,7 +823,10 @@ describe('Task API vertical slice', () => {
 
   it('rejects forged, ineligible, and hidden Artifact sources', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -894,7 +940,10 @@ describe('Task API vertical slice', () => {
 
   it('serializes concurrent Artifact registration to one durable row', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -952,7 +1001,10 @@ describe('Task API vertical slice', () => {
 
   it('requires exactly one sequence-one ToolCall before Artifact registration', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -1015,60 +1067,235 @@ describe('Task API vertical slice', () => {
 
   it('rejects a ToolCall name that disagrees with its persisted read_file request', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const run = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'read_file', relativePath: 'a.md' } })).json();
-    await app.inject({ method: 'POST', url: `/agent-runs/${run.run.id}/tool-results`, payload: { toolCallId: run.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'a.md', size: 1, encoding: 'utf-8', sha256: 'f'.repeat(64) } } });
-    await db.agentToolCall.update({ where: { id: run.toolRequest.id }, data: { name: 'list_directory' } });
-    const response = await app.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: run.run.id } });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const run = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'read_file', relativePath: 'a.md' }
+      })
+    ).json();
+    await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${run.run.id}/tool-results`,
+      payload: {
+        toolCallId: run.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: {
+          relativePath: 'a.md',
+          size: 1,
+          encoding: 'utf-8',
+          sha256: 'f'.repeat(64)
+        }
+      }
+    });
+    await db.agentToolCall.update({
+      where: { id: run.toolRequest.id },
+      data: { name: 'list_directory' }
+    });
+    const response = await app.inject({
+      method: 'POST',
+      url: '/artifacts',
+      payload: { agentRunId: run.run.id }
+    });
     expect(response.statusCode).toBe(409);
-    expect(response.json()).toMatchObject({ error: { code: 'ARTIFACT_SOURCE_INVALID' } });
+    expect(response.json()).toMatchObject({
+      error: { code: 'ARTIFACT_SOURCE_INVALID' }
+    });
     await app.close();
   });
 
   it('rejects Artifact registration when persisted request provenance or path is unsafe', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
     const complete = async (relativePath: string) => {
-      const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'read_file', relativePath } })).json();
-      await app.inject({ method: 'POST', url: `/agent-runs/${created.run.id}/tool-results`, payload: { toolCallId: created.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath, size: 1, encoding: 'utf-8', sha256: 'a'.repeat(64) } } });
+      const created = (
+        await app.inject({
+          method: 'POST',
+          url: `/tasks/${task.id}/agent-runs`,
+          payload: { name: 'read_file', relativePath }
+        })
+      ).json();
+      await app.inject({
+        method: 'POST',
+        url: `/agent-runs/${created.run.id}/tool-results`,
+        payload: {
+          toolCallId: created.toolRequest.id,
+          status: 'SUCCEEDED',
+          metadata: {
+            relativePath,
+            size: 1,
+            encoding: 'utf-8',
+            sha256: 'a'.repeat(64)
+          }
+        }
+      });
       return created;
     };
     const provenance = await complete('safe.md');
-    await db.agentToolCall.update({ where: { id: provenance.toolRequest.id }, data: { request: { ...provenance.toolRequest, userId: 'forged-user' } } });
-    expect((await app.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: provenance.run.id } })).statusCode).toBe(409);
+    await db.agentToolCall.update({
+      where: { id: provenance.toolRequest.id },
+      data: { request: { ...provenance.toolRequest, userId: 'forged-user' } }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: provenance.run.id }
+        })
+      ).statusCode
+    ).toBe(409);
     const unsafe = await complete('safe-two.md');
-    await db.agentToolCall.update({ where: { id: unsafe.toolRequest.id }, data: {
-      request: { ...unsafe.toolRequest, relativePath: 'docs/../secret.md' },
-      receipt: { toolCallId: unsafe.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'docs/../secret.md', size: 1, encoding: 'utf-8', sha256: 'a'.repeat(64) } }
-    } });
-    expect((await app.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: unsafe.run.id } })).statusCode).toBe(409);
+    await db.agentToolCall.update({
+      where: { id: unsafe.toolRequest.id },
+      data: {
+        request: { ...unsafe.toolRequest, relativePath: 'docs/../secret.md' },
+        receipt: {
+          toolCallId: unsafe.toolRequest.id,
+          status: 'SUCCEEDED',
+          metadata: {
+            relativePath: 'docs/../secret.md',
+            size: 1,
+            encoding: 'utf-8',
+            sha256: 'a'.repeat(64)
+          }
+        }
+      }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: unsafe.run.id }
+        })
+      ).statusCode
+    ).toBe(409);
     expect(await db.artifact.count()).toBe(0);
     await app.close();
   });
 
   it('hides Artifact registration after membership revocation and from another member', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const run = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'read_file', relativePath: 'a.md' } })).json();
-    await app.inject({ method: 'POST', url: `/agent-runs/${run.run.id}/tool-results`, payload: { toolCallId: run.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'a.md', size: 1, encoding: 'utf-8', sha256: 'a'.repeat(64) } } });
-    const other = await createApp({ prisma: db, identityProvider: new DevIdentityProvider({ id: 'other-member' }) });
-    await db.projectMember.create({ data: { id: 'other-member-project', projectId: project.id, userId: 'other-member', role: 'MEMBER', createdAt: new Date(), updatedAt: new Date() } });
-    expect((await other.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: run.run.id } })).statusCode).toBe(404);
-    await db.projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: 'dev-user' } } });
-    expect((await app.inject({ method: 'POST', url: '/artifacts', payload: { agentRunId: run.run.id } })).statusCode).toBe(404);
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const run = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: { name: 'read_file', relativePath: 'a.md' }
+      })
+    ).json();
+    await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${run.run.id}/tool-results`,
+      payload: {
+        toolCallId: run.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: {
+          relativePath: 'a.md',
+          size: 1,
+          encoding: 'utf-8',
+          sha256: 'a'.repeat(64)
+        }
+      }
+    });
+    const other = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider({ id: 'other-member' })
+    });
+    await db.projectMember.create({
+      data: {
+        id: 'other-member-project',
+        projectId: project.id,
+        userId: 'other-member',
+        role: 'MEMBER',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+    expect(
+      (
+        await other.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: run.run.id }
+        })
+      ).statusCode
+    ).toBe(404);
+    await db.projectMember.delete({
+      where: { projectId_userId: { projectId: project.id, userId: 'dev-user' } }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/artifacts',
+          payload: { agentRunId: run.run.id }
+        })
+      ).statusCode
+    ).toBe(404);
     await other.close();
     await app.close();
   });
 
   it('does not swallow unrelated Artifact uniqueness failures as idempotency', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
     const project = (
       await app.inject({
         method: 'POST',
@@ -1130,54 +1357,227 @@ describe('Task API vertical slice', () => {
 
   it('creates, confirms, rejects, and completes device-scoped write runs', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const input = { name: 'write_file', relativePath: 'docs/你好.md', payloadSize: 10, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' };
-    const created = await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: input });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const input = {
+      name: 'write_file',
+      relativePath: 'docs/你好.md',
+      payloadSize: 10,
+      payloadSha256: 'a'.repeat(64),
+      effect: 'CREATE',
+      deviceId: 'device-a'
+    };
+    const created = await app.inject({
+      method: 'POST',
+      url: `/tasks/${task.id}/agent-runs`,
+      payload: input
+    });
     expect(created.statusCode).toBe(201);
     const body = created.json();
     expect(body.run.status).toBe('WAITING_HUMAN');
-    expect((await db.task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('TODO');
+    expect(
+      (await db.task.findUniqueOrThrow({ where: { id: task.id } })).status
+    ).toBe('TODO');
     expect(await db.artifact.count()).toBe(0);
-    const stored = await db.humanConfirmation.findUniqueOrThrow({ where: { id: body.humanConfirmation.id }, include: { agentRun: true, toolCall: true } });
-    expect([stored.status, stored.agentRun.status, stored.toolCall.status, stored.toolCall.deviceId]).toEqual(['PENDING', 'WAITING_HUMAN', 'PENDING', 'device-a']);
+    const stored = await db.humanConfirmation.findUniqueOrThrow({
+      where: { id: body.humanConfirmation.id },
+      include: { agentRun: true, toolCall: true }
+    });
+    expect([
+      stored.status,
+      stored.agentRun.status,
+      stored.toolCall.status,
+      stored.toolCall.deviceId
+    ]).toEqual(['PENDING', 'WAITING_HUMAN', 'PENDING', 'device-a']);
     expect(JSON.stringify(stored)).not.toContain('content');
-    expect((await app.inject({ method: 'POST', url: `/agent-runs/${body.run.id}/tool-results`, payload: { toolCallId: body.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: input.relativePath, size: 10, encoding: 'utf-8', sha256: input.payloadSha256, effect: 'CREATE' } } })).statusCode).toBe(409);
-    const detail = await app.inject({ method: 'GET', url: `/human-confirmations/${body.humanConfirmation.id}` });
-    expect(detail.json()).toMatchObject({ action: 'write_file', relativePath: input.relativePath, effect: 'CREATE', payloadSize: 10, payloadSha256: input.payloadSha256, risk: 'MEDIUM', requiredPermission: 'LOCAL_CREATE' });
-    expect(JSON.stringify(detail.json())).not.toMatch(/deviceId|localPath|content|executionGrant/);
-    expect((await app.inject({ method: 'POST', url: `/human-confirmations/${body.humanConfirmation.id}/approve` })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'POST', url: `/human-confirmations/${body.humanConfirmation.id}/approve` })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'POST', url: `/agent-runs/${body.run.id}/tool-results`, payload: { toolCallId: body.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: input.relativePath, size: 10, encoding: 'utf-8', sha256: input.payloadSha256, effect: 'CREATE' } } })).statusCode).toBe(200);
-    const terminalRetry = await app.inject({ method: 'POST', url: `/human-confirmations/${body.humanConfirmation.id}/approve` });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/agent-runs/${body.run.id}/tool-results`,
+          payload: {
+            toolCallId: body.toolRequest.id,
+            status: 'SUCCEEDED',
+            metadata: {
+              relativePath: input.relativePath,
+              size: 10,
+              encoding: 'utf-8',
+              sha256: input.payloadSha256,
+              effect: 'CREATE'
+            }
+          }
+        })
+      ).statusCode
+    ).toBe(409);
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/human-confirmations/${body.humanConfirmation.id}`
+    });
+    expect(detail.json()).toMatchObject({
+      action: 'write_file',
+      relativePath: input.relativePath,
+      effect: 'CREATE',
+      payloadSize: 10,
+      payloadSha256: input.payloadSha256,
+      risk: 'MEDIUM',
+      requiredPermission: 'LOCAL_CREATE'
+    });
+    expect(JSON.stringify(detail.json())).not.toMatch(
+      /deviceId|localPath|content|executionGrant/
+    );
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/human-confirmations/${body.humanConfirmation.id}/approve`
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/human-confirmations/${body.humanConfirmation.id}/approve`
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/agent-runs/${body.run.id}/tool-results`,
+          payload: {
+            toolCallId: body.toolRequest.id,
+            status: 'SUCCEEDED',
+            metadata: {
+              relativePath: input.relativePath,
+              size: 10,
+              encoding: 'utf-8',
+              sha256: input.payloadSha256,
+              effect: 'CREATE'
+            }
+          }
+        })
+      ).statusCode
+    ).toBe(200);
+    const terminalRetry = await app.inject({
+      method: 'POST',
+      url: `/human-confirmations/${body.humanConfirmation.id}/approve`
+    });
     expect(terminalRetry.statusCode).toBe(200);
-    expect(terminalRetry.json()).toMatchObject({ confirmation: { status: 'APPROVED' } });
+    expect(terminalRetry.json()).toMatchObject({
+      confirmation: { status: 'APPROVED' }
+    });
     expect(terminalRetry.json().executionGrant).toBeUndefined();
-    expect((await db.task.findUniqueOrThrow({ where: { id: task.id } })).status).toBe('TODO');
+    expect(
+      (await db.task.findUniqueOrThrow({ where: { id: task.id } })).status
+    ).toBe('TODO');
     expect(await db.artifact.count()).toBe(0);
     await app.close();
   });
 
   it('accepts a valid approved write success receipt and records a safe failed write receipt', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const createWrite = async (suffix: string) => app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: `docs/${suffix}.md`, payloadSize: 4, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const createWrite = async (suffix: string) =>
+      app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: {
+          name: 'write_file',
+          relativePath: `docs/${suffix}.md`,
+          payloadSize: 4,
+          payloadSha256: 'a'.repeat(64),
+          effect: 'CREATE',
+          deviceId: 'device-a'
+        }
+      });
     const first = (await createWrite('success')).json();
-    const approved = await app.inject({ method: 'POST', url: `/human-confirmations/${first.humanConfirmation.id}/approve` });
+    const approved = await app.inject({
+      method: 'POST',
+      url: `/human-confirmations/${first.humanConfirmation.id}/approve`
+    });
     expect(approved.statusCode).toBe(200);
-    expect(approved.json().executionGrant).toMatchObject({ deviceId: 'device-a', effect: 'CREATE' });
-    const succeeded = await app.inject({ method: 'POST', url: `/agent-runs/${first.run.id}/tool-results`, payload: { toolCallId: first.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'docs/success.md', size: 4, encoding: 'utf-8', sha256: 'a'.repeat(64), effect: 'CREATE' } } });
+    expect(approved.json().executionGrant).toMatchObject({
+      deviceId: 'device-a',
+      effect: 'CREATE'
+    });
+    const succeeded = await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${first.run.id}/tool-results`,
+      payload: {
+        toolCallId: first.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: {
+          relativePath: 'docs/success.md',
+          size: 4,
+          encoding: 'utf-8',
+          sha256: 'a'.repeat(64),
+          effect: 'CREATE'
+        }
+      }
+    });
     expect(succeeded.statusCode).toBe(200);
     const second = (await createWrite('failure')).json();
-    await app.inject({ method: 'POST', url: `/human-confirmations/${second.humanConfirmation.id}/approve` });
-    const failed = await app.inject({ method: 'POST', url: `/agent-runs/${second.run.id}/tool-results`, payload: { toolCallId: second.toolRequest.id, status: 'FAILED', error: { code: 'LOCAL_IO_ERROR', message: 'safe failure', details: {} } } });
+    await app.inject({
+      method: 'POST',
+      url: `/human-confirmations/${second.humanConfirmation.id}/approve`
+    });
+    const failed = await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${second.run.id}/tool-results`,
+      payload: {
+        toolCallId: second.toolRequest.id,
+        status: 'FAILED',
+        error: { code: 'LOCAL_IO_ERROR', message: 'safe failure', details: {} }
+      }
+    });
     expect(failed.statusCode).toBe(200);
-    expect(await db.agentToolCall.findUniqueOrThrow({ where: { id: second.toolRequest.id } })).toMatchObject({ status: 'FAILED' });
-    expect(await db.agentRun.findUniqueOrThrow({ where: { id: second.run.id } })).toMatchObject({ status: 'FAILED' });
-    const failedRetry = await app.inject({ method: 'POST', url: `/human-confirmations/${second.humanConfirmation.id}/approve` });
+    expect(
+      await db.agentToolCall.findUniqueOrThrow({
+        where: { id: second.toolRequest.id }
+      })
+    ).toMatchObject({ status: 'FAILED' });
+    expect(
+      await db.agentRun.findUniqueOrThrow({ where: { id: second.run.id } })
+    ).toMatchObject({ status: 'FAILED' });
+    const failedRetry = await app.inject({
+      method: 'POST',
+      url: `/human-confirmations/${second.humanConfirmation.id}/approve`
+    });
     expect(failedRetry.statusCode).toBe(200);
     expect(failedRetry.json().executionGrant).toBeUndefined();
     await app.close();
@@ -1185,104 +1585,478 @@ describe('Task API vertical slice', () => {
 
   it('uses decision CAS so concurrent approve and reject have one durable winner', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: {
+          name: 'write_file',
+          relativePath: 'docs/a.md',
+          payloadSize: 0,
+          payloadSha256: 'a'.repeat(64),
+          effect: 'CREATE',
+          deviceId: 'device-a'
+        }
+      })
+    ).json();
     const id = created.humanConfirmation.id;
     const [approve, reject] = await Promise.all([
       app.inject({ method: 'POST', url: `/human-confirmations/${id}/approve` }),
       app.inject({ method: 'POST', url: `/human-confirmations/${id}/reject` })
     ]);
     expect([approve.statusCode, reject.statusCode].sort()).toEqual([200, 409]);
-    const stored = await db.humanConfirmation.findUniqueOrThrow({ where: { id }, include: { agentRun: true, toolCall: true } });
-    if (stored.status === 'APPROVED') expect([stored.agentRun.status, stored.toolCall.status]).toEqual(['RUNNING', 'PENDING']);
-    else expect([stored.status, stored.agentRun.status, stored.toolCall.status]).toEqual(['REJECTED', 'CANCELLED', 'CANCELLED']);
+    const stored = await db.humanConfirmation.findUniqueOrThrow({
+      where: { id },
+      include: { agentRun: true, toolCall: true }
+    });
+    if (stored.status === 'APPROVED')
+      expect([stored.agentRun.status, stored.toolCall.status]).toEqual([
+        'RUNNING',
+        'PENDING'
+      ]);
+    else
+      expect([
+        stored.status,
+        stored.agentRun.status,
+        stored.toolCall.status
+      ]).toEqual(['REJECTED', 'CANCELLED', 'CANCELLED']);
     await app.close();
   });
 
   it('rejects idempotently and cancels the pending write run and ToolCall', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
-    const first = await app.inject({ method: 'POST', url: `/human-confirmations/${created.humanConfirmation.id}/reject` });
-    const retry = await app.inject({ method: 'POST', url: `/human-confirmations/${created.humanConfirmation.id}/reject` });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: {
+          name: 'write_file',
+          relativePath: 'docs/a.md',
+          payloadSize: 0,
+          payloadSha256: 'a'.repeat(64),
+          effect: 'CREATE',
+          deviceId: 'device-a'
+        }
+      })
+    ).json();
+    const first = await app.inject({
+      method: 'POST',
+      url: `/human-confirmations/${created.humanConfirmation.id}/reject`
+    });
+    const retry = await app.inject({
+      method: 'POST',
+      url: `/human-confirmations/${created.humanConfirmation.id}/reject`
+    });
     expect([first.statusCode, retry.statusCode]).toEqual([200, 200]);
-    const stored = await db.humanConfirmation.findUniqueOrThrow({ where: { id: created.humanConfirmation.id }, include: { agentRun: true, toolCall: true } });
-    expect([stored.status, stored.agentRun.status, stored.toolCall.status]).toEqual(['REJECTED', 'CANCELLED', 'CANCELLED']);
+    const stored = await db.humanConfirmation.findUniqueOrThrow({
+      where: { id: created.humanConfirmation.id },
+      include: { agentRun: true, toolCall: true }
+    });
+    expect([
+      stored.status,
+      stored.agentRun.status,
+      stored.toolCall.status
+    ]).toEqual(['REJECTED', 'CANCELLED', 'CANCELLED']);
     await app.close();
   });
 
   it('fails closed when the persisted write request is malformed', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
-    await db.agentToolCall.update({ where: { id: created.toolRequest.id }, data: { request: { ...created.toolRequest, content: 'not-permitted' } } });
-    expect((await app.inject({ method: 'GET', url: `/human-confirmations/${created.humanConfirmation.id}` })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'POST', url: `/human-confirmations/${created.humanConfirmation.id}/approve` })).statusCode).toBe(409);
-    expect((await app.inject({ method: 'POST', url: `/agent-runs/${created.run.id}/tool-results`, payload: { toolCallId: created.toolRequest.id, status: 'FAILED', error: { code: 'LOCAL_IO_ERROR', message: 'safe', details: {} } } })).statusCode).toBe(400);
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: {
+          name: 'write_file',
+          relativePath: 'docs/a.md',
+          payloadSize: 0,
+          payloadSha256: 'a'.repeat(64),
+          effect: 'CREATE',
+          deviceId: 'device-a'
+        }
+      })
+    ).json();
+    await db.agentToolCall.update({
+      where: { id: created.toolRequest.id },
+      data: { request: { ...created.toolRequest, content: 'not-permitted' } }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: `/human-confirmations/${created.humanConfirmation.id}`
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/human-confirmations/${created.humanConfirmation.id}/approve`
+        })
+      ).statusCode
+    ).toBe(409);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/agent-runs/${created.run.id}/tool-results`,
+          payload: {
+            toolCallId: created.toolRequest.id,
+            status: 'FAILED',
+            error: { code: 'LOCAL_IO_ERROR', message: 'safe', details: {} }
+          }
+        })
+      ).statusCode
+    ).toBe(400);
     await app.close();
   });
 
   it('rejects formal ToolCall name/request disagreement without changing the run', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const created = (await app.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
-    await db.agentToolCall.update({ where: { id: created.toolRequest.id }, data: { name: 'read_file' } });
-    const completion = await app.inject({ method: 'POST', url: `/agent-runs/${created.run.id}/tool-results`, payload: { toolCallId: created.toolRequest.id, status: 'SUCCEEDED', metadata: { relativePath: 'docs/a.md', size: 0, encoding: 'utf-8', sha256: 'a'.repeat(64), effect: 'CREATE' } } });
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await app.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: {
+          name: 'write_file',
+          relativePath: 'docs/a.md',
+          payloadSize: 0,
+          payloadSha256: 'a'.repeat(64),
+          effect: 'CREATE',
+          deviceId: 'device-a'
+        }
+      })
+    ).json();
+    await db.agentToolCall.update({
+      where: { id: created.toolRequest.id },
+      data: { name: 'read_file' }
+    });
+    const completion = await app.inject({
+      method: 'POST',
+      url: `/agent-runs/${created.run.id}/tool-results`,
+      payload: {
+        toolCallId: created.toolRequest.id,
+        status: 'SUCCEEDED',
+        metadata: {
+          relativePath: 'docs/a.md',
+          size: 0,
+          encoding: 'utf-8',
+          sha256: 'a'.repeat(64),
+          effect: 'CREATE'
+        }
+      }
+    });
     expect(completion.statusCode).toBe(400);
-    expect(await db.agentToolCall.findUniqueOrThrow({ where: { id: created.toolRequest.id } })).toMatchObject({ name: 'read_file', status: 'PENDING' });
-    expect(await db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } })).toMatchObject({ status: 'WAITING_HUMAN' });
+    expect(
+      await db.agentToolCall.findUniqueOrThrow({
+        where: { id: created.toolRequest.id }
+      })
+    ).toMatchObject({ name: 'read_file', status: 'PENDING' });
+    expect(
+      await db.agentRun.findUniqueOrThrow({ where: { id: created.run.id } })
+    ).toMatchObject({ status: 'WAITING_HUMAN' });
     await app.close();
   });
 
   it('persists same-project dependencies and blocks Start until they are accepted', async () => {
     const db = requireDatabase();
-    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Dependencies' } })).json();
-    const upstream = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Upstream' } })).json();
-    expect((await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Duplicate', dependencyIds: [upstream.id, upstream.id] } })).statusCode).toBe(400);
-    expect((await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Missing', dependencyIds: ['missing'] } })).statusCode).toBe(404);
-    const otherProject = (await app.inject({ method: 'POST', url: '/projects', payload: { name: 'Other' } })).json();
-    const otherTask = (await app.inject({ method: 'POST', url: `/projects/${otherProject.id}/tasks`, payload: { title: 'Other' } })).json();
-    expect((await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Cross', dependencyIds: [otherTask.id] } })).statusCode).toBe(404);
-    const downstream = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Downstream', dependencyIds: [upstream.id] } })).json();
+    const app = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Dependencies' }
+      })
+    ).json();
+    const upstream = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Upstream' }
+      })
+    ).json();
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/projects/${project.id}/tasks`,
+          payload: {
+            title: 'Duplicate',
+            dependencyIds: [upstream.id, upstream.id]
+          }
+        })
+      ).statusCode
+    ).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/projects/${project.id}/tasks`,
+          payload: { title: 'Missing', dependencyIds: ['missing'] }
+        })
+      ).statusCode
+    ).toBe(404);
+    const otherProject = (
+      await app.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Other' }
+      })
+    ).json();
+    const otherTask = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${otherProject.id}/tasks`,
+        payload: { title: 'Other' }
+      })
+    ).json();
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/projects/${project.id}/tasks`,
+          payload: { title: 'Cross', dependencyIds: [otherTask.id] }
+        })
+      ).statusCode
+    ).toBe(404);
+    const downstream = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Downstream', dependencyIds: [upstream.id] }
+      })
+    ).json();
     expect(downstream.dependencyIds).toEqual([upstream.id]);
-    expect((await app.inject({ method: 'GET', url: `/tasks/${downstream.id}` })).json().dependencyIds).toEqual([upstream.id]);
-    const blocked = await app.inject({ method: 'POST', url: `/tasks/${downstream.id}/start` });
-    expect(blocked.statusCode).toBe(409); expect(blocked.json()).toMatchObject({ error: { code: 'TASK_DEPENDENCY_BLOCKED', details: { blockingDependencyIds: [upstream.id] } } });
-    expect((await db.task.findUniqueOrThrow({ where: { id: downstream.id } })).status).toBe('TODO');
-    await db.task.update({ where: { id: upstream.id }, data: { status: 'ACCEPTED' } });
-    expect((await app.inject({ method: 'POST', url: `/tasks/${downstream.id}/start` })).json()).toMatchObject({ status: 'IN_PROGRESS' });
-    const closed = (await app.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Closed', dependencyIds: [upstream.id] } })).json();
-    await db.task.update({ where: { id: upstream.id }, data: { status: 'CLOSED' } });
-    expect((await app.inject({ method: 'POST', url: `/tasks/${closed.id}/start` })).statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({ method: 'GET', url: `/tasks/${downstream.id}` })
+      ).json().dependencyIds
+    ).toEqual([upstream.id]);
+    const blocked = await app.inject({
+      method: 'POST',
+      url: `/tasks/${downstream.id}/start`
+    });
+    expect(blocked.statusCode).toBe(409);
+    expect(blocked.json()).toMatchObject({
+      error: {
+        code: 'TASK_DEPENDENCY_BLOCKED',
+        details: { blockingDependencyIds: [upstream.id] }
+      }
+    });
+    expect(
+      (await db.task.findUniqueOrThrow({ where: { id: downstream.id } })).status
+    ).toBe('TODO');
+    await db.task.update({
+      where: { id: upstream.id },
+      data: { status: 'ACCEPTED' }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: `/tasks/${downstream.id}/start`
+        })
+      ).json()
+    ).toMatchObject({ status: 'IN_PROGRESS' });
+    const closed = (
+      await app.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Closed', dependencyIds: [upstream.id] }
+      })
+    ).json();
+    await db.task.update({
+      where: { id: upstream.id },
+      data: { status: 'CLOSED' }
+    });
+    expect(
+      (await app.inject({ method: 'POST', url: `/tasks/${closed.id}/start` }))
+        .statusCode
+    ).toBe(200);
     await app.close();
   });
 
   it('hides confirmations from revoked owners and other current project members', async () => {
     const db = requireDatabase();
-    const owner = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
-    const project = (await owner.inject({ method: 'POST', url: '/projects', payload: { name: 'Project' } })).json();
-    const task = (await owner.inject({ method: 'POST', url: `/projects/${project.id}/tasks`, payload: { title: 'Task' } })).json();
-    const created = (await owner.inject({ method: 'POST', url: `/tasks/${task.id}/agent-runs`, payload: { name: 'write_file', relativePath: 'docs/a.md', payloadSize: 0, payloadSha256: 'a'.repeat(64), effect: 'CREATE', deviceId: 'device-a' } })).json();
+    const owner = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider()
+    });
+    const project = (
+      await owner.inject({
+        method: 'POST',
+        url: '/projects',
+        payload: { name: 'Project' }
+      })
+    ).json();
+    const task = (
+      await owner.inject({
+        method: 'POST',
+        url: `/projects/${project.id}/tasks`,
+        payload: { title: 'Task' }
+      })
+    ).json();
+    const created = (
+      await owner.inject({
+        method: 'POST',
+        url: `/tasks/${task.id}/agent-runs`,
+        payload: {
+          name: 'write_file',
+          relativePath: 'docs/a.md',
+          payloadSize: 0,
+          payloadSha256: 'a'.repeat(64),
+          effect: 'CREATE',
+          deviceId: 'device-a'
+        }
+      })
+    ).json();
     const id = created.humanConfirmation.id;
-    await db.projectMember.delete({ where: { projectId_userId: { projectId: project.id, userId: 'dev-user' } } });
-    expect((await owner.inject({ method: 'GET', url: `/human-confirmations/${id}` })).statusCode).toBe(404);
-    expect((await owner.inject({ method: 'POST', url: `/human-confirmations/${id}/approve` })).statusCode).toBe(404);
-    expect((await owner.inject({ method: 'POST', url: `/human-confirmations/${id}/reject` })).statusCode).toBe(404);
-    await db.user.create({ data: { id: 'member-user', name: 'Member', systemRole: 'EMPLOYEE', createdAt: new Date(), updatedAt: new Date() } });
-    await db.projectMember.create({ data: { id: 'member-user-project', projectId: project.id, userId: 'member-user', role: 'MEMBER', createdAt: new Date(), updatedAt: new Date() } });
-    const member = await createApp({ prisma: db, identityProvider: new DevIdentityProvider({ id: 'member-user' }) });
-    expect((await member.inject({ method: 'GET', url: `/human-confirmations/${id}` })).statusCode).toBe(404);
-    expect((await member.inject({ method: 'POST', url: `/human-confirmations/${id}/approve` })).statusCode).toBe(404);
-    expect((await member.inject({ method: 'POST', url: `/human-confirmations/${id}/reject` })).statusCode).toBe(404);
+    await db.projectMember.delete({
+      where: { projectId_userId: { projectId: project.id, userId: 'dev-user' } }
+    });
+    expect(
+      (await owner.inject({ method: 'GET', url: `/human-confirmations/${id}` }))
+        .statusCode
+    ).toBe(404);
+    expect(
+      (
+        await owner.inject({
+          method: 'POST',
+          url: `/human-confirmations/${id}/approve`
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await owner.inject({
+          method: 'POST',
+          url: `/human-confirmations/${id}/reject`
+        })
+      ).statusCode
+    ).toBe(404);
+    await db.user.create({
+      data: {
+        id: 'member-user',
+        name: 'Member',
+        systemRole: 'EMPLOYEE',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+    await db.projectMember.create({
+      data: {
+        id: 'member-user-project',
+        projectId: project.id,
+        userId: 'member-user',
+        role: 'MEMBER',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      }
+    });
+    const member = await createApp({
+      prisma: db,
+      identityProvider: new DevIdentityProvider({ id: 'member-user' })
+    });
+    expect(
+      (
+        await member.inject({
+          method: 'GET',
+          url: `/human-confirmations/${id}`
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await member.inject({
+          method: 'POST',
+          url: `/human-confirmations/${id}/approve`
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await member.inject({
+          method: 'POST',
+          url: `/human-confirmations/${id}/reject`
+        })
+      ).statusCode
+    ).toBe(404);
     await member.close();
     await owner.close();
   });

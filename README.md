@@ -3,6 +3,8 @@ Enterprise Brain Employee Reference Stack
 
 ## Demo startup
 
+See [the demo runbook](docs/DEMO_RUNBOOK.md) for the complete setup, walkthrough, reset, and verification flow. The short path is `pnpm install`, `docker compose up -d postgres`, `pnpm demo:setup`, then `pnpm dev:api`, `pnpm dev:admin`, and `pnpm dev:desktop` in separate terminals.
+
 1. Configure `DATABASE_URL`, then run `pnpm db:migrate:deploy` and
    `pnpm db:seed:demo`.
 2. Start the API with `pnpm dev:api`.

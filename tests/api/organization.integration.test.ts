@@ -1,94 +1,939 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
-import { createPrismaClient, encodePassword, hashSessionToken } from '../../packages/database/src/index.js';
-const url = process.env.DATABASE_URL; const database = url ? createPrismaClient(url) : undefined;
-const db = () => { if (!database) throw new Error('DATABASE_URL is required'); return database; };
+import {
+  createPrismaClient,
+  encodePassword,
+  hashSessionToken
+} from '../../packages/database/src/index.js';
+const url = process.env.DATABASE_URL;
+const database = url ? createPrismaClient(url) : undefined;
+const db = () => {
+  if (!database) throw new Error('DATABASE_URL is required');
+  return database;
+};
 const now = new Date('2026-09-03T00:00:00.000Z');
-async function token(userId: string) { const raw = `token-${userId}-${'x'.repeat(40)}`; await db().account.create({ data: { id: `account-${userId}`, userId, login: `${userId}@test.local`, passwordHash: await encodePassword('Password!2026'), status: 'ACTIVE', createdAt: now, updatedAt: now } }); await db().session.create({ data: { id: `session-${userId}`, accountId: `account-${userId}`, tokenHash: hashSessionToken(raw), createdAt: now, expiresAt: new Date('2100-01-01T00:00:00.000Z') } }); return { authorization: `Bearer ${raw}` }; }
-async function fixture() {
-  await db().organization.create({ data: { id: 'org-a', name: 'Enterprise Brain Demo', status: 'ACTIVE', createdAt: now, updatedAt: now } });
-  await db().organization.create({ data: { id: 'org-b', name: 'Other', status: 'ACTIVE', createdAt: now, updatedAt: now } });
-  for (const user of ['owner', 'admin', 'member', 'manager', 'employee', 'outsider']) await db().user.create({ data: { id: user, name: user, systemRole: 'EMPLOYEE', createdAt: now, updatedAt: now } });
-  for (const [id, userId, organizationId, role] of [['om-owner','owner','org-a','OWNER'],['om-admin','admin','org-a','ADMIN'],['om-member','member','org-a','MEMBER'],['om-manager','manager','org-a','MEMBER'],['om-employee','employee','org-a','MEMBER'],['om-outsider','outsider','org-b','MEMBER']] as const) await db().organizationMembership.create({ data: { id, userId, organizationId, role, status: 'ACTIVE', createdAt: now, updatedAt: now } });
-  await db().department.createMany({ data: [{ id: 'product', organizationId: 'org-a', name: 'Product', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'research', organizationId: 'org-a', name: 'Research', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'other-dept', organizationId: 'org-b', name: 'Other', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
-  await db().departmentMembership.createMany({ data: [{ id: 'dm-manager', organizationId: 'org-a', departmentId: 'product', userId: 'manager', role: 'MANAGER', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'dm-employee', organizationId: 'org-a', departmentId: 'product', userId: 'employee', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
+async function token(userId: string) {
+  const raw = `token-${userId}-${'x'.repeat(40)}`;
+  await db().account.create({
+    data: {
+      id: `account-${userId}`,
+      userId,
+      login: `${userId}@test.local`,
+      passwordHash: await encodePassword('Password!2026'),
+      status: 'ACTIVE',
+      createdAt: now,
+      updatedAt: now
+    }
+  });
+  await db().session.create({
+    data: {
+      id: `session-${userId}`,
+      accountId: `account-${userId}`,
+      tokenHash: hashSessionToken(raw),
+      createdAt: now,
+      expiresAt: new Date('2100-01-01T00:00:00.000Z')
+    }
+  });
+  return { authorization: `Bearer ${raw}` };
 }
-async function clean() { await db().auditEvent.deleteMany(); await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().agentAssignment.deleteMany(); await db().agentVersion.deleteMany(); await db().agentDefinition.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().permissionOverride.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany(); }
+async function fixture() {
+  await db().organization.create({
+    data: {
+      id: 'org-a',
+      name: 'Enterprise Brain Demo',
+      status: 'ACTIVE',
+      createdAt: now,
+      updatedAt: now
+    }
+  });
+  await db().organization.create({
+    data: {
+      id: 'org-b',
+      name: 'Other',
+      status: 'ACTIVE',
+      createdAt: now,
+      updatedAt: now
+    }
+  });
+  for (const user of [
+    'owner',
+    'admin',
+    'member',
+    'manager',
+    'employee',
+    'outsider'
+  ])
+    await db().user.create({
+      data: {
+        id: user,
+        name: user,
+        systemRole: 'EMPLOYEE',
+        createdAt: now,
+        updatedAt: now
+      }
+    });
+  for (const [id, userId, organizationId, role] of [
+    ['om-owner', 'owner', 'org-a', 'OWNER'],
+    ['om-admin', 'admin', 'org-a', 'ADMIN'],
+    ['om-member', 'member', 'org-a', 'MEMBER'],
+    ['om-manager', 'manager', 'org-a', 'MEMBER'],
+    ['om-employee', 'employee', 'org-a', 'MEMBER'],
+    ['om-outsider', 'outsider', 'org-b', 'MEMBER']
+  ] as const)
+    await db().organizationMembership.create({
+      data: {
+        id,
+        userId,
+        organizationId,
+        role,
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now
+      }
+    });
+  await db().department.createMany({
+    data: [
+      {
+        id: 'product',
+        organizationId: 'org-a',
+        name: 'Product',
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'research',
+        organizationId: 'org-a',
+        name: 'Research',
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'other-dept',
+        organizationId: 'org-b',
+        name: 'Other',
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now
+      }
+    ]
+  });
+  await db().departmentMembership.createMany({
+    data: [
+      {
+        id: 'dm-manager',
+        organizationId: 'org-a',
+        departmentId: 'product',
+        userId: 'manager',
+        role: 'MANAGER',
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        id: 'dm-employee',
+        organizationId: 'org-a',
+        departmentId: 'product',
+        userId: 'employee',
+        role: 'MEMBER',
+        status: 'ACTIVE',
+        createdAt: now,
+        updatedAt: now
+      }
+    ]
+  });
+}
+async function clean() {
+  await db().message.deleteMany();
+  await db().conversationParticipant.deleteMany();
+  await db().conversation.deleteMany();
+  await db().notification.deleteMany();
+  await db().reminder.deleteMany();
+  await db().swarmEvent.deleteMany();
+  await db().modelInvocation.deleteMany();
+  await db().auditEvent.deleteMany();
+  await db().session.deleteMany();
+  await db().account.deleteMany();
+  await db().humanConfirmation.deleteMany();
+  await db().review.deleteMany();
+  await db().resultArtifact.deleteMany();
+  await db().result.deleteMany();
+  await db().artifact.deleteMany();
+  await db().agentToolCall.deleteMany();
+  await db().agentRun.deleteMany();
+  await db().agentAssignment.deleteMany();
+  await db().agentVersion.deleteMany();
+  await db().agentDefinition.deleteMany();
+  await db().taskDependency.deleteMany();
+  await db().taskAssignment.deleteMany();
+  await db().task.deleteMany();
+  await db().projectMember.deleteMany();
+  await db().project.deleteMany();
+  await db().departmentMembership.deleteMany();
+  await db().permissionOverride.deleteMany();
+  await db().organizationMembership.deleteMany();
+  await db().department.deleteMany();
+  await db().organization.deleteMany();
+  await db().user.deleteMany();
+}
 describe('Organization API', () => {
-  beforeEach(clean); afterAll(async () => database?.$disconnect());
-  it('returns Session-derived organization and department context from /me', async () => { await fixture(); const app = await createApp({ prisma: db() }); const headers = await token('manager'); const response = await app.inject({ method: 'GET', url: '/me', headers }); expect(response.statusCode).toBe(200); expect(response.json()).toMatchObject({ id: 'manager', organization: { id: 'org-a', name: 'Enterprise Brain Demo', role: 'MEMBER' }, department: { id: 'product', name: 'Product', role: 'MANAGER' } }); await app.close(); });
-  it('allows owner/admin management while rejecting member and cross-organization forgery', async () => { await fixture(); const app = await createApp({ prisma: db() }); const owner = await token('owner'); const admin = await token('admin'); const member = await token('member'); const created = await app.inject({ method: 'POST', url: '/departments', headers: owner, payload: { name: 'Design' } }); expect(created.statusCode).toBe(201); const updated = await app.inject({ method: 'PATCH', url: `/departments/${created.json().id}`, headers: admin, payload: { status: 'DISABLED' } }); expect(updated.statusCode).toBe(200);
-    expect((await app.inject({ method: 'POST', url: '/departments', headers: member, payload: { name: 'Nope' } })).statusCode).toBe(403);
-    expect((await app.inject({ method: 'PUT', url: '/employees/employee/department', headers: owner, payload: { departmentId: 'research', role: 'MEMBER', actorId: 'admin', organizationId: 'org-b' } })).statusCode).toBe(400);
-    expect((await app.inject({ method: 'PUT', url: '/employees/outsider/department', headers: owner, payload: { departmentId: 'research', role: 'MEMBER' } })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'PUT', url: '/employees/employee/department', headers: owner, payload: { departmentId: 'other-dept', role: 'MEMBER' } })).statusCode).toBe(404); expect((await db().departmentMembership.findUniqueOrThrow({ where: { userId: 'employee' } })).departmentId).toBe('product'); await app.close(); });
-  it('moves an employee between departments through the owner Session without creating a second membership', async () => { await fixture(); const app = await createApp({ prisma: db() }); const owner = await token('owner'); const response = await app.inject({ method: 'PUT', url: '/employees/employee/department', headers: owner, payload: { departmentId: 'research', role: 'MANAGER' } }); expect(response.statusCode).toBe(200); expect(response.json()).toMatchObject({ userId: 'employee', role: 'MANAGER' }); expect(await db().departmentMembership.count({ where: { userId: 'employee' } })).toBe(1); expect((await db().departmentMembership.findUniqueOrThrow({ where: { userId: 'employee' } })).departmentId).toBe('research'); await app.close(); });
-  it('permits a department manager to list only their own department members', async () => { await fixture(); const app = await createApp({ prisma: db() }); const headers = await token('manager'); expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers })).statusCode).toBe(200); expect((await app.inject({ method: 'GET', url: '/departments/research/members', headers })).statusCode).toBe(403); await app.close(); });
+  beforeEach(clean);
+  afterAll(async () => database?.$disconnect());
+  it('returns Session-derived organization and department context from /me', async () => {
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const headers = await token('manager');
+    const response = await app.inject({ method: 'GET', url: '/me', headers });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      id: 'manager',
+      organization: {
+        id: 'org-a',
+        name: 'Enterprise Brain Demo',
+        role: 'MEMBER'
+      },
+      department: { id: 'product', name: 'Product', role: 'MANAGER' }
+    });
+    await app.close();
+  });
+  it('allows owner/admin management while rejecting member and cross-organization forgery', async () => {
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const owner = await token('owner');
+    const admin = await token('admin');
+    const member = await token('member');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/departments',
+      headers: owner,
+      payload: { name: 'Design' }
+    });
+    expect(created.statusCode).toBe(201);
+    const updated = await app.inject({
+      method: 'PATCH',
+      url: `/departments/${created.json().id}`,
+      headers: admin,
+      payload: { status: 'DISABLED' }
+    });
+    expect(updated.statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/departments',
+          headers: member,
+          payload: { name: 'Nope' }
+        })
+      ).statusCode
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/employee/department',
+          headers: owner,
+          payload: {
+            departmentId: 'research',
+            role: 'MEMBER',
+            actorId: 'admin',
+            organizationId: 'org-b'
+          }
+        })
+      ).statusCode
+    ).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/outsider/department',
+          headers: owner,
+          payload: { departmentId: 'research', role: 'MEMBER' }
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/employee/department',
+          headers: owner,
+          payload: { departmentId: 'other-dept', role: 'MEMBER' }
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await db().departmentMembership.findUniqueOrThrow({
+          where: { userId: 'employee' }
+        })
+      ).departmentId
+    ).toBe('product');
+    await app.close();
+  });
+  it('moves an employee between departments through the owner Session without creating a second membership', async () => {
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const owner = await token('owner');
+    const response = await app.inject({
+      method: 'PUT',
+      url: '/employees/employee/department',
+      headers: owner,
+      payload: { departmentId: 'research', role: 'MANAGER' }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      userId: 'employee',
+      role: 'MANAGER'
+    });
+    expect(
+      await db().departmentMembership.count({ where: { userId: 'employee' } })
+    ).toBe(1);
+    expect(
+      (
+        await db().departmentMembership.findUniqueOrThrow({
+          where: { userId: 'employee' }
+        })
+      ).departmentId
+    ).toBe('research');
+    await app.close();
+  });
+  it('permits a department manager to list only their own department members', async () => {
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const headers = await token('manager');
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/departments/product/members',
+          headers
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/departments/research/members',
+          headers
+        })
+      ).statusCode
+    ).toBe(403);
+    await app.close();
+  });
   it('evaluates and manages supported same-organization permission overrides from the Session actor', async () => {
-    await fixture(); const app = await createApp({ prisma: db() }); const owner = await token('owner'); const admin = await token('admin'); const member = await token('member'); const employee = await token('employee');
-    const put = await app.inject({ method: 'PUT', url: '/employees/employee/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY' } });
-    expect(put.statusCode).toBe(200); expect(put.json()).toMatchObject({ organizationId: 'org-a', scopeType: 'DEPARTMENT', scopeId: 'product', effect: 'DENY' });
-    expect((await app.inject({ method: 'GET', url: '/employees/employee/permission-overrides', headers: admin })).json().overrides).toHaveLength(1);
-    expect((await app.inject({ method: 'PUT', url: '/employees/employee/permission-overrides', headers: member, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-a', resource: 'ORGANIZATION', action: 'VIEW', effect: 'DENY' } })).statusCode).toBe(403);
-    expect((await app.inject({ method: 'PUT', url: '/employees/outsider/permission-overrides', headers: owner, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-a', resource: 'ORGANIZATION', action: 'VIEW', effect: 'DENY' } })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'PUT', url: '/employees/employee/permission-overrides', headers: owner, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-b', resource: 'ORGANIZATION', action: 'VIEW', effect: 'DENY' } })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'PUT', url: '/employees/employee/permission-overrides', headers: owner, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-a', resource: 'RESULT', action: 'MANAGE', effect: 'ALLOW' } })).statusCode).toBe(400);
-    const denied = await app.inject({ method: 'GET', url: '/me/permissions', headers: employee }); expect(denied.statusCode).toBe(200); expect(denied.json().permissions).toContainEqual(expect.objectContaining({ resource: 'DEPARTMENT', action: 'VIEW', scopeType: 'DEPARTMENT', scopeId: 'product', allowed: false, source: 'OVERRIDE_DENY' }));
-    expect((await app.inject({ method: 'PUT', url: '/employees/employee/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'ALLOW' } })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/me/permissions', headers: employee })).json().permissions).toContainEqual(expect.objectContaining({ resource: 'DEPARTMENT', action: 'VIEW', allowed: true, source: 'OVERRIDE_ALLOW' }));
-    expect((await app.inject({ method: 'PUT', url: '/employees/employee/permission-overrides', headers: owner, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-a', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY' } })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/me/permissions', headers: employee })).json().permissions).toContainEqual(expect.objectContaining({ resource: 'DEPARTMENT', action: 'VIEW', allowed: false, source: 'OVERRIDE_DENY' }));
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const owner = await token('owner');
+    const admin = await token('admin');
+    const member = await token('member');
+    const employee = await token('employee');
+    const put = await app.inject({
+      method: 'PUT',
+      url: '/employees/employee/permission-overrides',
+      headers: owner,
+      payload: {
+        scopeType: 'DEPARTMENT',
+        scopeId: 'product',
+        resource: 'DEPARTMENT',
+        action: 'VIEW',
+        effect: 'DENY'
+      }
+    });
+    expect(put.statusCode).toBe(200);
+    expect(put.json()).toMatchObject({
+      organizationId: 'org-a',
+      scopeType: 'DEPARTMENT',
+      scopeId: 'product',
+      effect: 'DENY'
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/employees/employee/permission-overrides',
+          headers: admin
+        })
+      ).json().overrides
+    ).toHaveLength(1);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/employee/permission-overrides',
+          headers: member,
+          payload: {
+            scopeType: 'ORGANIZATION',
+            scopeId: 'org-a',
+            resource: 'ORGANIZATION',
+            action: 'VIEW',
+            effect: 'DENY'
+          }
+        })
+      ).statusCode
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/outsider/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'ORGANIZATION',
+            scopeId: 'org-a',
+            resource: 'ORGANIZATION',
+            action: 'VIEW',
+            effect: 'DENY'
+          }
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/employee/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'ORGANIZATION',
+            scopeId: 'org-b',
+            resource: 'ORGANIZATION',
+            action: 'VIEW',
+            effect: 'DENY'
+          }
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/employee/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'ORGANIZATION',
+            scopeId: 'org-a',
+            resource: 'RESULT',
+            action: 'MANAGE',
+            effect: 'ALLOW'
+          }
+        })
+      ).statusCode
+    ).toBe(400);
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/me/permissions',
+      headers: employee
+    });
+    expect(denied.statusCode).toBe(200);
+    expect(denied.json().permissions).toContainEqual(
+      expect.objectContaining({
+        resource: 'DEPARTMENT',
+        action: 'VIEW',
+        scopeType: 'DEPARTMENT',
+        scopeId: 'product',
+        allowed: false,
+        source: 'OVERRIDE_DENY'
+      })
+    );
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/employee/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'DEPARTMENT',
+            scopeId: 'product',
+            resource: 'DEPARTMENT',
+            action: 'VIEW',
+            effect: 'ALLOW'
+          }
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/me/permissions',
+          headers: employee
+        })
+      ).json().permissions
+    ).toContainEqual(
+      expect.objectContaining({
+        resource: 'DEPARTMENT',
+        action: 'VIEW',
+        allowed: true,
+        source: 'OVERRIDE_ALLOW'
+      })
+    );
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/employee/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'ORGANIZATION',
+            scopeId: 'org-a',
+            resource: 'DEPARTMENT',
+            action: 'VIEW',
+            effect: 'DENY'
+          }
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/me/permissions',
+          headers: employee
+        })
+      ).json().permissions
+    ).toContainEqual(
+      expect.objectContaining({
+        resource: 'DEPARTMENT',
+        action: 'VIEW',
+        allowed: false,
+        source: 'OVERRIDE_DENY'
+      })
+    );
     await app.close();
   });
   it('enforces live Department overrides for manager listing and owner mutations', async () => {
-    await fixture(); const app = await createApp({ prisma: db() }); const owner = await token('owner'); const manager = await token('manager'); const employee = await token('employee'); const outsider = await token('outsider');
-    expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers: manager })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers: employee })).statusCode).toBe(403);
-    const deny = await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY' } });
-    expect(deny.statusCode).toBe(200); expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers: manager })).statusCode).toBe(403);
-    expect((await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'ALLOW' } })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'GET', url: '/departments/product/members', headers: manager })).statusCode).toBe(200);
-    const mutationDeny = await app.inject({ method: 'PUT', url: '/employees/owner/permission-overrides', headers: owner, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-a', resource: 'DEPARTMENT', action: 'MANAGE', effect: 'DENY' } });
-    expect(mutationDeny.statusCode).toBe(200); const count = await db().department.count({ where: { organizationId: 'org-a' } });
-    expect((await app.inject({ method: 'POST', url: '/departments', headers: owner, payload: { name: 'Blocked' } })).statusCode).toBe(403); expect(await db().department.count({ where: { organizationId: 'org-a' } })).toBe(count);
-    expect((await app.inject({ method: 'PUT', url: '/employees/owner/permission-overrides', headers: owner, payload: { scopeType: 'ORGANIZATION', scopeId: 'org-a', resource: 'DEPARTMENT', action: 'MANAGE', effect: 'ALLOW' } })).statusCode).toBe(200);
-    expect((await app.inject({ method: 'POST', url: '/departments', headers: owner, payload: { name: 'Allowed' } })).statusCode).toBe(201);
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const owner = await token('owner');
+    const manager = await token('manager');
+    const employee = await token('employee');
+    const outsider = await token('outsider');
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/departments/product/members',
+          headers: manager
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/departments/product/members',
+          headers: employee
+        })
+      ).statusCode
+    ).toBe(403);
+    const deny = await app.inject({
+      method: 'PUT',
+      url: '/employees/manager/permission-overrides',
+      headers: owner,
+      payload: {
+        scopeType: 'DEPARTMENT',
+        scopeId: 'product',
+        resource: 'DEPARTMENT',
+        action: 'VIEW',
+        effect: 'DENY'
+      }
+    });
+    expect(deny.statusCode).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/departments/product/members',
+          headers: manager
+        })
+      ).statusCode
+    ).toBe(403);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/manager/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'DEPARTMENT',
+            scopeId: 'product',
+            resource: 'DEPARTMENT',
+            action: 'VIEW',
+            effect: 'ALLOW'
+          }
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/departments/product/members',
+          headers: manager
+        })
+      ).statusCode
+    ).toBe(200);
+    const mutationDeny = await app.inject({
+      method: 'PUT',
+      url: '/employees/owner/permission-overrides',
+      headers: owner,
+      payload: {
+        scopeType: 'ORGANIZATION',
+        scopeId: 'org-a',
+        resource: 'DEPARTMENT',
+        action: 'MANAGE',
+        effect: 'DENY'
+      }
+    });
+    expect(mutationDeny.statusCode).toBe(200);
+    const count = await db().department.count({
+      where: { organizationId: 'org-a' }
+    });
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/departments',
+          headers: owner,
+          payload: { name: 'Blocked' }
+        })
+      ).statusCode
+    ).toBe(403);
+    expect(
+      await db().department.count({ where: { organizationId: 'org-a' } })
+    ).toBe(count);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/owner/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'ORGANIZATION',
+            scopeId: 'org-a',
+            resource: 'DEPARTMENT',
+            action: 'MANAGE',
+            effect: 'ALLOW'
+          }
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      (
+        await app.inject({
+          method: 'POST',
+          url: '/departments',
+          headers: owner,
+          payload: { name: 'Allowed' }
+        })
+      ).statusCode
+    ).toBe(201);
     const before = await db().permissionOverride.count();
-    expect((await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'other-dept', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY' } })).statusCode).toBe(404); expect(await db().permissionOverride.count()).toBe(before);
-    expect((await app.inject({ method: 'PUT', url: '/employees/manager/permission-overrides', headers: owner, payload: { scopeType: 'DEPARTMENT', scopeId: 'product', resource: 'DEPARTMENT', action: 'VIEW', effect: 'DENY', actorId: 'outsider' } })).statusCode).toBe(400);
-    expect((await app.inject({ method: 'DELETE', url: `/employees/manager/permission-overrides/${deny.json().id}`, headers: owner })).statusCode).toBe(200); expect(await db().permissionOverride.findUnique({ where: { id: deny.json().id } })).toBeNull();
-    expect((await app.inject({ method: 'GET', url: '/employees/manager/permission-overrides', headers: outsider })).statusCode).toBe(404);
-    expect((await app.inject({ method: 'DELETE', url: `/employees/manager/permission-overrides/${mutationDeny.json().id}`, headers: outsider })).statusCode).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/manager/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'DEPARTMENT',
+            scopeId: 'other-dept',
+            resource: 'DEPARTMENT',
+            action: 'VIEW',
+            effect: 'DENY'
+          }
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(await db().permissionOverride.count()).toBe(before);
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/manager/permission-overrides',
+          headers: owner,
+          payload: {
+            scopeType: 'DEPARTMENT',
+            scopeId: 'product',
+            resource: 'DEPARTMENT',
+            action: 'VIEW',
+            effect: 'DENY',
+            actorId: 'outsider'
+          }
+        })
+      ).statusCode
+    ).toBe(400);
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/employees/manager/permission-overrides/${deny.json().id}`,
+          headers: owner
+        })
+      ).statusCode
+    ).toBe(200);
+    expect(
+      await db().permissionOverride.findUnique({
+        where: { id: deny.json().id }
+      })
+    ).toBeNull();
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/employees/manager/permission-overrides',
+          headers: outsider
+        })
+      ).statusCode
+    ).toBe(404);
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/employees/manager/permission-overrides/${mutationDeny.json().id}`,
+          headers: outsider
+        })
+      ).statusCode
+    ).toBe(404);
     await app.close();
   });
   it('returns only the Session organization employee directory to owners/admins and protects sensitive fields', async () => {
-    await fixture(); const app = await createApp({ prisma: db() }); const owner = await token('owner'); const admin = await token('admin'); const member = await token('member'); await token('employee'); await token('outsider');
-    const ownerResponse = await app.inject({ method: 'GET', url: '/employees?organizationId=org-b', headers: { ...owner, organizationid: 'org-b' } });
-    expect(ownerResponse.statusCode).toBe(200); const employees = ownerResponse.json().employees; expect(employees.map((employee: { userId:string }) => employee.userId).sort()).toEqual(['admin','employee','member','owner']);
-    expect(JSON.stringify(employees)).not.toMatch(/passwordHash|tokenHash|session-/); expect((await app.inject({ method: 'GET', url: '/employees', headers: admin })).statusCode).toBe(200); expect((await app.inject({ method: 'GET', url: '/employees', headers: member })).statusCode).toBe(403); expect((await app.inject({ method: 'GET', url: '/employees' })).statusCode).toBe(401); await app.close();
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const owner = await token('owner');
+    const admin = await token('admin');
+    const member = await token('member');
+    await token('employee');
+    await token('outsider');
+    const ownerResponse = await app.inject({
+      method: 'GET',
+      url: '/employees?organizationId=org-b',
+      headers: { ...owner, organizationid: 'org-b' }
+    });
+    expect(ownerResponse.statusCode).toBe(200);
+    const employees = ownerResponse.json().employees;
+    expect(
+      employees.map((employee: { userId: string }) => employee.userId).sort()
+    ).toEqual(['admin', 'employee', 'member', 'owner']);
+    expect(JSON.stringify(employees)).not.toMatch(
+      /passwordHash|tokenHash|session-/
+    );
+    expect(
+      (await app.inject({ method: 'GET', url: '/employees', headers: admin }))
+        .statusCode
+    ).toBe(200);
+    expect(
+      (await app.inject({ method: 'GET', url: '/employees', headers: member }))
+        .statusCode
+    ).toBe(403);
+    expect(
+      (await app.inject({ method: 'GET', url: '/employees' })).statusCode
+    ).toBe(401);
+    await app.close();
   });
   it('allows only the configured Admin origin to use CORS and leaves non-browser API calls unchanged', async () => {
-    await fixture(); const previous = process.env.ADMIN_ORIGIN; process.env.ADMIN_ORIGIN = 'http://admin.test'; const app = await createApp({ prisma: db() }); const owner = await token('owner');
-    const allowed = await app.inject({ method: 'GET', url: '/employees', headers: { ...owner, origin: 'http://admin.test' } }); expect(allowed.headers['access-control-allow-origin']).toBe('http://admin.test');
-    const preflight = await app.inject({ method: 'OPTIONS', url: '/employees', headers: { origin: 'http://admin.test', 'access-control-request-method': 'GET' } }); expect(preflight.statusCode).toBe(204); expect(preflight.headers['access-control-allow-headers']).toContain('Authorization');
-    const denied = await app.inject({ method: 'GET', url: '/employees', headers: { ...owner, origin: 'http://other.test' } }); expect(denied.headers['access-control-allow-origin']).toBeUndefined(); expect((await app.inject({ method: 'GET', url: '/employees', headers: owner })).statusCode).toBe(200); await app.close(); if (previous === undefined) delete process.env.ADMIN_ORIGIN; else process.env.ADMIN_ORIGIN = previous;
+    await fixture();
+    const previous = process.env.ADMIN_ORIGIN;
+    process.env.ADMIN_ORIGIN = 'http://admin.test';
+    const app = await createApp({ prisma: db() });
+    const owner = await token('owner');
+    const allowed = await app.inject({
+      method: 'GET',
+      url: '/employees',
+      headers: { ...owner, origin: 'http://admin.test' }
+    });
+    expect(allowed.headers['access-control-allow-origin']).toBe(
+      'http://admin.test'
+    );
+    const preflight = await app.inject({
+      method: 'OPTIONS',
+      url: '/employees',
+      headers: {
+        origin: 'http://admin.test',
+        'access-control-request-method': 'GET'
+      }
+    });
+    expect(preflight.statusCode).toBe(204);
+    expect(preflight.headers['access-control-allow-headers']).toContain(
+      'Authorization'
+    );
+    const denied = await app.inject({
+      method: 'GET',
+      url: '/employees',
+      headers: { ...owner, origin: 'http://other.test' }
+    });
+    expect(denied.headers['access-control-allow-origin']).toBeUndefined();
+    expect(
+      (await app.inject({ method: 'GET', url: '/employees', headers: owner }))
+        .statusCode
+    ).toBe(200);
+    await app.close();
+    if (previous === undefined) delete process.env.ADMIN_ORIGIN;
+    else process.env.ADMIN_ORIGIN = previous;
   });
   it('disables a same-organization account atomically and records one audit event', async () => {
-    await fixture(); const app=await createApp({prisma:db()}); const owner=await token('owner'); const employee=await token('employee');
-    const response=await app.inject({method:'PATCH',url:'/employees/employee/account-status',headers:owner,payload:{status:'DISABLED',reason:'Offboarding approved'}}); expect(response.statusCode).toBe(200); expect((await db().account.findUniqueOrThrow({where:{userId:'employee'}})).status).toBe('DISABLED'); expect(await db().session.count({where:{account:{userId:'employee'},revokedAt:null}})).toBe(0); expect(await db().auditEvent.count({where:{action:'ACCOUNT_STATUS_CHANGED',subjectId:'employee'}})).toBe(1); expect((await app.inject({method:'GET',url:'/me',headers:employee})).statusCode).toBe(401); expect((await app.inject({method:'GET',url:'/audit-events',headers:owner})).json().items).toHaveLength(1); await app.close();
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const owner = await token('owner');
+    const employee = await token('employee');
+    const response = await app.inject({
+      method: 'PATCH',
+      url: '/employees/employee/account-status',
+      headers: owner,
+      payload: { status: 'DISABLED', reason: 'Offboarding approved' }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(
+      (await db().account.findUniqueOrThrow({ where: { userId: 'employee' } }))
+        .status
+    ).toBe('DISABLED');
+    expect(
+      await db().session.count({
+        where: { account: { userId: 'employee' }, revokedAt: null }
+      })
+    ).toBe(0);
+    expect(
+      await db().auditEvent.count({
+        where: { action: 'ACCOUNT_STATUS_CHANGED', subjectId: 'employee' }
+      })
+    ).toBe(1);
+    expect(
+      (await app.inject({ method: 'GET', url: '/me', headers: employee }))
+        .statusCode
+    ).toBe(401);
+    expect(
+      (
+        await app.inject({
+          method: 'GET',
+          url: '/audit-events',
+          headers: owner
+        })
+      ).json().items
+    ).toHaveLength(1);
+    await app.close();
   });
   it('records each successful control-plane mutation once and omits no-op mutations', async () => {
-    await fixture(); const app=await createApp({prisma:db()}); const owner=await token('owner');
-    const department=(await app.inject({method:'POST',url:'/departments',headers:owner,payload:{name:'Design'}})).json();
-    expect((await app.inject({method:'PUT',url:'/employees/employee/department',headers:owner,payload:{departmentId:'research',role:'MEMBER'}})).statusCode).toBe(200);
-    const override=(await app.inject({method:'PUT',url:'/employees/employee/permission-overrides',headers:owner,payload:{scopeType:'ORGANIZATION',scopeId:'org-a',resource:'AGENT',action:'VIEW',effect:'DENY'}})).json();
-    expect((await app.inject({method:'DELETE',url:`/employees/employee/permission-overrides/${override.id}`,headers:owner})).statusCode).toBe(200);
-    const agent=(await app.inject({method:'POST',url:'/agents',headers:owner,payload:{key:'designer',name:'Designer',runtimeProfile:'READ_ONLY_WORK'}})).json();
-    const assignment=(await app.inject({method:'PUT',url:`/agents/${agent.id}/assignments`,headers:owner,payload:{scopeType:'DEPARTMENT',scopeId:department.id}})).json();
-    expect((await app.inject({method:'DELETE',url:`/agents/${agent.id}/assignments/${assignment.id}`,headers:owner})).statusCode).toBe(204);
-    const events=(await app.inject({method:'GET',url:'/audit-events',headers:owner})).json().items;
-    expect(events.map((event:{action:string})=>event.action).sort()).toEqual(['AGENT_ASSIGNMENT_CREATED','AGENT_ASSIGNMENT_DELETED','AGENT_CREATED','DEPARTMENT_CREATED','EMPLOYEE_DEPARTMENT_ASSIGNED','PERMISSION_OVERRIDE_DELETED','PERMISSION_OVERRIDE_UPSERTED']);
-    expect(events.every((event:{actorUserId:string;organizationId:string;source:string})=>event.actorUserId==='owner'&&event.organizationId==='org-a'&&event.source==='ADMIN_API')).toBe(true);
-    const count=await db().auditEvent.count(); await app.inject({method:'PUT',url:'/employees/employee/department',headers:owner,payload:{departmentId:'research',role:'MEMBER'}}); await app.inject({method:'PUT',url:`/agents/${agent.id}/assignments`,headers:owner,payload:{scopeType:'DEPARTMENT',scopeId:department.id}}); await app.inject({method:'PUT',url:`/agents/${agent.id}/assignments`,headers:owner,payload:{scopeType:'DEPARTMENT',scopeId:department.id}}); expect(await db().auditEvent.count()).toBe(count+1); await app.close();
+    await fixture();
+    const app = await createApp({ prisma: db() });
+    const owner = await token('owner');
+    const department = (
+      await app.inject({
+        method: 'POST',
+        url: '/departments',
+        headers: owner,
+        payload: { name: 'Design' }
+      })
+    ).json();
+    expect(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: '/employees/employee/department',
+          headers: owner,
+          payload: { departmentId: 'research', role: 'MEMBER' }
+        })
+      ).statusCode
+    ).toBe(200);
+    const override = (
+      await app.inject({
+        method: 'PUT',
+        url: '/employees/employee/permission-overrides',
+        headers: owner,
+        payload: {
+          scopeType: 'ORGANIZATION',
+          scopeId: 'org-a',
+          resource: 'AGENT',
+          action: 'VIEW',
+          effect: 'DENY'
+        }
+      })
+    ).json();
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/employees/employee/permission-overrides/${override.id}`,
+          headers: owner
+        })
+      ).statusCode
+    ).toBe(200);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        headers: owner,
+        payload: {
+          key: 'designer',
+          name: 'Designer',
+          runtimeProfile: 'READ_ONLY_WORK'
+        }
+      })
+    ).json();
+    const assignment = (
+      await app.inject({
+        method: 'PUT',
+        url: `/agents/${agent.id}/assignments`,
+        headers: owner,
+        payload: { scopeType: 'DEPARTMENT', scopeId: department.id }
+      })
+    ).json();
+    expect(
+      (
+        await app.inject({
+          method: 'DELETE',
+          url: `/agents/${agent.id}/assignments/${assignment.id}`,
+          headers: owner
+        })
+      ).statusCode
+    ).toBe(204);
+    const events = (
+      await app.inject({ method: 'GET', url: '/audit-events', headers: owner })
+    ).json().items;
+    expect(
+      events.map((event: { action: string }) => event.action).sort()
+    ).toEqual([
+      'AGENT_ASSIGNMENT_CREATED',
+      'AGENT_ASSIGNMENT_DELETED',
+      'AGENT_CREATED',
+      'DEPARTMENT_CREATED',
+      'EMPLOYEE_DEPARTMENT_ASSIGNED',
+      'PERMISSION_OVERRIDE_DELETED',
+      'PERMISSION_OVERRIDE_UPSERTED'
+    ]);
+    expect(
+      events.every(
+        (event: {
+          actorUserId: string;
+          organizationId: string;
+          source: string;
+        }) =>
+          event.actorUserId === 'owner' &&
+          event.organizationId === 'org-a' &&
+          event.source === 'ADMIN_API'
+      )
+    ).toBe(true);
+    const count = await db().auditEvent.count();
+    await app.inject({
+      method: 'PUT',
+      url: '/employees/employee/department',
+      headers: owner,
+      payload: { departmentId: 'research', role: 'MEMBER' }
+    });
+    await app.inject({
+      method: 'PUT',
+      url: `/agents/${agent.id}/assignments`,
+      headers: owner,
+      payload: { scopeType: 'DEPARTMENT', scopeId: department.id }
+    });
+    await app.inject({
+      method: 'PUT',
+      url: `/agents/${agent.id}/assignments`,
+      headers: owner,
+      payload: { scopeType: 'DEPARTMENT', scopeId: department.id }
+    });
+    expect(await db().auditEvent.count()).toBe(count + 1);
+    await app.close();
   });
 });
