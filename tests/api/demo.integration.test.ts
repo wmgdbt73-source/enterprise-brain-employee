@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createApp } from '../../apps/api/src/app.js';
 import { createPrismaClient } from '../../packages/database/src/index.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 
 const execute = promisify(execFile);
 const database = process.env.DATABASE_URL
@@ -13,43 +14,8 @@ const db = () => {
     throw new Error('DATABASE_URL is required for demo integration tests');
   return database;
 };
-async function clean() {
-  const c = db();
-  await c.message.deleteMany();
-  await c.conversationParticipant.deleteMany();
-  await c.conversation.deleteMany();
-  await c.notification.deleteMany();
-  await c.reminder.deleteMany();
-  await c.swarmEvent.deleteMany();
-  await c.modelInvocation.deleteMany();
-  await c.auditEvent.deleteMany();
-  await c.session.deleteMany();
-  await c.account.deleteMany();
-  await c.humanConfirmation.deleteMany();
-  await c.review.deleteMany();
-  await c.resultArtifact.deleteMany();
-  await c.result.deleteMany();
-  await c.artifact.deleteMany();
-  await c.agentToolCall.deleteMany();
-  await c.agentRun.deleteMany();
-  await c.agentAssignment.deleteMany();
-  await c.agentVersion.deleteMany();
-  await c.agentDefinition.deleteMany();
-  await c.taskDependency.deleteMany();
-  await c.taskAssignment.deleteMany();
-  await c.task.deleteMany();
-  await c.projectMember.deleteMany();
-  await c.project.deleteMany();
-  await c.departmentMembership.deleteMany();
-  await c.permissionOverride.deleteMany();
-  await c.organizationMembership.deleteMany();
-  await c.department.deleteMany();
-  await c.organization.deleteMany();
-  await c.user.deleteMany();
-}
-
 describe('seeded demo API walkthrough', () => {
-  beforeEach(clean);
+  beforeEach(async () => clearTestDatabase(db()));
   afterAll(async () => database?.$disconnect());
   it('exposes coherent employee collaboration data and preserves the admin boundary', async () => {
     await execute('pnpm', ['db:seed:demo'], {
