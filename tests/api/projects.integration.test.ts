@@ -10,6 +10,7 @@ import {
   createProject,
   createUser
 } from '../../packages/domain/src/index.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 
 const connectionString = process.env.DATABASE_URL;
 const database = connectionString
@@ -27,30 +28,7 @@ function requireDatabase() {
 describe('Project API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
-    await db.auditEvent.deleteMany();
-    await db.session.deleteMany();
-    await db.account.deleteMany();
-    await db.humanConfirmation.deleteMany();
-    await db.review.deleteMany();
-    await db.resultArtifact.deleteMany();
-    await db.result.deleteMany();
-    await db.artifact.deleteMany();
-    await db.agentToolCall.deleteMany();
-    await db.agentRun.deleteMany();
-    await db.agentAssignment.deleteMany();
-    await db.agentVersion.deleteMany();
-    await db.agentDefinition.deleteMany();
-    await db.taskDependency.deleteMany();
-    await db.taskAssignment.deleteMany();
-    await db.task.deleteMany();
-    await db.projectMember.deleteMany();
-    await db.project.deleteMany();
-    await db.departmentMembership.deleteMany();
-    await db.permissionOverride.deleteMany();
-    await db.organizationMembership.deleteMany();
-    await db.department.deleteMany();
-    await db.organization.deleteMany();
-    await db.user.deleteMany();
+    await clearTestDatabase(db);
   });
 
   afterAll(async () => {

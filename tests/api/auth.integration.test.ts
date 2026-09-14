@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
 import { createPrismaClient, encodePassword } from '../../packages/database/src/index.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 
 const database = process.env.DATABASE_URL ? createPrismaClient(process.env.DATABASE_URL) : undefined;
 const db = () => { if (!database) throw new Error('DATABASE_URL is required for API integration tests'); return database; };
@@ -13,7 +14,7 @@ async function createAccount(id = 'auth-user', login = 'employee@example.test', 
 
 describe('production session identity API', () => {
   beforeEach(async () => {
-    await db().auditEvent.deleteMany(); await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().agentAssignment.deleteMany(); await db().agentVersion.deleteMany(); await db().agentDefinition.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().permissionOverride.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany();
+    await clearTestDatabase(db());
   });
   afterAll(async () => database?.$disconnect());
 

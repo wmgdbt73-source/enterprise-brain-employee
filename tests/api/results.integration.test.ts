@@ -3,6 +3,7 @@ import { createApp } from '../../apps/api/src/app.js';
 import { DevIdentityProvider } from '../../apps/api/src/identity/dev-identity-provider.js';
 import { createPrismaClient } from '../../packages/database/src/index.js';
 import type { PrismaClient } from '../../packages/database/src/generated/prisma/client.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 
 const database = process.env.DATABASE_URL ? createPrismaClient(process.env.DATABASE_URL) : undefined;
 const key = (suffix: string) => `00000000-0000-4000-8000-${suffix.padStart(12, '0')}`;
@@ -16,7 +17,7 @@ async function artifact(app: Awaited<ReturnType<typeof createApp>>, taskId: stri
 
 describe('Result Candidate API', () => {
   beforeEach(async () => {
-    await db().auditEvent.deleteMany(); await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().agentAssignment.deleteMany(); await db().agentVersion.deleteMany(); await db().agentDefinition.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().permissionOverride.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany();
+    await clearTestDatabase(db());
   });
   afterAll(async () => database?.$disconnect());
 

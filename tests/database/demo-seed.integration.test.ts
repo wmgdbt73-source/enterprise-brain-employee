@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createPrismaClient } from '../../packages/database/src/index.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 
 const execute = promisify(execFile);
 const database = process.env.DATABASE_URL ? createPrismaClient(process.env.DATABASE_URL) : undefined;
@@ -9,7 +10,7 @@ const db = () => { if (!database) throw new Error('DATABASE_URL is required for 
 
 describe('demo seed', () => {
   beforeEach(async () => {
-    await db().auditEvent.deleteMany(); await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().agentAssignment.deleteMany(); await db().agentVersion.deleteMany(); await db().agentDefinition.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().permissionOverride.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany();
+    await clearTestDatabase(db());
   });
   afterAll(async () => database?.$disconnect());
 
@@ -27,5 +28,12 @@ describe('demo seed', () => {
     const memberships = await db().organizationMembership.findMany({ where: { organizationId: organization.id }, orderBy: { userId: 'asc' }, include: { departmentMembership: { include: { department: true } } } });
     expect(memberships.map((item) => [item.userId, item.role, item.departmentMembership?.department.name, item.departmentMembership?.role])).toEqual([['demo-admin', 'OWNER', undefined, undefined], ['demo-employee', 'MEMBER', 'Product', 'MEMBER'], ['demo-reviewer', 'MEMBER', 'Research', 'MEMBER']]);
     expect(await db().organizationMembership.count()).toBe(3); expect(await db().departmentMembership.count()).toBe(2); expect(await db().department.count()).toBe(2);
+    expect(await db().task.count({ where: { projectId: 'demo-review-project' } })).toBe(4);
+    expect(await db().conversation.findUniqueOrThrow({ where: { id: 'demo-human-group' } })).toMatchObject({ type: 'HUMAN_GROUP', scopeId: 'demo-review-project' });
+    expect(await db().message.count({ where: { conversationId: 'demo-human-group' } })).toBe(2);
+    expect(await db().notification.count({ where: { organizationId: 'enterprise-brain-demo' } })).toBe(2);
+    expect(await db().reminder.findUniqueOrThrow({ where: { id: 'demo-reminder-review' } })).toMatchObject({ status: 'SCHEDULED', type: 'REVIEW' });
+    expect(await db().swarmEvent.findUniqueOrThrow({ where: { id: 'demo-swarm-launch' } })).toMatchObject({ scopeType: 'PROJECT', type: 'GROUP_MESSAGE' });
+    expect(await db().modelInvocation.findUniqueOrThrow({ where: { id: 'demo-model-invocation' } })).toMatchObject({ status: 'COMPLETED', provider: 'demo-history' });
   }, 20_000);
 });

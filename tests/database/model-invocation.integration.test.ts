@@ -5,12 +5,13 @@ import { modelRequestFingerprint, normalizeModelPrompt } from '../../packages/do
 import { createApp } from '../../apps/api/src/app.js';
 import { hashSessionToken } from '../../packages/database/src/index.js';
 import type { ModelGeneration, ModelGenerationRequest, ModelProvider } from '../../apps/api/src/providers/model-provider.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 
 const database = process.env.DATABASE_URL ? createPrismaClient(process.env.DATABASE_URL) : undefined;
 const db = () => { if (!database) throw new Error('DATABASE_URL is required for database integration tests'); return database; };
 const now = new Date('2026-09-09T00:00:00.000Z');
 
-async function clean() { const c = db(); await c.modelInvocation.deleteMany(); await c.auditEvent.deleteMany(); await c.session.deleteMany(); await c.account.deleteMany(); await c.humanConfirmation.deleteMany(); await c.review.deleteMany(); await c.resultArtifact.deleteMany(); await c.result.deleteMany(); await c.artifact.deleteMany(); await c.agentToolCall.deleteMany(); await c.agentRun.deleteMany(); await c.agentAssignment.deleteMany(); await c.agentVersion.deleteMany(); await c.agentDefinition.deleteMany(); await c.taskDependency.deleteMany(); await c.taskAssignment.deleteMany(); await c.task.deleteMany(); await c.projectMember.deleteMany(); await c.project.deleteMany(); await c.departmentMembership.deleteMany(); await c.permissionOverride.deleteMany(); await c.organizationMembership.deleteMany(); await c.department.deleteMany(); await c.organization.deleteMany(); await c.user.deleteMany(); }
+async function clean() { await clearTestDatabase(db()); }
 async function fixture() {
   const c = db();
   await c.user.createMany({ data: ['owner', 'member', 'outsider'].map(id => ({ id, name: id, systemRole: 'EMPLOYEE' as const, createdAt: now, updatedAt: now })) });

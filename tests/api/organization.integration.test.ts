@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { createApp } from '../../apps/api/src/app.js';
 import { createPrismaClient, encodePassword, hashSessionToken } from '../../packages/database/src/index.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 const url = process.env.DATABASE_URL; const database = url ? createPrismaClient(url) : undefined;
 const db = () => { if (!database) throw new Error('DATABASE_URL is required'); return database; };
 const now = new Date('2026-09-03T00:00:00.000Z');
@@ -13,7 +14,7 @@ async function fixture() {
   await db().department.createMany({ data: [{ id: 'product', organizationId: 'org-a', name: 'Product', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'research', organizationId: 'org-a', name: 'Research', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'other-dept', organizationId: 'org-b', name: 'Other', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
   await db().departmentMembership.createMany({ data: [{ id: 'dm-manager', organizationId: 'org-a', departmentId: 'product', userId: 'manager', role: 'MANAGER', status: 'ACTIVE', createdAt: now, updatedAt: now }, { id: 'dm-employee', organizationId: 'org-a', departmentId: 'product', userId: 'employee', role: 'MEMBER', status: 'ACTIVE', createdAt: now, updatedAt: now }] });
 }
-async function clean() { await db().auditEvent.deleteMany(); await db().session.deleteMany(); await db().account.deleteMany(); await db().humanConfirmation.deleteMany(); await db().review.deleteMany(); await db().resultArtifact.deleteMany(); await db().result.deleteMany(); await db().artifact.deleteMany(); await db().agentToolCall.deleteMany(); await db().agentRun.deleteMany(); await db().agentAssignment.deleteMany(); await db().agentVersion.deleteMany(); await db().agentDefinition.deleteMany(); await db().taskDependency.deleteMany(); await db().taskAssignment.deleteMany(); await db().task.deleteMany(); await db().projectMember.deleteMany(); await db().project.deleteMany(); await db().departmentMembership.deleteMany(); await db().permissionOverride.deleteMany(); await db().organizationMembership.deleteMany(); await db().department.deleteMany(); await db().organization.deleteMany(); await db().user.deleteMany(); }
+async function clean() { await clearTestDatabase(db()); }
 describe('Organization API', () => {
   beforeEach(clean); afterAll(async () => database?.$disconnect());
   it('returns Session-derived organization and department context from /me', async () => { await fixture(); const app = await createApp({ prisma: db() }); const headers = await token('manager'); const response = await app.inject({ method: 'GET', url: '/me', headers }); expect(response.statusCode).toBe(200); expect(response.json()).toMatchObject({ id: 'manager', organization: { id: 'org-a', name: 'Enterprise Brain Demo', role: 'MEMBER' }, department: { id: 'product', name: 'Product', role: 'MANAGER' } }); await app.close(); });

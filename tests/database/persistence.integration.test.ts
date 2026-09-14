@@ -4,6 +4,7 @@ import { isSourceToolCallUniqueConflict } from '../../packages/database/src/repo
 import { ResultRepository } from '../../packages/database/src/repositories/result-repository.js';
 import { encodePassword, hashSessionToken } from '../../packages/database/src/index.js';
 import type { PrismaClient } from '../../packages/database/src/generated/prisma/client.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 
 const connectionString = process.env.DATABASE_URL;
 const database = connectionString
@@ -57,30 +58,7 @@ async function createProjectFixture() {
 describe('PostgreSQL persistence constraints', () => {
   beforeEach(async () => {
     const db = requireDatabase();
-    await db.auditEvent.deleteMany();
-    await db.session.deleteMany();
-    await db.account.deleteMany();
-    await db.humanConfirmation.deleteMany();
-    await db.review.deleteMany();
-    await db.resultArtifact.deleteMany();
-    await db.result.deleteMany();
-    await db.artifact.deleteMany();
-    await db.agentToolCall.deleteMany();
-    await db.agentRun.deleteMany();
-    await db.agentAssignment.deleteMany();
-    await db.agentVersion.deleteMany();
-    await db.agentDefinition.deleteMany();
-    await db.taskDependency.deleteMany();
-    await db.taskAssignment.deleteMany();
-    await db.task.deleteMany();
-    await db.projectMember.deleteMany();
-    await db.project.deleteMany();
-    await db.departmentMembership.deleteMany();
-    await db.permissionOverride.deleteMany();
-    await db.organizationMembership.deleteMany();
-    await db.department.deleteMany();
-    await db.organization.deleteMany();
-    await db.user.deleteMany();
+    await clearTestDatabase(db);
   });
 
   afterAll(async () => {
