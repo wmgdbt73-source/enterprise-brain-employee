@@ -10,6 +10,7 @@ import {
   createProject,
   createUser
 } from '../../packages/domain/src/index.js';
+import { clearTestDatabase } from '../database-cleanup.js';
 
 const connectionString = process.env.DATABASE_URL;
 const database = connectionString
@@ -27,37 +28,7 @@ function requireDatabase() {
 describe('Project API vertical slice', () => {
   beforeEach(async () => {
     const db = requireDatabase();
-    await db.message.deleteMany();
-    await db.conversationParticipant.deleteMany();
-    await db.conversation.deleteMany();
-    await db.notification.deleteMany();
-    await db.reminder.deleteMany();
-    await db.swarmEvent.deleteMany();
-    await db.modelInvocation.deleteMany();
-    await db.auditEvent.deleteMany();
-    await db.session.deleteMany();
-    await db.account.deleteMany();
-    await db.humanConfirmation.deleteMany();
-    await db.review.deleteMany();
-    await db.resultArtifact.deleteMany();
-    await db.result.deleteMany();
-    await db.artifact.deleteMany();
-    await db.agentToolCall.deleteMany();
-    await db.agentRun.deleteMany();
-    await db.agentAssignment.deleteMany();
-    await db.agentVersion.deleteMany();
-    await db.agentDefinition.deleteMany();
-    await db.taskDependency.deleteMany();
-    await db.taskAssignment.deleteMany();
-    await db.task.deleteMany();
-    await db.projectMember.deleteMany();
-    await db.project.deleteMany();
-    await db.departmentMembership.deleteMany();
-    await db.permissionOverride.deleteMany();
-    await db.organizationMembership.deleteMany();
-    await db.department.deleteMany();
-    await db.organization.deleteMany();
-    await db.user.deleteMany();
+    await clearTestDatabase(db);
   });
 
   afterAll(async () => {
@@ -130,10 +101,7 @@ describe('Project API vertical slice', () => {
   });
 
   it('returns contract-safe validation errors for invalid project creation', async () => {
-    const app = await createApp({
-      prisma: requireDatabase(),
-      identityProvider: new DevIdentityProvider()
-    });
+    const app = await createApp({ prisma: requireDatabase(), identityProvider: new DevIdentityProvider() });
 
     const blankName = await app.inject({
       method: 'POST',
@@ -207,10 +175,7 @@ describe('Project API vertical slice', () => {
       });
     });
 
-    const app = await createApp({
-      prisma: db,
-      identityProvider: new DevIdentityProvider()
-    });
+    const app = await createApp({ prisma: db, identityProvider: new DevIdentityProvider() });
     for (const projectId of ['missing-project', 'foreign-project']) {
       const response = await app.inject({
         method: 'GET',
